@@ -1,0 +1,20 @@
+[
+  {"name": "agent:architect", "color": "5319e7", "description": "Assigned to the Architect agent"},
+  {"name": "agent:backend", "color": "0052cc", "description": "Assigned to the Backend agent"},
+  {"name": "agent:frontend", "color": "1d76db", "description": "Assigned to the Frontend agent"},
+  {"name": "agent:integrations", "color": "006b75", "description": "Assigned to the Integrations agent"},
+  {"name": "agent:qa", "color": "0e8a16", "description": "Assigned to the QA agent"},
+  {"name": "agent:security", "color": "b60205", "description": "Assigned to the Security Reviewer agent"},
+  {"name": "type:feature", "color": "a2eeef", "description": "New product capability"},
+  {"name": "type:bug", "color": "d93f0b", "description": "Something isn't working"},
+  {"name": "type:refactor", "color": "bfdadc", "description": "Code restructuring"},
+  {"name": "type:security", "color": "e11d21", "description": "Security-focused task"},
+  {"name": "priority:p0", "color": "e11d21", "description": "Critical blocker"},
+  {"name": "priority:p1", "color": "d93f0b", "description": "High priority"},
+  {"name": "priority:p2", "color": "fbca04", "description": "Medium priority"},
+  {"name": "priority:p3", "color": "0e8a16", "description": "Low priority"},
+  {"name": "status:ready", "color": "0e8a16", "description": "Ready for an agent to pick up"},
+  {"name": "status:in-progress", "color": "fef2c0", "description": "Work currently being executed"},
+  {"name": "status:review", "color": "c5def5", "description": "Awaiting review"},
+  {"name": "status:blocked", "color": "b60205", "description": "Blocked by a dependency"}
+]

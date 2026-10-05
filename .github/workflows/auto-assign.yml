@@ -1,19 +1,21 @@
 name: Auto Assign
+
 on:
-  issues:
-    types: [opened]
   pull_request:
-    types: [opened]
+    types: [opened, ready_for_review]
+
 jobs:
-  run:
+  assign:
     runs-on: ubuntu-latest
-    permissions:
-      issues: write
-      pull-requests: write
     steps:
-    - name: 'Auto-assign issue'
-      uses: pozil/auto-assign-issue@v1
-      with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          assignees: Reyreygit
-          numOfAssignee: 1
+      - name: Auto-assign Pull Request PR Author
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.addAssignees({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              assignees: [context.actor]
+            });
+

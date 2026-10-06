@@ -1,0 +1,9 @@
+{
+  "agents": {
+    "mode": "orchestrated",
+    "directory": ".github/agents",
+    "defaultAgent": {
+      "excludedTools": ["edit"]
+    }
+  }
+}

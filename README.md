@@ -28,3 +28,5 @@ npm run build
 ## Current scope
 
 The React interface demonstrates operational progress states only. It does not authenticate users, access a backend, persist task state, execute integrations, or enforce permissions. Do not connect production credentials or treat the displayed state as evidence that a workflow ran.
+
+The framework-independent `src/workflow` module defines an in-memory workflow contract and transition rules. It is not wired to persistence, APIs, or external execution.

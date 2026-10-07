@@ -20,5 +20,5 @@
     "noFallthroughCasesInSwitch": true,
     "types": ["vitest/globals", "vite/client"]
   },
-  "include": ["src/frontend"]
+  "include": ["src"]
 }

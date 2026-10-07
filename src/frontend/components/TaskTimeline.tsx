@@ -1,13 +1,7 @@
-export const WORKFLOW_STATUSES = [
-  'Planning',
-  'Running',
-  'Waiting for approval',
-  'Verifying',
-  'Completed',
-  'Failed',
-] as const;
-
-export type WorkflowStatus = (typeof WORKFLOW_STATUSES)[number];
+import {
+  WORKFLOW_STATUSES,
+  type WorkflowStatus,
+} from '../../workflow/workflow';
 
 interface TaskTimelineProps {
   currentStep: WorkflowStatus;

@@ -4,7 +4,7 @@ FlowWork is a B2B workflow automation platform. This repository currently contai
 
 ## Requirements
 
-- Node.js 20.19+ or 22.12+
+- Node.js 22.22.2+ or 24.15+
 - npm 10+
 
 ## Local development

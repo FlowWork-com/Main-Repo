@@ -1,41 +1,92 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import {
+  applyWorkflowCommand,
+  createWorkflow,
+} from '../../workflow/workflow';
 import { TaskTimeline } from './TaskTimeline';
 
 describe('TaskTimeline', () => {
-  it('identifies the current status and visited history', () => {
-    render(
-      <TaskTimeline
-        currentStep="Waiting for approval"
-        stepsHistory={['Planning', 'Running']}
-      />,
-    );
-
-    const currentStep = screen.getByRole('listitem', { current: 'step' });
-    const visitedStep = screen.getByRole('listitem', {
-      name: 'Planning, Visited',
+  it('derives current state and visible history from the saved aggregate', () => {
+    const initial = createWorkflow({
+      task: { id: 'task-1', tenantId: 'workspace-1', ownerId: 'user-1' },
+      actorId: 'user-1',
+      actorTenantId: 'workspace-1',
+      idempotencyKey: 'create',
+      occurredAt: '2026-10-08T10:00:00.000Z',
     });
-    const upcomingStep = screen.getByRole('listitem', {
-      name: 'Verifying, Upcoming',
+    const aggregate = applyWorkflowCommand(initial, {
+      taskId: 'task-1',
+      tenantId: 'workspace-1',
+      ownerId: 'user-1',
+      actorId: 'user-1',
+      actorTenantId: 'workspace-1',
+      idempotencyKey: 'start',
+      expectedSequence: 1,
+      occurredAt: '2026-10-08T10:01:00.000Z',
+      type: 'start',
     });
 
-    expect(currentStep).toHaveAttribute('aria-current', 'step');
-    expect(currentStep).toHaveTextContent('Waiting for approval');
-    expect(within(visitedStep).getByText('Visited')).toBeInTheDocument();
-    expect(within(upcomingStep).getByText('Upcoming')).toBeInTheDocument();
+    render(<TaskTimeline aggregate={aggregate} />);
+
+    expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Running');
+    expect(screen.getByRole('listitem', { name: 'Planning, Visited' })).toBeInTheDocument();
+    expect(screen.getByRole('listitem', { name: 'Verifying, Upcoming' })).toBeInTheDocument();
+    expect(screen.getByText('Task created in Planning')).toBeInTheDocument();
+    expect(screen.getByText('Planning → Running')).toBeInTheDocument();
   });
 
-  it('supports a failed terminal state without marking unrelated steps visited', () => {
-    render(<TaskTimeline currentStep="Failed" stepsHistory={['Planning']} />);
+  it('renders persisted verification evidence in the event timeline', () => {
+    let aggregate = createWorkflow({
+      task: { id: 'task-2', tenantId: 'workspace-1', ownerId: 'user-1' },
+      actorId: 'user-1',
+      actorTenantId: 'workspace-1',
+      idempotencyKey: 'create-2',
+      occurredAt: '2026-10-08T10:00:00.000Z',
+    });
+    aggregate = applyWorkflowCommand(aggregate, {
+      taskId: 'task-2',
+      tenantId: 'workspace-1',
+      ownerId: 'user-1',
+      actorId: 'user-1',
+      actorTenantId: 'workspace-1',
+      idempotencyKey: 'start-2',
+      expectedSequence: 1,
+      occurredAt: '2026-10-08T10:01:00.000Z',
+      type: 'start',
+    });
+    aggregate = applyWorkflowCommand(aggregate, {
+      taskId: 'task-2',
+      tenantId: 'workspace-1',
+      ownerId: 'user-1',
+      actorId: 'user-1',
+      actorTenantId: 'workspace-1',
+      idempotencyKey: 'verify-2',
+      expectedSequence: 2,
+      occurredAt: '2026-10-08T10:02:00.000Z',
+      type: 'begin-verification',
+    });
+    aggregate = applyWorkflowCommand(aggregate, {
+      taskId: 'task-2',
+      tenantId: 'workspace-1',
+      ownerId: 'user-1',
+      actorId: 'user-1',
+      actorTenantId: 'workspace-1',
+      idempotencyKey: 'record-2',
+      expectedSequence: 3,
+      occurredAt: '2026-10-08T10:03:00.000Z',
+      type: 'record-verification',
+      result: {
+        passed: true,
+        evidenceReference: 'receipt://test/check-1',
+        verifiedBy: 'user-1',
+        verifiedAt: '2026-10-08T10:03:00.000Z',
+      },
+    });
 
-    expect(
-      screen.getByRole('listitem', { current: 'step' }),
-    ).toHaveTextContent('Failed');
-    expect(
-      screen.getByRole('listitem', { name: 'Completed, Upcoming' }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('listitem', { name: 'Planning, Visited' }),
-    ).toBeInTheDocument();
+    render(<TaskTimeline aggregate={aggregate} />);
+
+    expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Completed');
+    expect(screen.getByText('Verification passed — evidence: receipt://test/check-1')).toBeInTheDocument();
   });
 });

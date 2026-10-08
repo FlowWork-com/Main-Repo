@@ -36,3 +36,17 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.39.2
+
+      - name: Start local Supabase
+        run: supabase start -x studio,mailpit,storage-api,realtime,edge-runtime,logflare,vector
+
+      - name: Lint local database schema
+        run: supabase db lint --local
+
+      - name: Test database migrations and RLS
+        run: supabase test db

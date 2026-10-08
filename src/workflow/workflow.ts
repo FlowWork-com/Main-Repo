@@ -401,6 +401,17 @@ function validateApproval(
     .reverse()
     .find((event) => event.type === 'approval.requested');
   if (
+    pendingRequest &&
+    pendingRequest.requestId === result.requestId &&
+    result.decision === 'approved' &&
+    pendingRequest.actorId === actorId
+  ) {
+    throw new WorkflowDomainError(
+      'INVALID_APPROVAL',
+      'An approval requester cannot approve their own request.',
+    );
+  }
+  if (
     !pendingRequest ||
     pendingRequest.requestId !== result.requestId ||
     result.approverId !== actorId ||

@@ -1,6 +1,6 @@
 begin;
 
-select plan(23);
+select plan(26);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -27,6 +27,17 @@ insert into auth.users (
     now(),
     now(),
     now()
+  ),
+  (
+    '10000000-0000-4000-8000-000000000003',
+    '00000000-0000-0000-0000-000000000000',
+    'authenticated',
+    'authenticated',
+    'reviewer@example.test',
+    '',
+    now(),
+    now(),
+    now()
   )
 on conflict (id) do nothing;
 
@@ -43,6 +54,14 @@ values (
   '20000000-0000-4000-8000-000000000001',
   '10000000-0000-4000-8000-000000000001',
   'owner'
+)
+on conflict (workspace_id, user_id) do nothing;
+
+insert into public.workspace_members (workspace_id, user_id, role)
+values (
+  '20000000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-000000000003',
+  'member'
 )
 on conflict (workspace_id, user_id) do nothing;
 
@@ -114,7 +133,7 @@ select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001
 set local role authenticated;
 
 select is((select count(*) from public.workspaces), 1::bigint, 'members can read their workspace');
-select is((select count(*) from public.workspace_members), 1::bigint, 'members can read their workspace membership');
+select is((select count(*) from public.workspace_members), 2::bigint, 'members can read their workspace membership');
 select is((select count(*) from public.tasks), 1::bigint, 'members can read their tasks');
 select is((select count(*) from public.task_events), 1::bigint, 'members can read persisted task events');
 select is((select count(*) from public.task_steps), 1::bigint, 'members can read task steps');
@@ -252,6 +271,54 @@ select public.persist_workflow_events(
     )
   )
 );
+select is(
+  (select requested_by from public.task_approvals
+   where task_id = '30000000-0000-4000-8000-000000000002'
+     and request_id = 'rpc-approval'),
+  '10000000-0000-4000-8000-000000000001'::uuid,
+  'approval requests record the authenticated requester'
+);
+select throws_ok(
+  $$ select public.persist_workflow_events(
+       '30000000-0000-4000-8000-000000000002',
+       4,
+       'Running',
+       1,
+       jsonb_build_array(
+         jsonb_build_object(
+           'sequence', 5,
+           'eventType', 'approval.recorded',
+           'actorId', '10000000-0000-4000-8000-000000000001',
+           'occurredAt', '2026-10-08T10:03:00Z',
+           'idempotencyKey', 'rpc-self-approve',
+           'requestFingerprint', 'rpc-self-approve-fingerprint',
+           'statusAfter', 'Waiting for approval',
+           'attempt', 1,
+           'payload', jsonb_build_object('result', jsonb_build_object(
+             'requestId', 'rpc-approval',
+             'decision', 'approved',
+             'approverId', '10000000-0000-4000-8000-000000000001',
+             'decidedAt', '2026-10-08T10:03:00Z'
+           ))
+         ),
+         jsonb_build_object(
+           'sequence', 6,
+           'eventType', 'status.changed',
+           'actorId', '10000000-0000-4000-8000-000000000001',
+           'occurredAt', '2026-10-08T10:03:00Z',
+           'idempotencyKey', 'rpc-self-approve',
+           'requestFingerprint', 'rpc-self-approve-fingerprint',
+           'statusAfter', 'Running',
+           'attempt', 1,
+           'payload', jsonb_build_object('from', 'Waiting for approval', 'to', 'Running')
+         )
+       )
+     ) $$,
+  '23514',
+  'new row for relation "task_approvals" violates check constraint "task_approvals_no_self_approval"',
+  'the persistence RPC rejects approval by the requester'
+);
+select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000003', true);
 select public.persist_workflow_events(
   '30000000-0000-4000-8000-000000000002',
   4,
@@ -261,7 +328,7 @@ select public.persist_workflow_events(
     jsonb_build_object(
       'sequence', 5,
       'eventType', 'approval.recorded',
-      'actorId', '10000000-0000-4000-8000-000000000001',
+      'actorId', '10000000-0000-4000-8000-000000000003',
       'occurredAt', '2026-10-08T10:03:00Z',
       'idempotencyKey', 'rpc-approve',
       'requestFingerprint', 'rpc-approve-fingerprint',
@@ -270,14 +337,14 @@ select public.persist_workflow_events(
       'payload', jsonb_build_object('result', jsonb_build_object(
         'requestId', 'rpc-approval',
         'decision', 'approved',
-        'approverId', '10000000-0000-4000-8000-000000000001',
+        'approverId', '10000000-0000-4000-8000-000000000003',
         'decidedAt', '2026-10-08T10:03:00Z'
       ))
     ),
     jsonb_build_object(
       'sequence', 6,
       'eventType', 'status.changed',
-      'actorId', '10000000-0000-4000-8000-000000000001',
+      'actorId', '10000000-0000-4000-8000-000000000003',
       'occurredAt', '2026-10-08T10:03:00Z',
       'idempotencyKey', 'rpc-approve',
       'requestFingerprint', 'rpc-approve-fingerprint',
@@ -287,6 +354,7 @@ select public.persist_workflow_events(
     )
   )
 );
+select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', true);
 select public.persist_workflow_events(
   '30000000-0000-4000-8000-000000000002',
   6,
@@ -354,6 +422,11 @@ select is(
   (select decision from public.task_approvals where task_id = '30000000-0000-4000-8000-000000000002'),
   'approved',
   'approval decisions are persisted with the workflow event'
+);
+select is(
+  (select approver_id from public.task_approvals where task_id = '30000000-0000-4000-8000-000000000002'),
+  '10000000-0000-4000-8000-000000000003'::uuid,
+  'another authorized workspace member can approve the request'
 );
 select is(
   (select payload->'result'->>'evidenceReference' from public.task_events where task_id = '30000000-0000-4000-8000-000000000002' and event_type = 'verification.recorded'),

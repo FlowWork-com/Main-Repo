@@ -176,6 +176,21 @@ describe('workflow domain', () => {
     expectDomainError(
       () =>
         apply(aggregate, {
+          ...context(aggregate, 'approval-self-approved'),
+          type: 'resolve-approval',
+          result: {
+            requestId: 'approval-1',
+            decision: 'approved',
+            approverId: 'owner-1',
+            decidedAt: '2026-10-07T10:02:00.000Z',
+          },
+        }),
+      'INVALID_APPROVAL',
+    );
+
+    expectDomainError(
+      () =>
+        apply(aggregate, {
           ...context(aggregate, 'approval-wrong-request', 'reviewer-1'),
           type: 'resolve-approval',
           result: {

@@ -64,11 +64,6 @@ export class SupabaseToolExecutionRepository
   constructor(private readonly client: SupabaseClient) {}
 
   async authorize(context: ToolExecutionContext): Promise<boolean> {
-    const { data, error } = await this.client.auth.getUser();
-    if (error) throw operationError('authorize tool execution');
-    if (!data.user) return false;
-    if (data.user.id !== context.userId) return false;
-
     const { data: membership, error: membershipError } = await this.client
       .from('workspace_members')
       .select('workspace_id')
@@ -142,6 +137,7 @@ export class SupabaseToolExecutionRepository
       p_tool_id: context.toolId,
       p_tool_version: context.toolVersion,
       p_input: input,
+      p_actor_id: context.userId,
     });
     if (error || !Array.isArray(data) || data.length !== 1) {
       throw operationError('reserve tool execution');
@@ -164,6 +160,7 @@ export class SupabaseToolExecutionRepository
       p_output: result.success ? result.output : null,
       p_error: result.success ? null : result.error,
       p_evidence: result.success ? result.evidence ?? null : null,
+      p_actor_id: context.userId,
     });
     if (error) throw operationError('save tool execution result');
   }

@@ -23,6 +23,7 @@ function repository(): WorkflowRepository & {
   } = {
     listWorkspaces: vi.fn(),
     createWorkspace: vi.fn(),
+    getTask: vi.fn(),
     listTasks: vi.fn(),
     createTask: vi.fn(async (input) => {
       const record: PersistedTask = {

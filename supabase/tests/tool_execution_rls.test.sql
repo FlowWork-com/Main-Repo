@@ -1,6 +1,6 @@
 begin;
 
-select plan(14);
+select plan(24);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -11,7 +11,7 @@ insert into auth.users (
     '00000000-0000-0000-0000-000000000000',
     'authenticated',
     'authenticated',
-    'tool-member@example.test',
+    'tool-owner@example.test',
     '',
     now(),
     now(),
@@ -19,6 +19,17 @@ insert into auth.users (
   ),
   (
     '41000000-0000-4000-8000-000000000002',
+    '00000000-0000-0000-0000-000000000000',
+    'authenticated',
+    'authenticated',
+    'tool-reviewer@example.test',
+    '',
+    now(),
+    now(),
+    now()
+  ),
+  (
+    '41000000-0000-4000-8000-000000000003',
     '00000000-0000-0000-0000-000000000000',
     'authenticated',
     'authenticated',
@@ -38,23 +49,39 @@ values (
 );
 
 insert into public.workspace_members (workspace_id, user_id, role)
-values (
-  '42000000-0000-4000-8000-000000000001',
-  '41000000-0000-4000-8000-000000000001',
-  'owner'
-);
+values
+  (
+    '42000000-0000-4000-8000-000000000001',
+    '41000000-0000-4000-8000-000000000001',
+    'owner'
+  ),
+  (
+    '42000000-0000-4000-8000-000000000001',
+    '41000000-0000-4000-8000-000000000002',
+    'member'
+  );
 
 insert into public.tasks (
   id, workspace_id, owner_id, title, details, status, attempt
-) values (
-  '43000000-0000-4000-8000-000000000001',
-  '42000000-0000-4000-8000-000000000001',
-  '41000000-0000-4000-8000-000000000001',
-  'Tool test task',
-  '',
-  'Running',
-  1
-);
+) values
+  (
+    '43000000-0000-4000-8000-000000000001',
+    '42000000-0000-4000-8000-000000000001',
+    '41000000-0000-4000-8000-000000000001',
+    'Tool test task',
+    '',
+    'Running',
+    1
+  ),
+  (
+    '43000000-0000-4000-8000-000000000003',
+    '42000000-0000-4000-8000-000000000001',
+    '41000000-0000-4000-8000-000000000001',
+    'Planning task',
+    '',
+    'Planning',
+    1
+  );
 
 insert into public.workspaces (id, name, created_by)
 values (
@@ -77,54 +104,6 @@ insert into public.tasks (
 select set_config('request.jwt.claim.sub', '41000000-0000-4000-8000-000000000001', true);
 set local role authenticated;
 
-select is(
-  (select was_created from public.claim_task_tool_execution(
-    '42000000-0000-4000-8000-000000000001',
-    '43000000-0000-4000-8000-000000000001',
-    '44000000-0000-4000-8000-000000000001',
-    'request-1',
-    'echo',
-    '1.0.0',
-    '{"value":"hello"}'::jsonb
-  )),
-  true,
-  'a workspace member can claim a tool execution'
-);
-select is(
-  (select count(*) from public.task_tool_executions),
-  1::bigint,
-  'workspace members can read their execution history'
-);
-select lives_ok(
-  $$ select public.finish_task_tool_execution(
-       '42000000-0000-4000-8000-000000000001',
-       '43000000-0000-4000-8000-000000000001',
-       '44000000-0000-4000-8000-000000000001',
-       '{"value":"hello"}'::jsonb,
-       null,
-       '{"type":"test","reference":"echo-1"}'::jsonb
-     ) $$,
-  'the authenticated execution owner can record a result'
-);
-select is(
-  (select status from public.task_tool_executions
-   where execution_id = '44000000-0000-4000-8000-000000000001'),
-  'succeeded',
-  'execution results are persisted'
-);
-select is(
-  (select was_created from public.claim_task_tool_execution(
-    '42000000-0000-4000-8000-000000000001',
-    '43000000-0000-4000-8000-000000000001',
-    '44000000-0000-4000-8000-000000000001',
-    'request-1',
-    'echo',
-    '1.0.0',
-    '{"value":"hello"}'::jsonb
-  )),
-  false,
-  'the same execution request is idempotently replayed'
-);
 select throws_ok(
   $$ select public.claim_task_tool_execution(
        '42000000-0000-4000-8000-000000000001',
@@ -133,39 +112,26 @@ select throws_ok(
        'request-1',
        'echo',
        '1.0.0',
-       '{"value":"different"}'::jsonb
+       '{"value":"hello"}'::jsonb,
+       '41000000-0000-4000-8000-000000000001'
      ) $$,
-  '23505',
-  'Execution identity was already used for a different request.',
-  'the same idempotency identity cannot be reused with different input'
+  '42501',
+  'permission denied for function claim_task_tool_execution',
+  'authenticated clients cannot claim tool executions directly'
 );
 select throws_ok(
-  $$ select public.claim_task_tool_execution(
+  $$ select public.finish_task_tool_execution(
        '42000000-0000-4000-8000-000000000001',
        '43000000-0000-4000-8000-000000000001',
-       '44000000-0000-4000-8000-000000000005',
-       'credential-input',
-       'echo',
-       '1.0.0',
-       '{"nested":{"service_role_key":"must-not-persist"}}'::jsonb
+       '44000000-0000-4000-8000-000000000001',
+       '{"forged":true}'::jsonb,
+       null,
+       null,
+       '41000000-0000-4000-8000-000000000001'
      ) $$,
-  '22023',
-  'Invalid tool execution request.',
-  'the database rejects credential-like input keys even when RPC is called directly'
-);
-select throws_ok(
-  $$ select public.claim_task_tool_execution(
-       '42000000-0000-4000-8000-000000000001',
-       '43000000-0000-4000-8000-000000000001',
-       '44000000-0000-4000-8000-000000000006',
-       'credential-value',
-       'echo',
-       '1.0.0',
-       '"Bearer abcdefghijklmnop"'::jsonb
-     ) $$,
-  '22023',
-  'Invalid tool execution request.',
-  'the database rejects common raw credential formats'
+  '42501',
+  'permission denied for function finish_task_tool_execution',
+  'authenticated clients cannot finalize tool executions directly'
 );
 select throws_ok(
   $$ insert into public.task_tool_executions (
@@ -193,7 +159,197 @@ select throws_ok(
   'authenticated clients cannot mutate execution linkage or history'
 );
 
-select set_config('request.jwt.claim.sub', '41000000-0000-4000-8000-000000000002', true);
+reset role;
+set local role service_role;
+
+select is(
+  (select was_created from public.claim_task_tool_execution(
+    '42000000-0000-4000-8000-000000000001',
+    '43000000-0000-4000-8000-000000000001',
+    '44000000-0000-4000-8000-000000000001',
+    'request-1',
+    'echo',
+    '1.0.0',
+    '{"value":"hello"}'::jsonb,
+    '41000000-0000-4000-8000-000000000001'
+  )),
+  true,
+  'the server role can claim for a verified workspace member'
+);
+select is(
+  (select count(*) from public.task_tool_executions),
+  1::bigint,
+  'the claimed execution is persisted'
+);
+select lives_ok(
+  $$ select public.finish_task_tool_execution(
+       '42000000-0000-4000-8000-000000000001',
+       '43000000-0000-4000-8000-000000000001',
+       '44000000-0000-4000-8000-000000000001',
+       '{"value":"hello"}'::jsonb,
+       null,
+       '{"type":"test","reference":"echo-1"}'::jsonb,
+       '41000000-0000-4000-8000-000000000001'
+     ) $$,
+  'the execution owner can persist a structured result'
+);
+select is(
+  (select status from public.task_tool_executions
+   where execution_id = '44000000-0000-4000-8000-000000000001'),
+  'succeeded',
+  'execution results are persisted'
+);
+select throws_ok(
+  $$ select public.finish_task_tool_execution(
+       '42000000-0000-4000-8000-000000000001',
+       '43000000-0000-4000-8000-000000000001',
+       '44000000-0000-4000-8000-000000000001',
+       '{"value":"replacement"}'::jsonb,
+       null,
+       '{"type":"test","reference":"echo-1"}'::jsonb,
+       '41000000-0000-4000-8000-000000000001'
+     ) $$,
+  '23505',
+  'Tool execution result is already final.',
+  'a conflicting result cannot replace a finalized execution'
+);
+select is(
+  (select was_created from public.claim_task_tool_execution(
+    '42000000-0000-4000-8000-000000000001',
+    '43000000-0000-4000-8000-000000000001',
+    '44000000-0000-4000-8000-000000000001',
+    'request-1',
+    'echo',
+    '1.0.0',
+    '{"value":"hello"}'::jsonb,
+    '41000000-0000-4000-8000-000000000001'
+  )),
+  false,
+  'the same completed request is safely replayed'
+);
+select throws_ok(
+  $$ select public.claim_task_tool_execution(
+       '42000000-0000-4000-8000-000000000001',
+       '43000000-0000-4000-8000-000000000001',
+       '44000000-0000-4000-8000-000000000001',
+       'request-1',
+       'echo',
+       '1.0.0',
+       '{"value":"different"}'::jsonb,
+       '41000000-0000-4000-8000-000000000001'
+     ) $$,
+  '23505',
+  'Execution identity was already used for a different request.',
+  'the same idempotency identity cannot be reused with different input'
+);
+select throws_ok(
+  $$ select public.claim_task_tool_execution(
+       '42000000-0000-4000-8000-000000000001',
+       '43000000-0000-4000-8000-000000000001',
+       '44000000-0000-4000-8000-000000000012',
+       'request-1',
+       'echo',
+       '1.0.0',
+       '{"value":"hello"}'::jsonb,
+       '41000000-0000-4000-8000-000000000001'
+     ) $$,
+  '23505',
+  'Execution identity was already used for a different request.',
+  'a request ID cannot be reused under a different execution ID'
+);
+select throws_ok(
+  $$ select public.claim_task_tool_execution(
+       '42000000-0000-4000-8000-000000000001',
+       '43000000-0000-4000-8000-000000000001',
+       '44000000-0000-4000-8000-000000000005',
+       'credential-input',
+       'echo',
+       '1.0.0',
+       '{"nested":{"service_role_key":"must-not-persist"}}'::jsonb,
+       '41000000-0000-4000-8000-000000000001'
+     ) $$,
+  '22023',
+  'Invalid tool execution request.',
+  'the database rejects credential-like input keys'
+);
+select throws_ok(
+  $$ select public.claim_task_tool_execution(
+       '42000000-0000-4000-8000-000000000001',
+       '43000000-0000-4000-8000-000000000001',
+       '44000000-0000-4000-8000-000000000006',
+       'credential-value',
+       'echo',
+       '1.0.0',
+       '"bearer sample-secret-token-value"'::jsonb,
+       '41000000-0000-4000-8000-000000000001'
+     ) $$,
+  '22023',
+  'Invalid tool execution request.',
+  'the database rejects common raw credential formats'
+);
+select throws_ok(
+  $$ select public.claim_task_tool_execution(
+       '42000000-0000-4000-8000-000000000001',
+       '43000000-0000-4000-8000-000000000001',
+       '44000000-0000-4000-8000-000000000007',
+       'outsider-request',
+       'echo',
+       '1.0.0',
+       '{}'::jsonb,
+       '41000000-0000-4000-8000-000000000003'
+     ) $$,
+  '42501',
+  'Workspace access is required.',
+  'the server function independently rejects a nonmember actor'
+);
+select throws_ok(
+  $$ select public.finish_task_tool_execution(
+       '42000000-0000-4000-8000-000000000001',
+       '43000000-0000-4000-8000-000000000001',
+       '44000000-0000-4000-8000-000000000001',
+       '{"value":"hello"}'::jsonb,
+       null,
+       '{"type":"test","reference":"echo-1"}'::jsonb,
+       '41000000-0000-4000-8000-000000000002'
+     ) $$,
+  '42501',
+  'Tool execution access is required.',
+  'a different workspace member cannot finalize the execution'
+);
+select throws_ok(
+  $$ select public.claim_task_tool_execution(
+       '42000000-0000-4000-8000-000000000001',
+       '43000000-0000-4000-8000-000000000002',
+       '44000000-0000-4000-8000-000000000008',
+       'cross-task-request',
+       'echo',
+       '1.0.0',
+       '{}'::jsonb,
+       '41000000-0000-4000-8000-000000000001'
+     ) $$,
+  '42501',
+  'Task access is required.',
+  'a workspace member cannot execute against another workspace task'
+);
+select throws_ok(
+  $$ select public.claim_task_tool_execution(
+       '42000000-0000-4000-8000-000000000001',
+       '43000000-0000-4000-8000-000000000003',
+       '44000000-0000-4000-8000-000000000009',
+       'planning-request',
+       'echo',
+       '1.0.0',
+       '{}'::jsonb,
+       '41000000-0000-4000-8000-000000000001'
+     ) $$,
+  '22023',
+  'Task must be Running before tool execution.',
+  'the database rejects claims outside the Running workflow state'
+);
+
+reset role;
+select set_config('request.jwt.claim.sub', '41000000-0000-4000-8000-000000000003', true);
+set local role authenticated;
 select is(
   (select count(*) from public.task_tool_executions),
   0::bigint,
@@ -203,32 +359,20 @@ select throws_ok(
   $$ select public.claim_task_tool_execution(
        '42000000-0000-4000-8000-000000000001',
        '43000000-0000-4000-8000-000000000001',
-       '44000000-0000-4000-8000-000000000003',
-       'outsider-request',
+       '44000000-0000-4000-8000-000000000010',
+       'direct-outsider-request',
        'echo',
        '1.0.0',
-       '{}'::jsonb
+       '{}'::jsonb,
+       '41000000-0000-4000-8000-000000000003'
      ) $$,
   '42501',
-  'Workspace access is required.',
-  'non-members cannot claim workspace executions'
+  'permission denied for function claim_task_tool_execution',
+  'a non-member authenticated client cannot invoke the privileged claim RPC'
 );
-select set_config('request.jwt.claim.sub', '41000000-0000-4000-8000-000000000001', true);
-select throws_ok(
-  $$ select public.claim_task_tool_execution(
-       '42000000-0000-4000-8000-000000000001',
-       '43000000-0000-4000-8000-000000000002',
-       '44000000-0000-4000-8000-000000000004',
-       'cross-task-request',
-       'echo',
-       '1.0.0',
-       '{}'::jsonb
-     ) $$,
-  '42501',
-  'Task access is required.',
-  'a workspace member cannot execute against another workspace task'
-);
-select set_config('request.jwt.claim.sub', '41000000-0000-4000-8000-000000000002', true);
+
+reset role;
+set local role service_role;
 select throws_ok(
   $$ select public.finish_task_tool_execution(
        '42000000-0000-4000-8000-000000000001',
@@ -236,11 +380,76 @@ select throws_ok(
        '44000000-0000-4000-8000-000000000001',
        '{"forged":true}'::jsonb,
        null,
-       null
+       null,
+       '41000000-0000-4000-8000-000000000003'
      ) $$,
   '42501',
   'Workspace access is required.',
-  'non-members cannot finish executions'
+  'the server function independently rejects nonmember finalization'
+);
+
+select public.claim_task_tool_execution(
+  '42000000-0000-4000-8000-000000000001',
+  '43000000-0000-4000-8000-000000000001',
+  '44000000-0000-4000-8000-000000000011',
+  'status-change-request',
+  'echo',
+  '1.0.0',
+  '{}'::jsonb,
+  '41000000-0000-4000-8000-000000000001'
+);
+reset role;
+update public.tasks
+set status = 'Verifying'
+where id = '43000000-0000-4000-8000-000000000001';
+set local role service_role;
+select throws_ok(
+  $$ select public.finish_task_tool_execution(
+       '42000000-0000-4000-8000-000000000001',
+       '43000000-0000-4000-8000-000000000001',
+       '44000000-0000-4000-8000-000000000011',
+       '{"value":"finished"}'::jsonb,
+       null,
+       null,
+       '41000000-0000-4000-8000-000000000001'
+     ) $$,
+  '22023',
+  'Task must be Running to finalize tool execution.',
+  'the database rejects finalization after the task leaves Running'
+);
+reset role;
+update public.tasks
+set status = 'Running'
+where id = '43000000-0000-4000-8000-000000000001';
+set local role service_role;
+select lives_ok(
+  $$ select public.finish_task_tool_execution(
+       '42000000-0000-4000-8000-000000000001',
+       '43000000-0000-4000-8000-000000000001',
+       '44000000-0000-4000-8000-000000000011',
+       '{"value":"finished"}'::jsonb,
+       null,
+       null,
+       '41000000-0000-4000-8000-000000000001'
+     ) $$,
+  'the claimed result can be finalized while Running'
+);
+reset role;
+update public.tasks
+set status = 'Verifying'
+where id = '43000000-0000-4000-8000-000000000001';
+set local role service_role;
+select lives_ok(
+  $$ select public.finish_task_tool_execution(
+       '42000000-0000-4000-8000-000000000001',
+       '43000000-0000-4000-8000-000000000001',
+       '44000000-0000-4000-8000-000000000011',
+       '{"value":"finished"}'::jsonb,
+       null,
+       null,
+       '41000000-0000-4000-8000-000000000001'
+     ) $$,
+  'an identical finalized result remains safely replayable'
 );
 
 select * from finish();

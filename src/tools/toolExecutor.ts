@@ -20,9 +20,18 @@ export class ToolExecutor {
     tool: ToolDefinition,
     context: ToolExecutionContext,
     input: unknown,
+    externalSignal?: AbortSignal,
   ): Promise<ToolExecutionResult> {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
+    if (externalSignal?.aborted) {
+      controller.abort();
+      return toolFailure(
+        'EXECUTION_TIMEOUT',
+        'Tool execution was cancelled.',
+        true,
+      );
+    }
     const timeoutSignal = new Promise<ToolExecutionResult>((resolve) => {
       timer = setTimeout(() => {
         controller.abort();
@@ -35,12 +44,39 @@ export class ToolExecutor {
         );
       }, this.timeoutMs);
     });
+    let onExternalAbort: (() => void) | undefined;
+    const cancellationSignal = externalSignal
+      ? new Promise<ToolExecutionResult>((resolve) => {
+          onExternalAbort = () => {
+            controller.abort();
+            resolve(
+              toolFailure(
+                'EXECUTION_TIMEOUT',
+                'Tool execution was cancelled.',
+                true,
+              ),
+            );
+          };
+          externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+          if (externalSignal.aborted) onExternalAbort();
+        })
+      : null;
 
     try {
       const execution = Promise.resolve().then(() =>
-        tool.execute({ ...context, signal: controller.signal }, input),
+        controller.signal.aborted
+          ? toolFailure(
+              'EXECUTION_TIMEOUT',
+              'Tool execution was cancelled.',
+              true,
+            )
+          : tool.execute({ ...context, signal: controller.signal }, input),
       );
-      const result = await Promise.race([execution, timeoutSignal]);
+      const result = await Promise.race(
+        cancellationSignal
+          ? [execution, timeoutSignal, cancellationSignal]
+          : [execution, timeoutSignal],
+      );
       if (result?.success === true) {
         if (!isPersistableJson(result.output) || !isValidEvidence(result.evidence)) {
           return toolFailure(
@@ -65,6 +101,9 @@ export class ToolExecutor {
       return toolFailure('EXECUTION_FAILED', 'Tool execution failed.');
     } finally {
       if (timer !== undefined) clearTimeout(timer);
+      if (onExternalAbort) {
+        externalSignal?.removeEventListener('abort', onExternalAbort);
+      }
       controller.abort();
     }
   }

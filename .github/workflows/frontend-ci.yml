@@ -22,6 +22,11 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.2.8
+
       - name: Install dependencies
         run: npm ci
 
@@ -36,6 +41,11 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Check and test the Edge Function
+        run: |
+          deno check --unstable-sloppy-imports supabase/functions/execute-tool/index.ts
+          deno test --unstable-sloppy-imports supabase/functions/execute-tool/handler_test.ts
 
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v1

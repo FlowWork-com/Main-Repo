@@ -46,13 +46,13 @@ The framework-independent `src/workflow` module remains the workflow transition/
 
 ### Tool execution infrastructure
 
-The framework-independent `src/tools` module defines versioned tool contracts, immutable registry metadata, input validation, a timeout-bounded executor, and the deterministic MVP tools: `echo`, `text-transform`, `json-inspect`, and `file-metadata`. Each execution receives an authenticated user, workspace, task, execution, tool/version, and request identity. The backend service checks that context, workspace authorization, and any workflow approval requirement before execution.
+The browser requests tool execution only through the authenticated `execute-tool` Supabase Edge Function. Its payload contains the task, execution, and request IDs, tool ID/version, and JSON input; it cannot supply an actor, workspace, approval, or result. The function verifies the Supabase Auth token, resolves the task and workspace from database records under the caller JWT, and checks membership before invoking the shared backend execution service.
 
-`file-metadata` queries only metadata registered to the current task; it never reads a filesystem path or file contents. Successful tool outputs and optional evidence remain separate from verification: the workflow moves from Running to Verifying, and only the existing workflow verification command can record verification evidence and complete the task.
+The versioned allow-list and canonical implementations remain in `src/tools`: `echo`, `text-transform`, `json-inspect`, and `file-metadata`. Tool input is validated before claiming; `file-metadata` reads only metadata registered to the task. No client-supplied code or tool definition is executed. The browser adapter in `src/backend/toolExecutionClient.ts` only invokes the Edge Function with the public authenticated Supabase client; it does not import or instantiate the executor.
 
-`task_tool_executions` stores execution inputs, outputs, failures, and evidence with task/workspace linkage and per-task execution/request idempotency constraints. Workspace members have read-only history access through RLS. Authenticated writes go through constrained `claim_task_tool_execution` and `finish_task_tool_execution` functions, which verify the current user, membership, task association, and workflow execution state. Browser code uses the existing public Supabase client; it does not receive a service-role key or any tool-specific credentials. Inputs, outputs, and evidence are size-limited, and credential-like field names and common credential formats are rejected in both the application and database RPC boundary; credentials must not be passed as ordinary tool input.
+The Edge Function uses two clients: the caller's verified JWT for task/workflow reads and workflow-domain event persistence, and a service-role client held only in the function runtime for execution-record RPCs and task-file metadata reads. A forward-only migration revokes authenticated access to the claim/finalization RPCs and grants it only to `service_role`. Those `SECURITY DEFINER` functions take an explicit actor ID from the verified Edge Function and independently validate actor membership, task/workspace linkage, Running status for new claims/finalization, and execution ownership. They preserve identity uniqueness, safe identical-result replay, and rejection of conflicting results. Input/output size limits and credential checks remain enforced by application and database boundaries. RLS still permits workspace members to read execution history but not mutate it.
 
-This phase is infrastructure only. FlowWork does not yet contain AI orchestration, autonomous agents, external production integrations, browser automation, arbitrary shell/code execution, unrestricted filesystem/network/database tools, or an independent workflow state machine. Existing workflow domain rules and approval protections remain authoritative.
+Successful execution moves a Running workflow to Verifying through the existing workflow domain and authenticated persistence RPC. Execution output and evidence are not verification: only the existing independent verification command may complete the task. High-risk tools require an approval recorded in both workflow history and persisted approval records; the workflow self-approval protection remains in force.
 
 ## Environment variables
 
@@ -60,5 +60,29 @@ This phase is infrastructure only. FlowWork does not yet contain AI orchestratio
 | --- | --- |
 | `VITE_SUPABASE_URL` | Supabase project API URL |
 | `VITE_SUPABASE_ANON_KEY` | Public Supabase anon/publishable key; protected by RLS |
+| `SUPABASE_URL` | Supabase project URL available to the Edge Function |
+| `SUPABASE_ANON_KEY` | Public key available to the Edge Function for caller-scoped requests |
+| `SUPABASE_SERVICE_ROLE_KEY` | Privileged key used only inside the Edge Function runtime; never add a `VITE_` prefix |
+| `APP_ORIGINS` | Comma-separated exact browser origins allowed by the Edge Function; local defaults are `http://localhost:5173,http://127.0.0.1:5173` |
 
-Authentication is required. The app fails with a setup message when either variable is missing and never falls back to an unauthenticated or privileged database client.
+Authentication is required. The app fails with a setup message when either `VITE_` value is missing and never falls back to an unauthenticated or privileged database client. Configure the Edge Function's `SUPABASE_SERVICE_ROLE_KEY` and `APP_ORIGINS` as Supabase secrets for hosted deployments. Never place the service-role key in frontend environment files or logs.
+
+For local execution, start Supabase, apply migrations, and serve the function using a local ignored env file containing the four `SUPABASE_*`/`APP_ORIGINS` values above:
+
+```sh
+npx supabase db reset
+npx supabase functions serve execute-tool --env-file supabase/functions/.env
+```
+
+The browser app continues to use the local URL and anon key in `.env.local`; the local function env file is server-only and must not be committed. Configure `APP_ORIGINS` to the exact origin(s) used by the browser.
+
+Run the Edge Function's executable request/auth/authorization tests and type-check with:
+
+```sh
+deno check --unstable-sloppy-imports supabase/functions/execute-tool/index.ts
+deno test --unstable-sloppy-imports supabase/functions/execute-tool/handler_test.ts
+```
+
+The existing `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npx supabase db lint --local`, and `npx supabase test db` remain enabled in CI. The database tests cover role privileges and actor/task ownership independently of `auth.uid()`.
+
+This phase remains infrastructure only: no AI orchestration, autonomous agents, external production integrations, browser automation, arbitrary shell/code/network/filesystem/database access, background workers, or separate workflow state machine. Edge execution is request-bound; a process interruption after an execution is claimed can leave it `running`, and retries safely report in-progress rather than risk executing an operation twice. There is no queue or automated recovery worker yet. Execution is bounded by the tool timeout and the Edge Function platform's request limits.

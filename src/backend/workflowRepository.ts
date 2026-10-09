@@ -62,6 +62,7 @@ interface DbEvent {
 export interface WorkflowRepository {
   listWorkspaces(userId: string): Promise<WorkspaceRecord[]>;
   createWorkspace(name: string): Promise<WorkspaceRecord>;
+  getTask(taskId: string): Promise<PersistedTask | null>;
   listTasks(workspaceId: string): Promise<PersistedTask[]>;
   createTask(
     input: {
@@ -141,6 +142,21 @@ export class SupabaseWorkflowRepository implements WorkflowRepository {
 
     const events = await this.loadEvents(rows);
     return rows.map((row) => mapTaskRow(row, events.get(row.id) ?? []));
+  }
+
+  async getTask(taskId: string): Promise<PersistedTask | null> {
+    const { data, error } = await this.client
+      .from('tasks')
+      .select(
+        'id, workspace_id, owner_id, title, details, status, attempt, created_at, updated_at',
+      )
+      .eq('id', taskId)
+      .maybeSingle();
+    if (error) throw operationError('load task');
+    if (!data) return null;
+    const row = data as TaskRow;
+    const events = await this.loadEvents([row]);
+    return mapTaskRow(row, events.get(row.id) ?? []);
   }
 
   async createTask(input: {

@@ -85,6 +85,7 @@ function workflowRepository(): WorkflowRepository & {
   return {
     listWorkspaces: vi.fn(),
     createWorkspace: vi.fn(),
+    getTask: vi.fn(),
     listTasks: vi.fn(),
     createTask: vi.fn(),
     persistEvents: vi.fn(async () => undefined),

@@ -19,4 +19,10 @@ export default tseslint.config(
       ...reactHooks.configs.flat.recommended.rules,
     },
   },
+  {
+    files: ['supabase/functions/**/*.ts'],
+    languageOptions: {
+      globals: globals.deno,
+    },
+  },
 );

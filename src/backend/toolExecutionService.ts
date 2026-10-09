@@ -46,6 +46,7 @@ export class ToolExecutionService {
   async execute(
     request: ToolExecutionRequest,
     aggregate: WorkflowAggregate,
+    signal?: AbortSignal,
   ): Promise<ToolExecutionOutcome> {
     if (!request || typeof request !== 'object') {
       return unchanged(
@@ -253,7 +254,7 @@ export class ToolExecutionService {
       );
     }
 
-    let result = await this.executor.execute(tool, context, request.input);
+    let result = await this.executor.execute(tool, context, request.input, signal);
     if (result.success && !isPersistableJson(result.output)) {
       result = toolFailure(
         'EXECUTION_FAILED',

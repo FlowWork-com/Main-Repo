@@ -213,6 +213,7 @@ select throws_ok(
   'Workspace access is required.',
   'non-members cannot claim workspace executions'
 );
+select set_config('request.jwt.claim.sub', '41000000-0000-4000-8000-000000000001', true);
 select throws_ok(
   $$ select public.claim_task_tool_execution(
        '42000000-0000-4000-8000-000000000001',
@@ -227,6 +228,7 @@ select throws_ok(
   'Task access is required.',
   'a workspace member cannot execute against another workspace task'
 );
+select set_config('request.jwt.claim.sub', '41000000-0000-4000-8000-000000000002', true);
 select throws_ok(
   $$ select public.finish_task_tool_execution(
        '42000000-0000-4000-8000-000000000001',

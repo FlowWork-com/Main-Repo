@@ -104,7 +104,7 @@ export function TaskToolExecutionPanel({
       const response = await executeTool(client, request);
       setResult(response.result);
       if (response.result.success) {
-        setExecutionMessage(`Execution returned successfully. The server reported ${response.workflowStatus}.`);
+        setExecutionMessage('Execution returned successfully. Refreshing saved workflow status…');
         setPendingRequest(null);
       } else {
         setExecutionError(readableExecutionError(response.result.error.code));
@@ -115,7 +115,12 @@ export function TaskToolExecutionPanel({
         }
       }
       try {
-        await onTaskRefresh();
+        const refreshedTask = await onTaskRefresh();
+        if (response.result.success) {
+          setExecutionMessage(
+            `Execution returned successfully. Saved workflow status: ${refreshedTask.workflow.task.status}.`,
+          );
+        }
       } catch {
         setExecutionMessage((current) =>
           `${current} Saved workflow refresh is unavailable; the displayed task status may be stale.`,
@@ -140,16 +145,16 @@ export function TaskToolExecutionPanel({
   }
 
   return (
-    <section className="tool-executions" aria-labelledby="tool-executions-title">
-      <header className="tool-executions__heading">
-        <div>
-          <p className="eyebrow">Registered tools</p>
-          <h3 id="tool-executions-title">Tool execution</h3>
-        </div>
-        <span className="tool-executions__workflow">Workflow: {task.workflow.task.status}</span>
-      </header>
-
-      {eligible ? (
+    <>
+      {eligible && (
+        <section className="tool-executions" aria-labelledby="tool-executions-title">
+          <header className="tool-executions__heading">
+            <div>
+              <p className="eyebrow">Registered tools</p>
+              <h3 id="tool-executions-title">Tool execution</h3>
+            </div>
+            <span className="tool-executions__workflow">Workflow: {task.workflow.task.status}</span>
+          </header>
         <form className="form-stack tool-execution-form" onSubmit={submitExecution}>
           <label>
             Tool
@@ -202,10 +207,7 @@ export function TaskToolExecutionPanel({
             </button>
           )}
         </form>
-      ) : (
-        <p className="tool-executions__unavailable">
-          New executions are available only to workspace members while this task is in Planning or Running.
-        </p>
+        </section>
       )}
 
       {executionMessage && <p className="notice" role="status">{executionMessage}</p>}
@@ -259,7 +261,7 @@ export function TaskToolExecutionPanel({
           </ol>
         )}
       </section>
-    </section>
+    </>
   );
 }
 

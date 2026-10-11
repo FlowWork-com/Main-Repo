@@ -566,7 +566,6 @@ select:focus {
 
 .tool-execution-form__description,
 .tool-execution-form__example,
-.tool-executions__unavailable,
 .tool-execution-history > p {
   margin: -7px 0 0;
   color: #65736f;
@@ -578,10 +577,6 @@ select:focus {
 .tool-execution-form__example code {
   color: #34423d;
   overflow-wrap: anywhere;
-}
-
-.tool-executions__unavailable {
-  margin: 0;
 }
 
 .tool-execution-result,

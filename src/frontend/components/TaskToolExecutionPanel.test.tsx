@@ -168,7 +168,9 @@ describe('TaskToolExecutionPanel', () => {
 
     expect(await screen.findByRole('heading', { name: 'Latest result' })).toBeInTheDocument();
     expect(screen.getByText(/"greeting": "hi"/)).toBeInTheDocument();
-    expect(await screen.findByText('Workflow: Verifying')).toBeInTheDocument();
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Saved workflow status: Verifying.',
+    );
     expect(onRefresh).toHaveBeenCalledOnce();
     const [, request] = vi.mocked(executeTool).mock.calls[0];
     expect(Object.keys(request).sort()).toEqual([
@@ -233,6 +235,7 @@ describe('TaskToolExecutionPanel', () => {
     expect(await screen.findByText('Echo')).toBeInTheDocument();
     expect(screen.getByText('Echo').parentElement).toHaveTextContent(/v\s*1\.0\.0/);
     expect(screen.getByText(/"value": "saved"/)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Tool execution' })).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Tool' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Run Echo' })).not.toBeInTheDocument();
     expect(client.from).toHaveBeenCalledWith('task_tool_executions');

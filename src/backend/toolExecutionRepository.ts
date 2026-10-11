@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
+  JsonValue,
   ToolEvidence,
   ToolExecutionContext,
   ToolExecutionError,
@@ -22,6 +23,30 @@ export interface StoredToolExecution {
   readonly input: unknown;
   readonly status: StoredExecutionStatus;
   readonly result: ToolExecutionResult | null;
+}
+
+export interface ToolExecutionHistoryEntry {
+  readonly executionId: string;
+  readonly toolId: string;
+  readonly toolVersion: string;
+  readonly status: StoredExecutionStatus;
+  readonly output: JsonValue | null;
+  readonly error: ToolExecutionError | null;
+  readonly createdAt: string;
+  readonly startedAt: string;
+  readonly completedAt: string | null;
+}
+
+interface ExecutionHistoryRow {
+  readonly execution_id: string;
+  readonly tool_id: string;
+  readonly tool_version: string;
+  readonly status: string;
+  readonly output: unknown;
+  readonly error: unknown;
+  readonly created_at: string;
+  readonly started_at: string;
+  readonly completed_at: string | null;
 }
 
 export interface ToolExecutionRepository extends TaskFileMetadataSource {
@@ -186,6 +211,49 @@ export class SupabaseToolExecutionRepository
       createdAt: file.created_at,
     };
   }
+}
+
+export class SupabaseToolExecutionHistoryRepository {
+  constructor(private readonly client: SupabaseClient) {}
+
+  async listTaskExecutions(
+    workspaceId: string,
+    taskId: string,
+  ): Promise<ToolExecutionHistoryEntry[]> {
+    const { data, error } = await this.client
+      .from('task_tool_executions')
+      .select('execution_id, tool_id, tool_version, status, output, error, created_at, started_at, completed_at')
+      .eq('workspace_id', workspaceId)
+      .eq('task_id', taskId)
+      .order('created_at', { ascending: false });
+    if (error) throw operationError('load tool execution history');
+    return ((data ?? []) as ExecutionHistoryRow[]).map(mapExecutionHistoryRow);
+  }
+}
+
+function mapExecutionHistoryRow(row: ExecutionHistoryRow): ToolExecutionHistoryEntry {
+  const status = asExecutionStatus(row.status);
+  let output: JsonValue | null = null;
+  let error: ToolExecutionError | null = null;
+  if (status === 'succeeded') {
+    if (!isPersistableJson(row.output)) {
+      throw new Error('Tool execution history contains invalid output.');
+    }
+    output = row.output;
+  } else if (status === 'failed') {
+    error = asToolError(row.error);
+  }
+  return {
+    executionId: row.execution_id,
+    toolId: row.tool_id,
+    toolVersion: row.tool_version,
+    status,
+    output,
+    error,
+    createdAt: row.created_at,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+  };
 }
 
 function mapExecutionRow(row: ExecutionRow): StoredToolExecution {

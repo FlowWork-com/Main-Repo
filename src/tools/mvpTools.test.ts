@@ -5,6 +5,7 @@ import {
   createMvpTools,
   type TaskFileMetadataSource,
 } from './mvpTools';
+import { MVP_TOOL_UI_METADATA } from './toolMetadata';
 import { ToolRegistry } from './toolRegistry';
 
 const context: ToolExecutionContext = {
@@ -25,6 +26,22 @@ function registry(source: TaskFileMetadataSource): ToolRegistry {
 }
 
 describe('deterministic MVP tools', () => {
+  it('keeps the manual UI metadata in parity with the registered tools', () => {
+    const tools = registry({ getTaskFileMetadata: vi.fn() });
+
+    expect(MVP_TOOL_UI_METADATA.map(({ id, name, description, version }) => ({
+      id,
+      name,
+      description,
+      version,
+    }))).toEqual(tools.list().map(({ id, name, description, version }) => ({
+      id,
+      name,
+      description,
+      version,
+    })));
+  });
+
   it('echoes structured JSON without granting external capabilities', async () => {
     const source = { getTaskFileMetadata: vi.fn() };
     const tools = registry(source);

@@ -17,6 +17,7 @@ import {
   getSupabaseClient,
   SupabaseConfigurationError,
 } from '../backend/supabaseClient';
+import { TaskToolExecutionPanel } from './components/TaskToolExecutionPanel';
 import { TaskTimeline } from './components/TaskTimeline';
 
 export function App() {
@@ -275,6 +276,17 @@ function WorkspaceView({
     };
   }
 
+  async function refreshTask(taskId: string): Promise<PersistedTask> {
+    const task = await repository.getTask(taskId);
+    if (!task || task.workspaceId !== workspace?.id) {
+      throw new Error('Unable to refresh saved task history.');
+    }
+    setTasks((existing) =>
+      existing.map((current) => current.id === task.id ? task : current),
+    );
+    return task;
+  }
+
   if (loading) {
     return <section className="panel" role="status">Loading your saved workspace…</section>;
   }
@@ -372,6 +384,14 @@ function WorkspaceView({
               {selectedTask.details && <p className="task-details">{selectedTask.details}</p>}
 
               <TaskTimeline aggregate={selectedTask.workflow} />
+
+              <TaskToolExecutionPanel
+                canAccessWorkspace={canAccessWorkspace}
+                client={client}
+                key={selectedTask.id}
+                onTaskRefresh={() => refreshTask(selectedTask.id)}
+                task={selectedTask}
+              />
 
               <div className="task-actions" aria-label="Workflow actions">
                 {selectedTask.workflow.task.status === 'Planning' && (

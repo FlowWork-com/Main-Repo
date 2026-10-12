@@ -44,6 +44,12 @@ Workspace membership and task access are enforced by PostgreSQL row-level securi
 
 The framework-independent `src/workflow` module remains the workflow transition/business-rule authority. The persistence adapter maps its aggregates and commands to Supabase storage; the database provides authorization, immutable workspace linkage, sequence/concurrency checks, and atomic writes.
 
+### Planning foundation
+
+The `src/planning` module defines a provider-agnostic planning contract and validation logic. It accepts a goal and the canonical tool catalog, validates the returned plan against the registered tools and safe JSON rules, and rejects plans containing unknown tool IDs, duplicate step IDs, cyclic dependencies, unsafe credential-like values, or unsupported capabilities. A planner request can only be generated through a configured server-side adapter; when no provider is configured, the module responds with a sanitized `PLANNER_NOT_CONFIGURED` error instead of inventing a plan.
+
+For local configuration, set `FLOWWORK_PLANNER_PROVIDER` to a supported provider name such as `mock` and optionally set `FLOWWORK_PLANNER_MODEL` to identify the configured model. Server-side secrets remain outside the browser bundle and source-controlled app config; the browser never imports or exposes provider credentials.
+
 ### Tool execution infrastructure
 
 The browser requests tool execution only through the authenticated `execute-tool` Supabase Edge Function. Its payload contains the task, execution, and request IDs, tool ID/version, and JSON input; it cannot supply an actor, workspace, approval, or result. The function verifies the Supabase Auth token, resolves the task and workspace from database records under the caller JWT, and checks membership before invoking the shared backend execution service.

@@ -17,6 +17,7 @@ import {
   getSupabaseClient,
   SupabaseConfigurationError,
 } from '../backend/supabaseClient';
+import { PlanReviewPanel } from './components/PlanReviewPanel';
 import { TaskToolExecutionPanel } from './components/TaskToolExecutionPanel';
 import { TaskTimeline } from './components/TaskTimeline';
 
@@ -384,6 +385,11 @@ function WorkspaceView({
               {selectedTask.details && <p className="task-details">{selectedTask.details}</p>}
 
               <TaskTimeline aggregate={selectedTask.workflow} />
+
+              <PlanReviewPanel
+                taskId={selectedTask.id}
+                taskTitle={selectedTask.title}
+              />
 
               <TaskToolExecutionPanel
                 canAccessWorkspace={canAccessWorkspace}

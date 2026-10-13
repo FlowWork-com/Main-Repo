@@ -224,7 +224,9 @@ begin
 
     if v_step->>'toolId' = 'json-inspect' and (
       jsonb_typeof(v_input) is distinct from 'object'
-      or jsonb_object_length(v_input) <> 1
+      or (select count(*) from jsonb_object_keys(
+        case when jsonb_typeof(v_input) = 'object' then v_input else '{}'::jsonb end
+      )) <> 1
       or jsonb_typeof(v_input->'json') is distinct from 'string'
       or char_length(v_input->>'json') > 32768
     ) then
@@ -240,7 +242,9 @@ begin
 
     if v_step->>'toolId' = 'file-metadata' and (
       jsonb_typeof(v_input) is distinct from 'object'
-      or jsonb_object_length(v_input) <> 1
+      or (select count(*) from jsonb_object_keys(
+        case when jsonb_typeof(v_input) = 'object' then v_input else '{}'::jsonb end
+      )) <> 1
       or coalesce(v_input->>'fileId', '') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       or not exists (
         select 1 from public.task_files f

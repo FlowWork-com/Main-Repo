@@ -76,7 +76,14 @@ as $$
   select public.create_workflow_plan(
     p_task_id,
     p_plan::text,
-    encode(public.hmac(p_plan::text, 'plan-test-signing-key-at-least-32-characters-long', 'sha256'), 'hex')
+      encode(
+        extensions.hmac(
+          p_plan::text,
+          'plan-test-signing-key-at-least-32-characters-long'::text,
+          'sha256'::text
+        ),
+        'hex'
+      )
   );
 $$;
 

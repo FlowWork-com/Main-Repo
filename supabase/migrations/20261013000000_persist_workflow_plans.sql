@@ -108,7 +108,10 @@ begin
   where s.name = 'flowwork-plan-signing-key'
   limit 1;
   if v_signing_key is null
-    or encode(public.hmac(p_plan_json, v_signing_key, 'sha256'), 'hex') <> p_signature then
+    or encode(
+      extensions.hmac(p_plan_json::text, v_signing_key::text, 'sha256'::text),
+      'hex'
+    ) <> p_signature then
     raise exception 'Plan proposal signature is invalid.' using errcode = '42501';
   end if;
 

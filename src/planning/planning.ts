@@ -109,21 +109,31 @@ export function planFromModelResponse(raw: unknown): WorkflowPlan {
   return plan;
 }
 
-export function validatePlan(plan: unknown, registry: ToolRegistry): WorkflowPlan {
+export function validatePlan(
+  plan: unknown,
+  registry: ToolRegistry,
+  expected?: { readonly taskId: string; readonly goal?: string },
+): WorkflowPlan {
   const normalized = normalizePlan(plan);
-  ensureStepCount(normalized);
-  const stepIds = new Set<string>();
+  if (expected && (normalized.taskId !== expected.taskId || (expected.goal !== undefined && normalized.goal !== expected.goal))) {
+    throw createPlannerError('INVALID_PLAN', 'The plan does not match the requested task and goal.');
+  }
+  const unsupported = detectUnsupportedCapabilities(normalized.goal, normalized.limitations);
+  ensureStepCount(normalized, unsupported.length > 0);
+  const stepIds = new Set(normalized.steps.map((step) => step.id));
   const graph = new Map<string, string[]>();
 
   for (const step of normalized.steps) {
-    if (stepIds.has(step.id)) {
+    if (stepIds.size !== normalized.steps.length) {
       throw createPlannerError('INVALID_PLAN', `Duplicate step id "${step.id}".`);
     }
-    stepIds.add(step.id);
     graph.set(step.id, [...step.dependencies]);
 
     if (step.dependencies.some((dependency) => dependency === step.id)) {
       throw createPlannerError('INVALID_PLAN', `Step "${step.id}" cannot depend on itself.`);
+    }
+    if (new Set(step.dependencies).size !== step.dependencies.length) {
+      throw createPlannerError('INVALID_PLAN', `Step "${step.id}" contains duplicate dependencies.`);
     }
 
     const definition = registry.get(step.toolId, step.toolVersion);
@@ -142,6 +152,9 @@ export function validatePlan(plan: unknown, registry: ToolRegistry): WorkflowPla
     if (containsCredentialLikeValue(step.input)) {
       throw createPlannerError('INVALID_PLAN', `Step "${step.id}" input contains credential-like data.`);
     }
+    if (expected && containsCrossTaskReference(step.input, expected.taskId)) {
+      throw createPlannerError('INVALID_PLAN', `Step "${step.id}" references a different task.`);
+    }
     if (!isPersistableJson(step.input)) {
       throw createPlannerError('INVALID_PLAN', `Step "${step.id}" input is not safe JSON.`);
     }
@@ -155,9 +168,6 @@ export function validatePlan(plan: unknown, registry: ToolRegistry): WorkflowPla
       }
     }
 
-    if (!step.validation.valid && step.validation.blockingReasons.length > 0) {
-      throw createPlannerError('INVALID_PLAN', `Step "${step.id}" was marked as invalid by the model.`);
-    }
   }
 
   for (const dependency of normalized.dependencies) {
@@ -170,13 +180,25 @@ export function validatePlan(plan: unknown, registry: ToolRegistry): WorkflowPla
     throw createPlannerError('INVALID_PLAN', 'Plan dependency graph contains a cycle.');
   }
 
-  const unsupported = detectUnsupportedCapabilities(normalized.goal, normalized.limitations);
   if (unsupported.length > 0) {
-    const combined = [...new Set([...normalized.limitations, ...unsupported])];
-    return { ...normalized, limitations: combined, validationStatus: 'invalid' } as WorkflowPlan;
+    return {
+      ...normalized,
+      steps: [],
+      dependencies: [],
+      validationStatus: 'invalid',
+      limitations: [...new Set([...normalized.limitations, ...unsupported])],
+    };
   }
 
-  return { ...normalized, validationStatus: 'valid', limitations: normalized.limitations } as WorkflowPlan;
+  return {
+    ...normalized,
+    steps: normalized.steps.map((step) => ({
+      ...step,
+      validation: { valid: true, blockingReasons: [] },
+    })),
+    validationStatus: 'valid',
+    limitations: normalized.limitations,
+  } as WorkflowPlan;
 }
 
 export function sanitizePlanResponse(value: unknown): WorkflowPlan | null {
@@ -200,10 +222,13 @@ function normalizePlan(raw: unknown): WorkflowPlan {
   const summary = readRequiredString(record.summary, 'summary');
   const createdAt = readRequiredString(record.createdAt, 'createdAt');
   const version = readRequiredNumber(record.version, 'version');
-  const dependencies = readStringArray(record.dependencies, 'dependencies');
-  const limitations = readStringArray(record.limitations, 'limitations');
+  const dependencies = readStringArray(record.dependencies, 'dependencies', MAX_PLAN_STEPS);
+  const limitations = readStringArray(record.limitations, 'limitations', 20);
 
-  const steps = Array.isArray(record.steps) ? record.steps : [];
+  if (!Array.isArray(record.steps) || record.steps.length > MAX_PLAN_STEPS) {
+    throw createPlannerError('INVALID_RESPONSE', `Plan cannot contain more than ${MAX_PLAN_STEPS} steps.`);
+  }
+  const steps = record.steps;
   const normalizedSteps: readonly PlanStep[] = steps.map((step, index) => normalizeStep(step, index));
 
   return Object.freeze({
@@ -236,7 +261,7 @@ function normalizeStep(raw: unknown, index: number): PlanStep {
     record.verificationCriteria,
     `step ${index + 1} verificationCriteria`,
   );
-  const dependencies = readStringArray(record.dependencies, `step ${index + 1} dependencies`);
+  const dependencies = readStringArray(record.dependencies, `step ${index + 1} dependencies`, MAX_PLAN_STEPS);
   const input = normalizeJsonInput(record.input, `step ${index + 1} input`);
   const validation = normalizeStepValidation(record.validation, `step ${index + 1}`);
 
@@ -255,9 +280,8 @@ function normalizeStep(raw: unknown, index: number): PlanStep {
 }
 
 function normalizeStepValidation(raw: unknown, label: string): PlanStepValidation {
-  if (!raw || typeof raw !== 'object') {
-    throw createPlannerError('INVALID_RESPONSE', `${label} validation block is missing.`);
-  }
+  if (raw === undefined) return Object.freeze({ valid: false, blockingReasons: [] });
+  if (!raw || typeof raw !== 'object') throw createPlannerError('INVALID_RESPONSE', `${label} validation block is invalid.`);
   const record = raw as Record<string, unknown>;
   const valid = record.valid === true;
   const blockingReasons = Array.isArray(record.blockingReasons)
@@ -307,9 +331,9 @@ function readRequiredNumber(value: unknown, label: string): number {
   return Number(value);
 }
 
-function readStringArray(value: unknown, label: string): readonly string[] {
+function readStringArray(value: unknown, label: string, maximumItems: number): readonly string[] {
   if (value === undefined) return [];
-  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) {
+  if (!Array.isArray(value) || value.length > maximumItems || !value.every((item) => typeof item === 'string')) {
     throw createPlannerError('INVALID_RESPONSE', `${label} must be an array of strings.`);
   }
   return value.map((item) => sanitizeField(item, 400));
@@ -328,8 +352,8 @@ function normalizeStatus(value: unknown): PlanValidationStatus {
   return 'invalid';
 }
 
-function ensureStepCount(plan: WorkflowPlan): void {
-  if (plan.steps.length === 0) {
+function ensureStepCount(plan: WorkflowPlan, allowEmpty: boolean): void {
+  if (plan.steps.length === 0 && !allowEmpty) {
     throw createPlannerError('INVALID_PLAN', 'Plan must contain at least one step.');
   }
   if (plan.steps.length > MAX_PLAN_STEPS) {
@@ -344,6 +368,17 @@ function containsCredentialLikeValue(value: unknown): boolean {
     return Object.values(value as Record<string, unknown>).some((entry) => containsCredentialLikeValue(entry));
   }
   return false;
+}
+
+function containsCrossTaskReference(value: unknown, taskId: string): boolean {
+  if (Array.isArray(value)) return value.some((entry) => containsCrossTaskReference(entry, taskId));
+  if (!value || typeof value !== 'object') return false;
+  return Object.entries(value as Record<string, unknown>).some(([key, entry]) => {
+    if (['taskId', 'task_id'].includes(key.toLowerCase()) && typeof entry === 'string' && entry !== taskId) {
+      return true;
+    }
+    return containsCrossTaskReference(entry, taskId);
+  });
 }
 
 function detectUnsupportedCapabilities(goal: string, limitations: readonly string[]): readonly string[] {

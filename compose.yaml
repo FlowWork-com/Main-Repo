@@ -1,0 +1,17 @@
+services:
+  frontend:
+    image: flowwork-frontend:local
+    build:
+      context: .
+      secrets:
+        - VITE_SUPABASE_URL
+        - VITE_SUPABASE_ANON_KEY
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+secrets:
+  VITE_SUPABASE_URL:
+    environment: VITE_SUPABASE_URL
+  VITE_SUPABASE_ANON_KEY:
+    environment: VITE_SUPABASE_ANON_KEY

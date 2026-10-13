@@ -27,3 +27,6 @@ enable_confirmations = true
 
 [functions.execute-tool]
 verify_jwt = true
+
+[functions.plan-workflow]
+verify_jwt = true

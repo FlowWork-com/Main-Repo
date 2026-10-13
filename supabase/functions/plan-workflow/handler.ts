@@ -1,5 +1,5 @@
-import { buildToolCatalogForPlanner, validatePlan, type PlannerRequest } from '../../../src/planning/planning.ts';
-import { createPlannerAdapterFromEnvironment } from '../../../src/planning/provider.ts';
+import { buildToolCatalogForPlanner, createPlannerError, validatePlan, type PlannerRequest, type WorkflowPlan } from '../../../src/planning/planning.ts';
+import { createPlannerAdapterFromEnvironment, type PlannerEnvironment } from '../../../src/planning/provider.ts';
 import { createMvpTools } from '../../../src/tools/mvpTools.ts';
 import { ToolRegistry } from '../../../src/tools/toolRegistry.ts';
 
@@ -18,6 +18,7 @@ export interface PlanWorkflowPayload {
 
 export interface PlanWorkflowDependencies<Context> {
   readonly origins: ReadonlySet<string>;
+  readonly plannerEnvironment?: PlannerEnvironment;
   readonly authenticate: (
     accessToken: string,
   ) => Promise<AuthenticatedCaller<Context> | null>;
@@ -31,6 +32,11 @@ export interface PlanWorkflowDependencies<Context> {
     readonly title: string;
     readonly details: string;
   } | null>;
+  readonly persistPlan: (
+    caller: AuthenticatedCaller<Context>,
+    task: { readonly id: string; readonly workspaceId: string },
+    plan: WorkflowPlan,
+  ) => Promise<WorkflowPlan>;
   readonly logFailure?: (code: string) => void;
 }
 
@@ -110,7 +116,7 @@ export function createPlanWorkflowHandler<Context>(
       registry.register(tool);
     }
 
-    const plannerAdapter = createPlannerAdapterFromEnvironment();
+    const plannerAdapter = createPlannerAdapterFromEnvironment(dependencies.plannerEnvironment ?? {});
     if (!plannerAdapter) {
       return errorResponse(503, 'PLANNER_NOT_CONFIGURED', 'The planner is not configured.', corsHeaders);
     }
@@ -126,8 +132,21 @@ export function createPlanWorkflowHandler<Context>(
       if (!providerResponse.success) {
         return errorResponse(502, providerResponse.error.code, providerResponse.error.message, corsHeaders);
       }
-      const plan = validatePlan(providerResponse.plan, registry);
-      return jsonResponse(200, { plan }, corsHeaders);
+      const plan = validatePlan(providerResponse.plan, registry, { taskId: task.id, goal: payload.goal });
+      if (new TextEncoder().encode(JSON.stringify(plan)).byteLength > maxRequestBytes) {
+        throw createPlannerError('INVALID_PLAN', 'The proposed plan is too large to save.');
+      }
+      let persistedPlan: WorkflowPlan;
+      try {
+        persistedPlan = await dependencies.persistPlan(caller, {
+          id: task.id,
+          workspaceId: task.workspaceId,
+        }, plan);
+      } catch {
+        dependencies.logFailure?.('PLAN_PERSISTENCE_FAILED');
+        return errorResponse(503, 'PLAN_PERSISTENCE_FAILED', 'Unable to save the proposed plan. Try again.', corsHeaders);
+      }
+      return jsonResponse(200, { plan: persistedPlan }, corsHeaders);
     } catch (error) {
       if (error instanceof Error && error.name === 'PlannerError') {
         const plannerError = error as Error & { code?: string; details?: string };
@@ -166,9 +185,16 @@ async function readPayload(request: Request): Promise<PlanWorkflowPayload> {
     reader.releaseLock();
   }
 
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
   let text: string;
   try {
-    text = new TextDecoder('utf-8', { fatal: true }).decode(new Uint8Array(totalBytes));
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   } catch {
     throw new PlanRequestError(400, 'INVALID_REQUEST', 'Request body is invalid.');
   }

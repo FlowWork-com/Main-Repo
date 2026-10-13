@@ -387,7 +387,11 @@ function WorkspaceView({
               <TaskTimeline aggregate={selectedTask.workflow} />
 
               <PlanReviewPanel
+                canAccessWorkspace={canAccessWorkspace}
+                client={client}
+                key={selectedTask.id}
                 taskId={selectedTask.id}
+                taskStatus={selectedTask.workflow.task.status}
                 taskTitle={selectedTask.title}
               />
 

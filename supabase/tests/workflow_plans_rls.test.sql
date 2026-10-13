@@ -64,6 +64,8 @@ insert into plan_test_payload values (jsonb_build_object(
   'limitations', '[]'::jsonb
 ));
 
+grant select on plan_test_payload to authenticated;
+
 select vault.create_secret(
   'plan-test-signing-key-at-least-32-characters-long',
   'flowwork-plan-signing-key',

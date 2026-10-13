@@ -25,6 +25,19 @@ npx supabase test db
 
 The local Supabase CLI requires Docker. Supabase Auth email confirmation is enabled in the local configuration.
 
+### Run the containerized frontend
+
+Copy `.env.example` to `.env` and set the local Supabase URL and public anon key printed by `npx supabase status`. Then build and start the frontend container:
+
+```sh
+cp .env.example .env
+# Edit .env with the local Supabase values.
+docker compose up --build -d
+docker compose ps
+```
+
+Open `http://localhost:8080`. Compose builds a multi-stage Node/Nginx image, serves SPA routes through the Nginx fallback, and reports container health at `/health`. The `VITE_SUPABASE_*` values are public frontend configuration and are embedded in the static bundle; never put service-role or provider secrets in `.env` or build arguments. `.env` is ignored by Git.
+
 For a hosted Supabase project, apply migrations with `npx supabase db push` after linking the project, and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the frontend environment. The frontend uses only the project URL and public anon key; never set a service-role key in a `VITE_` variable or expose it to a browser.
 
 ## Quality checks

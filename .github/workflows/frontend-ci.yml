@@ -83,7 +83,7 @@ jobs:
             VITE_SUPABASE_ANON_KEY=ci-placeholder-public-anon-key
 
       - name: Scan container image
-        uses: aquasecurity/trivy-action@0.32.0
+        uses: aquasecurity/trivy-action@v0
         with:
           image-ref: flowwork-frontend:ci
           format: table

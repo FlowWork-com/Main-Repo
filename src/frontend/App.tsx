@@ -108,11 +108,11 @@ export function App() {
           <p className="error-message" role="alert">{authError}</p>
         )}
         <section className="welcome" aria-labelledby="welcome-title">
-          <p className="eyebrow">Your workspace</p>
-          <h1 id="welcome-title">Make work move forward.</h1>
+          <p className="eyebrow">Your digital coworker</p>
+          <h1 id="welcome-title">What do you need done?</h1>
           <p className="welcome__description">
-            Create tasks, record approvals and verification, and return to the
-            saved workflow whenever you need it.
+            Describe the outcome you need. FlowWork will help you plan the work,
+            review the proposed steps, and keep the result tied to a saved workflow.
           </p>
         </section>
 
@@ -179,8 +179,6 @@ function WorkspaceView({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [taskFormOpen, setTaskFormOpen] = useState(false);
-  const [title, setTitle] = useState('');
   const [details, setDetails] = useState('');
   const [evidenceReference, setEvidenceReference] = useState('');
   const [decisionReason, setDecisionReason] = useState('');
@@ -218,21 +216,24 @@ function WorkspaceView({
 
   async function submitTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!workspace || !canAccessWorkspace || !title.trim()) return;
+    const request = details.trim();
+    if (!workspace || !canAccessWorkspace || request.length < 3) return;
     setBusy(true);
     setError('');
     try {
+      const firstLine = request.split(/\r?\n/).map((line) => line.trim()).find(Boolean) ?? request;
+      const taskTitle = firstLine.length > 200
+        ? `${firstLine.slice(0, 197).trimEnd()}…`
+        : firstLine;
       const task = await createWorkflowTask(repository, {
         workspaceId: workspace.id,
         actorId: userId,
-        title: title.trim(),
-        details: details.trim(),
+        title: taskTitle,
+        details: request,
       });
       setTasks((existing) => [task, ...existing]);
       setSelectedTaskId(task.id);
-      setTitle('');
       setDetails('');
-      setTaskFormOpen(false);
     } catch (caught) {
       setError(readableWorkflowError(caught, 'Unable to create this task.'));
     } finally {
@@ -308,56 +309,47 @@ function WorkspaceView({
           <p className="eyebrow">Workspace</p>
           <h2>{workspace.name}</h2>
         </div>
-        <button
-          className="button"
-          onClick={() => setTaskFormOpen((open) => !open)}
-          type="button"
-        >
-          {taskFormOpen ? 'Close' : 'New task'}
-        </button>
+        <span className="preview-badge preview-badge--subtle">Plan before action</span>
       </div>
 
       <p className="workspace-note">
-        Status changes are recorded explicitly; tasks are not executed automatically.
+        Start with the outcome you want. Creating a workflow saves it in Planning; it does not execute any actions.
       </p>
 
       {error && <p className="error-message" role="alert">{error}</p>}
 
-      {taskFormOpen && (
-        <form className="panel form-stack task-form" onSubmit={submitTask}>
-          <label>
-            Task name
-            <input
-              maxLength={200}
-              onChange={(event) => setTitle(event.target.value)}
-              required
-              value={title}
-            />
-          </label>
-          <label>
-            Details <span className="optional-label">Optional</span>
-            <textarea
-              maxLength={10000}
-              onChange={(event) => setDetails(event.target.value)}
-              rows={3}
-              value={details}
-            />
-          </label>
-          <button className="button" disabled={busy} type="submit">
-            Create task in Planning
+      <form className="request-composer" onSubmit={submitTask}>
+        <label className="request-composer__label" htmlFor="work-request">Describe your request</label>
+        <textarea
+          id="work-request"
+          aria-describedby="work-request-guidance"
+          autoComplete="off"
+          maxLength={2000}
+          onChange={(event) => setDetails(event.target.value)}
+          placeholder="Describe the work you need done and the outcome you expect…"
+          required
+          rows={4}
+          value={details}
+        />
+        <div className="request-composer__footer">
+          <p id="work-request-guidance" className="request-composer__hint">
+            FlowWork creates a plan for review. Nothing runs automatically when you submit.
+          </p>
+          <button className="button" disabled={busy || details.trim().length < 3} type="submit">
+            Create workflow <span className="button__arrow" aria-hidden="true">→</span>
           </button>
-        </form>
-      )}
+        </div>
+      </form>
 
       {tasks.length === 0 ? (
         <section className="panel empty-state">
-          <h3>No tasks yet</h3>
-          <p>Create a task to start a saved workflow in Planning.</p>
+          <h3>Your work starts here</h3>
+          <p>Create your first workflow above. It will be saved in Planning for review.</p>
         </section>
       ) : (
         <div className="task-layout">
           <nav className="task-list panel" aria-label="Saved tasks">
-            <h3>Tasks</h3>
+            <h3>Recent work</h3>
             {tasks.map((task) => (
               <button
                 aria-current={selectedTaskId === task.id ? 'true' : undefined}
@@ -392,7 +384,7 @@ function WorkspaceView({
                 key={selectedTask.id}
                 taskId={selectedTask.id}
                 taskStatus={selectedTask.workflow.task.status}
-                taskTitle={selectedTask.title}
+                taskTitle={selectedTask.details || selectedTask.title}
               />
 
               <TaskToolExecutionPanel

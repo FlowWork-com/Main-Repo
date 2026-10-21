@@ -12,6 +12,9 @@ describe('App configuration', () => {
     render(<App />);
 
     expect(
+      screen.getByRole('heading', { name: 'What do you need done?' }),
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole('heading', { name: 'Connect Supabase to continue' }),
     ).toBeInTheDocument();
     expect(

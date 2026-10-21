@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import {
+  WORKFLOW_STATUSES,
   type WorkflowCommand,
   type WorkflowCommandContext,
+  type WorkflowStatus,
 } from '../workflow/workflow';
+import { filterTasksForHistory } from './taskHistory';
 import {
   SupabaseWorkflowRepository,
   type PersistedTask,
@@ -29,6 +32,7 @@ export function App() {
   const [authError, setAuthError] = useState('');
   const [email, setEmail] = useState('');
   const [linkSent, setLinkSent] = useState(false);
+  const [activeView, setActiveView] = useState<'workspace' | 'history'>('workspace');
 
   useEffect(() => {
     if (!client) return;
@@ -85,19 +89,40 @@ export function App() {
           <span>FlowWork</span>
         </a>
         {session && client ? (
-          <button
-            className="button button--quiet"
-            onClick={() => {
-              void client.auth.signOut().then(({ error }) => {
-                if (error) {
-                  setAuthError('Unable to sign out. Please retry.');
-                }
-              }).catch(() => setAuthError('Unable to sign out. Please retry.'));
-            }}
-            type="button"
-          >
-            Sign out
-          </button>
+          <nav className="topbar-actions" aria-label="Application navigation">
+            <div className="topbar-nav" role="group" aria-label="Workspace views">
+              <button
+                className={`button button--quiet topbar-nav__button${activeView === 'workspace' ? ' is-active' : ''}`}
+                aria-pressed={activeView === 'workspace'}
+                onClick={() => setActiveView('workspace')}
+                type="button"
+              >
+                Workspace
+              </button>
+              <button
+                className={`button button--quiet topbar-nav__button${activeView === 'history' ? ' is-active' : ''}`}
+                aria-pressed={activeView === 'history'}
+                onClick={() => setActiveView('history')}
+                type="button"
+              >
+                History
+              </button>
+            </div>
+            <button
+              className="button button--quiet"
+              onClick={() => {
+                setActiveView('workspace');
+                void client.auth.signOut().then(({ error }) => {
+                  if (error) {
+                    setAuthError('Unable to sign out. Please retry.');
+                  }
+                }).catch(() => setAuthError('Unable to sign out. Please retry.'));
+              }}
+              type="button"
+            >
+              Sign out
+            </button>
+          </nav>
         ) : (
           <span className="preview-badge">Private workspace</span>
         )}
@@ -129,7 +154,12 @@ export function App() {
         ) : authLoading ? (
           <section className="panel" role="status">Checking your sign-in…</section>
         ) : session && client ? (
-          <WorkspaceView client={client} userId={session.user.id} />
+          <WorkspaceView
+            client={client}
+            userId={session.user.id}
+            activeView={activeView}
+            onViewChange={setActiveView}
+          />
         ) : (
           <section className="panel auth-panel" aria-labelledby="signin-title">
             <p className="eyebrow">Sign in</p>
@@ -168,9 +198,13 @@ export function App() {
 function WorkspaceView({
   client,
   userId,
+  activeView,
+  onViewChange,
 }: {
   readonly client: SupabaseClient;
   readonly userId: string;
+  readonly activeView: 'workspace' | 'history';
+  readonly onViewChange: (view: 'workspace' | 'history') => void;
 }) {
   const repository = useMemo(() => new SupabaseWorkflowRepository(client), [client]);
   const [workspace, setWorkspace] = useState<WorkspaceRecord | null>(null);
@@ -180,6 +214,12 @@ function WorkspaceView({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [details, setDetails] = useState('');
+  const [historyQuery, setHistoryQuery] = useState('');
+  const [historyStatus, setHistoryStatus] = useState<'all' | WorkflowStatus>('all');
+  const historyTasks = useMemo(
+    () => filterTasksForHistory(tasks, historyQuery, historyStatus),
+    [tasks, historyQuery, historyStatus],
+  );
   const [evidenceReference, setEvidenceReference] = useState('');
   const [decisionReason, setDecisionReason] = useState('');
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
@@ -298,6 +338,95 @@ function WorkspaceView({
         <h2>Workspace access unavailable</h2>
         <p>Your account is not a member of an available workspace.</p>
         {error && <p className="error-message">{error}</p>}
+      </section>
+    );
+  }
+
+  if (activeView === 'history') {
+    return (
+      <section className="history-view" aria-labelledby="history-title">
+        <div className="workspace__heading">
+          <div>
+            <p className="eyebrow">Saved workflows</p>
+            <h2 id="history-title">Work history</h2>
+          </div>
+          <button className="button" onClick={() => onViewChange('workspace')} type="button">
+            New request
+          </button>
+        </div>
+        <p className="workspace-note">
+          Search previous requests, review their latest status, and reopen the saved workflow.
+        </p>
+        {error && <p className="error-message" role="alert">{error}</p>}
+        <div className="history-controls">
+          <label className="history-search" htmlFor="history-search">
+            <span>Search history</span>
+            <input
+              id="history-search"
+              type="search"
+              autoComplete="off"
+              placeholder="Search request, details, or status…"
+              value={historyQuery}
+              onChange={(event) => setHistoryQuery(event.target.value)}
+            />
+          </label>
+          <label className="history-status-filter" htmlFor="history-status">
+            <span>Status</span>
+            <select
+              id="history-status"
+              value={historyStatus}
+              onChange={(event) => setHistoryStatus(event.target.value as 'all' | WorkflowStatus)}
+            >
+              <option value="all">All statuses</option>
+              {WORKFLOW_STATUSES.map((status) => (
+                <option key={status} value={status}>{status}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {historyTasks.length === 0 ? (
+          <section className="panel empty-state">
+            <h3>{tasks.length === 0 ? 'No saved work yet' : 'No matching work'}</h3>
+            <p>
+              {tasks.length === 0
+                ? 'Create a workflow from the Workspace tab and it will appear here.'
+                : 'Try a different search term or status filter.'}
+            </p>
+          </section>
+        ) : (
+          <div className="history-list">
+            {historyTasks.map((task) => (
+              <article className="history-item panel" key={task.id}>
+                <div className="history-item__content">
+                  <div className="history-item__heading">
+                    <h3>{task.title}</h3>
+                    <span className={`status-pill status-pill--${statusClass(task.workflow.task.status)}`}>
+                      {task.workflow.task.status}
+                    </span>
+                  </div>
+                  <p className="history-item__details">
+                    {task.details || 'No additional request details.'}
+                  </p>
+                  <div className="history-item__meta">
+                    <span>Created {new Date(task.createdAt).toLocaleString()}</span>
+                    <span>Updated {new Date(task.updatedAt).toLocaleString()}</span>
+                    <span>{task.workflow.events.length} history event{task.workflow.events.length === 1 ? '' : 's'}</span>
+                  </div>
+                </div>
+                <button
+                  className="button button--secondary history-item__open"
+                  onClick={() => {
+                    setSelectedTaskId(task.id);
+                    onViewChange('workspace');
+                  }}
+                  type="button"
+                >
+                  Open workflow <span aria-hidden="true">→</span>
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
     );
   }

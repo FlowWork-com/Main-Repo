@@ -342,6 +342,95 @@ function WorkspaceView({
     );
   }
 
+  if (activeView === 'history') {
+    return (
+      <section className="history-view" aria-labelledby="history-title">
+        <div className="workspace__heading">
+          <div>
+            <p className="eyebrow">Saved workflows</p>
+            <h2 id="history-title">Work history</h2>
+          </div>
+          <button className="button" onClick={() => onViewChange('workspace')} type="button">
+            New request
+          </button>
+        </div>
+        <p className="workspace-note">
+          Search previous requests, review their latest status, and reopen the saved workflow.
+        </p>
+        {error && <p className="error-message" role="alert">{error}</p>}
+        <div className="history-controls">
+          <label className="history-search" htmlFor="history-search">
+            <span>Search history</span>
+            <input
+              id="history-search"
+              type="search"
+              autoComplete="off"
+              placeholder="Search request, details, or status…"
+              value={historyQuery}
+              onChange={(event) => setHistoryQuery(event.target.value)}
+            />
+          </label>
+          <label className="history-status-filter" htmlFor="history-status">
+            <span>Status</span>
+            <select
+              id="history-status"
+              value={historyStatus}
+              onChange={(event) => setHistoryStatus(event.target.value as 'all' | WorkflowStatus)}
+            >
+              <option value="all">All statuses</option>
+              {WORKFLOW_STATUSES.map((status) => (
+                <option key={status} value={status}>{status}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {historyTasks.length === 0 ? (
+          <section className="panel empty-state">
+            <h3>{tasks.length === 0 ? 'No saved work yet' : 'No matching work'}</h3>
+            <p>
+              {tasks.length === 0
+                ? 'Create a workflow from the Workspace tab and it will appear here.'
+                : 'Try a different search term or status filter.'}
+            </p>
+          </section>
+        ) : (
+          <div className="history-list">
+            {historyTasks.map((task) => (
+              <article className="history-item panel" key={task.id}>
+                <div className="history-item__content">
+                  <div className="history-item__heading">
+                    <h3>{task.title}</h3>
+                    <span className={`status-pill status-pill--${statusClass(task.workflow.task.status)}`}>
+                      {task.workflow.task.status}
+                    </span>
+                  </div>
+                  <p className="history-item__details">
+                    {task.details || 'No additional request details.'}
+                  </p>
+                  <div className="history-item__meta">
+                    <span>Created {new Date(task.createdAt).toLocaleString()}</span>
+                    <span>Updated {new Date(task.updatedAt).toLocaleString()}</span>
+                    <span>{task.workflow.events.length} history event{task.workflow.events.length === 1 ? '' : 's'}</span>
+                  </div>
+                </div>
+                <button
+                  className="button button--secondary history-item__open"
+                  onClick={() => {
+                    setSelectedTaskId(task.id);
+                    onViewChange('workspace');
+                  }}
+                  type="button"
+                >
+                  Open workflow <span aria-hidden="true">→</span>
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  }
+
   return (
     <section className="workspace" aria-label={`${workspace.name} workspace`}>
       <div className="workspace__heading">

@@ -83,6 +83,10 @@ insert into csv_plan_payload values (jsonb_build_object(
   'limitations', '[]'::jsonb
 ));
 
+-- The test deliberately switches to authenticated below; grant the role read access
+-- to this session-local fixture so failures exercise create_workflow_plan, not the fixture ACL.
+grant select on csv_plan_payload to authenticated;
+
 select vault.create_secret(
   'csv-plan-test-signing-key-at-least-32-characters-long',
   'flowwork-plan-signing-key',

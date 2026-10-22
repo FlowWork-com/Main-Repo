@@ -1,6 +1,6 @@
 begin;
 
-select plan(13);
+select plan(16);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -160,6 +160,38 @@ select is(
 );
 
 select set_config('request.jwt.claim.sub', '81000000-0000-4000-8000-000000000001', true);
+
+select lives_ok(
+  $$ insert into storage.objects (bucket_id, name, owner_id, metadata)
+     values (
+       'workflow-files',
+       '82000000-0000-4000-8000-000000000001/83000000-0000-4000-8000-000000000001/84000000-0000-4000-8000-000000000004/new.txt',
+       '81000000-0000-4000-8000-000000000001',
+       '{"mimetype":"text/plain","size":4}'::jsonb
+     ) $$,
+  'authenticated workspace members can upload supported files to Planning tasks'
+);
+
+select is(
+  (select count(*) from storage.objects
+   where bucket_id = 'workflow-files'
+     and name = '82000000-0000-4000-8000-000000000001/83000000-0000-4000-8000-000000000001/84000000-0000-4000-8000-000000000004/new.txt'),
+  1::bigint,
+  'the valid upload path and file type are accepted by Storage RLS'
+);
+
+select throws_ok(
+  $$ insert into storage.objects (bucket_id, name, owner_id, metadata)
+     values (
+       'workflow-files',
+       '82000000-0000-4000-8000-000000000001/83000000-0000-4000-8000-000000000001/84000000-0000-4000-8000-000000000005/payload.exe',
+       '81000000-0000-4000-8000-000000000001',
+       '{"mimetype":"text/plain","size":4}'::jsonb
+     ) $$,
+  '42501',
+  'new row violates row-level security policy for table "objects"',
+  'Storage RLS rejects unsupported extensions even when MIME is spoofed'
+);
 
 select throws_ok(
   $$ select public.register_task_file(

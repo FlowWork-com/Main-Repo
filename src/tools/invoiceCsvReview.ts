@@ -303,7 +303,7 @@ function parseDelimitedText(text: string, delimiter: string): string[][] {
     pushCell();
     rows.push(row);
     row = [];
-    if (rows.length > MAX_DATA_ROWS + 1) {
+    if (rows.length > MAX_DATA_ROWS + 2) {
       throw new Error(`Files are limited to ${MAX_DATA_ROWS.toLocaleString()} non-empty invoice rows per review.`);
     }
   };

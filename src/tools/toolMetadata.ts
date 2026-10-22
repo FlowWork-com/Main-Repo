@@ -8,7 +8,7 @@ interface ToolUiMetadata {
   readonly exampleInput: JsonValue;
 }
 
-export const MVP_PLANNER_TOOL_UI_METADATA = [
+export const MVP_PLANNER_TOOL_UI_METADATA: readonly ToolUiMetadata[] = [
   {
     id: 'echo',
     name: 'Echo',
@@ -37,7 +37,7 @@ export const MVP_PLANNER_TOOL_UI_METADATA = [
     version: '1.0.0',
     exampleInput: { operation: 'uppercase', text: 'hello, FlowWork' },
   },
-] satisfies readonly ToolUiMetadata[];
+];
 
 /** Tools exposed to the manual execution UI. New capabilities must be added to the planner catalogue separately. */
 export const MVP_TOOL_UI_METADATA: readonly ToolUiMetadata[] = [

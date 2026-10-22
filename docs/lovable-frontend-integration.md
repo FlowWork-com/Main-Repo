@@ -4,11 +4,11 @@
 
 `FlowWork-com/Main-Repo` remains the canonical repository for workflow lifecycle rules, task/workspace persistence, plan validation, tool execution, approvals, and verification.
 
-The Lovable project is available in `FlowWork-com/flowowork`. It is a TanStack Start application with server functions and its own Drizzle/Supabase schema; it is not a drop-in set of React components for this repository's React + Vite app. Its current Supabase project configuration is separate from Main-Repo's local project. Do not copy its `.env`, `supabase/config.toml`, or migrations into Main-Repo without an explicit schema and environment migration plan.
+The Lovable project is available in `FlowWork-com/flowowork`. It is a TanStack Start application with server functions and its own Drizzle/Supabase schema; it is not a drop-in set of React components for this repository's React + Vite app. Its Supabase project configuration is separate from Main-Repo's local project. Do not copy its `.env`, `supabase/config.toml`, or migrations into Main-Repo without an explicit schema and environment migration plan.
 
 ## Phase 1 — request-first home experience
 
-This phase ports the central interaction pattern into the existing Vite frontend while keeping the existing backend authoritative:
+**Merged:** PR #21.
 
 - The home page asks, "What do you need done?"
 - The request composer saves a task in the existing Planning state.
@@ -16,22 +16,38 @@ This phase ports the central interaction pattern into the existing Vite frontend
 - Existing plan review, tool execution, workflow timeline, approval, and verification components stay in place.
 - The interface explicitly says that creating a workflow does not execute actions automatically.
 
-No new external integrations or execution behavior are introduced by this phase.
+## Phase 2 — saved workflow history
 
-## Not migrated in Phase 1
+**Merged:** PR #22.
 
-The following parts of the Lovable app depend on its own TanStack Start server functions, database tables, storage rules, OAuth credential handling, or Drizzle migrations, so they must not be copied as disconnected UI:
+- Adds Workspace and History navigation for authenticated users.
+- Searches saved requests by title, details, or current status and filters by the canonical workflow statuses.
+- Displays created/updated timestamps and event counts.
+- Reopens the existing workflow without creating another task or executing actions.
 
-- File upload and attachment processing.
-- Invoice parsing and spreadsheet preparation/export.
-- Google Drive, Google Sheets, and Gmail OAuth connections and workflows.
-- Saved prompt templates and the richer history/detail routes.
+## Phase 3 — private task attachments
 
-## Follow-up phases
+**In review:** [PR #23 — Private task attachments](https://github.com/FlowWork-com/Main-Repo/pull/23).
 
-1. Rework task history and task details around Main-Repo's persisted workflow model.
-2. Add private task-file upload/download with storage authorization and RLS.
-3. Plan any invoice/spreadsheet or Google integration migration separately: identify the required data model, server-side secret storage, OAuth callback lifecycle, approval requirements, recovery/idempotency behavior, and test coverage before porting routes or migrations.
-4. Keep real provider credentials server-side and keep tool execution behind existing authorization and approval controls.
+- Adds a private Supabase Storage bucket named `workflow-files`.
+- Restricts upload to authenticated workspace members and Planning tasks.
+- Restricts reads to workspace members whose workspace/task path matches the saved task.
+- Restricts object deletion to the uploader; attachment metadata deletion remains guarded by the existing uploader RLS policy.
+- Registers metadata through the `register_task_file` security-definer RPC only after Storage upload succeeds. It validates workspace membership, task status, uploader ownership, object path, content type, and size.
+- Supports PDF, TXT, CSV, TSV, XLS, and XLSX files up to 10 MiB per file. Files are private and downloaded through the authenticated Supabase Storage client.
 
-Every phase should land through a small feature branch and PR, with typecheck, lint, tests, build, and the relevant database/function checks before merge.
+Files are not parsed or automatically executed in this phase. Spreadsheet/invoice processing comes later.
+
+## Remaining phases
+
+1. Port selected invoice and spreadsheet processing logic into Main-Repo's existing authenticated execution model. Preserve originals; validate and verify generated outputs; use durable, idempotent checkpoints for external writes.
+2. Add private saved prompt templates using owner/workspace-scoped persistence and existing auth controls.
+3. Port Google integrations behind server-side credential handling and explicit workspace/user authorization. Start with read-only access; keep email sending approval-gated.
+4. Add richer recovery and execution orchestration only after each integration has a clear data model, tests, authorization rules, and observability.
+
+## Security and migration rules
+
+- Never copy the Lovable project's database migrations as-is; its task, file, OAuth, and checkpoint schemas differ from Main-Repo.
+- Never put service-role keys, provider API keys, OAuth client secrets, or signing keys in Vite `VITE_*` variables or browser code.
+- Keep the existing RLS, plan signing, workflow transition checks, and server-side tool-execution protections intact.
+- Every phase lands on a dedicated feature branch and PR. Require typecheck, lint, tests, build, and relevant database/function validation before merge.

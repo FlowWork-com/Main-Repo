@@ -1173,3 +1173,150 @@ select:focus {
     align-items: flex-start;
   }
 }
+
+
+/* Private task attachment panel */
+.attachments-panel {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid #e3e9e2;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.attachments-panel__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.attachments-panel__heading h3 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: -0.025em;
+}
+
+.attachments-panel__heading p {
+  margin: 5px 0 0;
+  color: #65746b;
+  font-size: 12px;
+}
+
+.attachments-panel__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.attachments-panel__hint,
+.attachments-panel__empty {
+  margin: 0;
+  color: #78867c;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.attachments-list {
+  display: grid;
+  gap: 0;
+  margin: 2px 0 0;
+  padding: 0;
+  border-top: 1px solid #e8ede7;
+  list-style: none;
+}
+
+.attachments-list__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  padding: 13px 0;
+  border-bottom: 1px solid #e8ede7;
+}
+
+.attachments-list__file {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.attachments-list__icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #dce7de;
+  border-radius: 9px;
+  background: #f3f8f3;
+  color: #176b58;
+  font-size: 21px;
+}
+
+.attachments-list__details {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.attachments-list__details strong {
+  overflow-wrap: anywhere;
+  color: #26372d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.attachments-list__details span {
+  overflow-wrap: anywhere;
+  color: #7a887e;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.attachments-list__actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 3px;
+}
+
+.attachments-list__actions .button {
+  min-height: 34px;
+  padding: 7px 9px;
+  font-size: 11px;
+}
+
+.attachments-list__remove {
+  color: #922d2d;
+}
+
+@media (max-width: 560px) {
+  .attachments-panel {
+    padding: 16px;
+  }
+
+  .attachments-panel__heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .attachments-list__item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .attachments-list__actions {
+    width: 100%;
+  }
+
+  .attachments-list__actions .button {
+    flex: 1;
+  }
+}

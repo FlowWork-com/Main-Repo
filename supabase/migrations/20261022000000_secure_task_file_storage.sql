@@ -142,6 +142,17 @@ begin
     raise exception 'Invalid task file metadata.' using errcode = '22023';
   end if;
 
+  if not (
+    (p_file_name ~* '[.]pdf$' and lower(p_content_type) = 'application/pdf')
+    or (p_file_name ~* '[.]txt$' and lower(p_content_type) = 'text/plain')
+    or (p_file_name ~* '[.]csv$' and lower(p_content_type) = 'text/csv')
+    or (p_file_name ~* '[.]tsv$' and lower(p_content_type) = 'text/tab-separated-values')
+    or (p_file_name ~* '[.]xls$' and lower(p_content_type) = 'application/vnd.ms-excel')
+    or (p_file_name ~* '[.]xlsx$' and lower(p_content_type) = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  ) then
+    raise exception 'Invalid task file metadata.' using errcode = '22023';
+  end if;
+
   v_folders := storage.foldername(p_storage_path);
   if coalesce(array_length(v_folders, 1), 0) <> 3
     or v_folders[1] is distinct from p_workspace_id::text

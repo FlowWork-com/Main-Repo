@@ -28,6 +28,11 @@ export interface PlannerRequest {
   readonly taskId: string;
   readonly goal: string;
   readonly toolCatalog: readonly ToolMetadata[];
+  readonly availableAttachments?: readonly {
+    readonly id: string;
+    readonly fileName: string;
+    readonly contentType: string | null;
+  }[];
   readonly maxSteps?: number;
 }
 

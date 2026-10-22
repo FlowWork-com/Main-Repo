@@ -23,6 +23,7 @@ import {
 import { PlanReviewPanel } from './components/PlanReviewPanel';
 import { TaskToolExecutionPanel } from './components/TaskToolExecutionPanel';
 import { TaskTimeline } from './components/TaskTimeline';
+import { TaskAttachmentsPanel } from './components/TaskAttachmentsPanel';
 
 export function App() {
   const [connection] = useState(initializeConnection);
@@ -506,6 +507,13 @@ function WorkspaceView({
               {selectedTask.details && <p className="task-details">{selectedTask.details}</p>}
 
               <TaskTimeline aggregate={selectedTask.workflow} />
+
+              <TaskAttachmentsPanel
+                client={client}
+                canAccessWorkspace={canAccessWorkspace}
+                task={selectedTask}
+                userId={userId}
+              />
 
               <PlanReviewPanel
                 canAccessWorkspace={canAccessWorkspace}

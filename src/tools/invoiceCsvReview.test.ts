@@ -83,7 +83,7 @@ describe('reviewInvoiceCsv', () => {
     expect(() => reviewInvoiceCsv('Vendor,Amount\nAcme,10', 'invoices.xlsx')).toThrow(/CSV and TSV/);
     expect(() => reviewInvoiceCsv('Invoice Number,Vendor,Amount\n"INV-1,Acme,10', 'invoices.csv')).toThrow(/unfinished quoted/i);
     const rows = ['Invoice Number,Vendor,Amount,Currency', ...Array.from({ length: 2501 }, (_, i) => `INV-${i},Acme,10,INR`)];
-    expect(() => reviewInvoiceCsv(rows.join('\n'), 'invoices.csv')).toThrow(/2500/);
+    expect(() => reviewInvoiceCsv(rows.join('\n'), 'invoices.csv')).toThrow(/2,500/);
   });
 
   it('uses only a registered file ID and returns evidence without altering files', async () => {

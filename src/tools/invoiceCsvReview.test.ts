@@ -71,7 +71,7 @@ describe('reviewInvoiceCsv', () => {
     const report = reviewInvoiceCsv([
       'Invoice Number,Vendor,Description,Amount,Currency',
       'INV-1,"Acme, Inc.","Line 1',
-      'Line ""2""",1,234.00,INR',
+      'Line ""2""","1,234.00",INR',
     ].join('\n'), 'invoices.csv');
 
     expect(report.rowsRead).toBe(1);

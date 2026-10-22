@@ -31,6 +31,11 @@ export interface PlanWorkflowDependencies<Context> {
     readonly ownerId: string;
     readonly title: string;
     readonly details: string;
+    readonly availableAttachments?: readonly {
+      readonly id: string;
+      readonly fileName: string;
+      readonly contentType: string | null;
+    }[];
   } | null>;
   readonly persistPlan: (
     caller: AuthenticatedCaller<Context>,
@@ -101,7 +106,18 @@ export function createPlanWorkflowHandler<Context>(
       return errorResponse(401, 'INVALID_AUTHENTICATION', 'A valid sign-in is required.', corsHeaders);
     }
 
-    let task: { readonly id: string; readonly workspaceId: string; readonly ownerId: string; readonly title: string; readonly details: string } | null;
+    let task: {
+      readonly id: string;
+      readonly workspaceId: string;
+      readonly ownerId: string;
+      readonly title: string;
+      readonly details: string;
+      readonly availableAttachments?: readonly {
+        readonly id: string;
+        readonly fileName: string;
+        readonly contentType: string | null;
+      }[];
+    } | null;
     try {
       task = await dependencies.loadTask(caller, payload.taskId);
     } catch {
@@ -125,6 +141,7 @@ export function createPlanWorkflowHandler<Context>(
       taskId: task.id,
       goal: payload.goal,
       toolCatalog: buildToolCatalogForPlanner(registry),
+      availableAttachments: task.availableAttachments ?? [],
     };
 
     try {

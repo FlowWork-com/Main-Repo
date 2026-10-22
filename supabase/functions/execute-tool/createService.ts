@@ -13,7 +13,7 @@ export function createServerToolExecutionService(
 ): ToolExecutionService {
   const executionRepository = new SupabaseToolExecutionRepository(privilegedClient);
   const registry = new ToolRegistry();
-  for (const tool of createMvpTools(executionRepository)) {
+  for (const tool of createMvpTools(executionRepository, executionRepository)) {
     registry.register(tool);
   }
   return new ToolExecutionService(

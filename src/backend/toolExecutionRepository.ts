@@ -8,6 +8,8 @@ import type {
 } from '../tools/contracts';
 import { isPersistableJson } from '../tools/contracts';
 import type {
+  TaskFileContent,
+  TaskFileContentSource,
   TaskFileMetadata,
   TaskFileMetadataSource,
 } from '../tools/mvpTools';
@@ -49,7 +51,7 @@ interface ExecutionHistoryRow {
   readonly completed_at: string | null;
 }
 
-export interface ToolExecutionRepository extends TaskFileMetadataSource {
+export interface ToolExecutionRepository extends TaskFileMetadataSource, TaskFileContentSource {
   authorize(context: ToolExecutionContext): Promise<boolean>;
   hasApprovedRequest(
     context: ToolExecutionContext,
@@ -81,6 +83,7 @@ interface TaskFileRow {
   readonly file_name: string;
   readonly content_type: string | null;
   readonly created_at: string;
+  readonly storage_path?: string;
 }
 
 export class SupabaseToolExecutionRepository
@@ -188,6 +191,75 @@ export class SupabaseToolExecutionRepository
       p_actor_id: context.userId,
     });
     if (error) throw operationError('save tool execution result');
+  }
+
+  async getTaskFileContent(
+    context: ToolExecutionContext,
+    fileId: string,
+  ): Promise<TaskFileContent | null> {
+    if (!(await this.authorize(context))) return null;
+
+    const { data, error } = await this.client
+      .from('task_files')
+      .select('id, file_name, storage_path, content_type')
+      .eq('workspace_id', context.workspaceId)
+      .eq('task_id', context.taskId)
+      .eq('id', fileId)
+      .maybeSingle();
+    if (error) throw operationError('load task file');
+    if (!data) return null;
+
+    const file = data as {
+      readonly id: string;
+      readonly file_name: string;
+      readonly storage_path: string;
+      readonly content_type: string | null;
+    };
+    const extension = file.file_name.toLowerCase().split('.').pop();
+    const expectedContentType = extension === 'csv'
+      ? 'text/csv'
+      : extension === 'tsv'
+      ? 'text/tab-separated-values'
+      : null;
+    if (!expectedContentType || file.content_type?.toLowerCase() !== expectedContentType) {
+      return null;
+    }
+
+    const pathParts = file.storage_path.split('/');
+    if (
+      pathParts.length !== 4 ||
+      pathParts[0] !== context.workspaceId ||
+      pathParts[1] !== context.taskId ||
+      !isUuid(pathParts[2]) ||
+      pathParts[3] !== file.file_name
+    ) {
+      return null;
+    }
+
+    const downloaded = await this.client.storage
+      .from('workflow-files')
+      .download(file.storage_path);
+    if (downloaded.error) throw operationError('read task file content');
+    if (!downloaded.data || downloaded.data.size === 0 || downloaded.data.size > 10_485_760) {
+      return null;
+    }
+
+    let text: string;
+    try {
+      text = new TextDecoder('utf-8', { fatal: true }).decode(
+        await downloaded.data.arrayBuffer(),
+      );
+    } catch {
+      return null;
+    }
+    if (text.includes('\u0000')) return null;
+
+    return {
+      id: file.id,
+      fileName: file.file_name,
+      contentType: expectedContentType,
+      text,
+    };
   }
 
   async getTaskFileMetadata(
@@ -349,6 +421,11 @@ function isErrorCode(value: unknown): value is ToolExecutionError['code'] {
     default:
       return false;
   }
+}
+
+function isUuid(value: string | undefined): boolean {
+  return typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
 function operationError(operation: string): Error {

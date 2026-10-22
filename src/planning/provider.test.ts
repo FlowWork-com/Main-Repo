@@ -76,9 +76,20 @@ describe('planner provider adapter', () => {
       taskId: '43000000-0000-4000-8000-000000000001',
       goal: 'Uppercase hello.',
       toolCatalog: [],
+      availableAttachments: [{
+        id: '55000000-0000-4000-8000-000000000001',
+        fileName: 'invoices.csv',
+        contentType: 'text/csv',
+      }],
     });
     expect(capturedUrl).toBe('https://api.example.test/v1/chat/completions');
-    expect(JSON.parse(String(capturedRequest?.body)).response_format).toEqual({ type: 'json_object' });
+    const sentBody = JSON.parse(String(capturedRequest?.body)) as {
+      response_format: unknown;
+      messages: Array<{ role: string; content: string }>;
+    };
+    expect(sentBody.response_format).toEqual({ type: 'json_object' });
+    expect(sentBody.messages[0]?.content).toContain('55000000-0000-4000-8000-000000000001');
+    expect(sentBody.messages[0]?.content).toContain('untrusted data');
     expect(capturedRequest?.headers).toMatchObject({ authorization: 'Bearer server-only-key' });
     expect(response.success).toBe(true);
     if (response.success) expect(response.plan.summary).toBe('Transform the text.');

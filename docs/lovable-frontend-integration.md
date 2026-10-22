@@ -27,7 +27,7 @@ The Lovable project is available in `FlowWork-com/flowowork`. It is a TanStack S
 
 ## Phase 3 — private task attachments
 
-**In review:** [PR #23 — Private task attachments](https://github.com/FlowWork-com/Main-Repo/pull/23).
+**Merged:** [PR #23 — Private task attachments](https://github.com/FlowWork-com/Main-Repo/pull/23).
 
 - Adds a private Supabase Storage bucket named `workflow-files`.
 - Restricts upload to authenticated workspace members and Planning tasks.
@@ -36,14 +36,28 @@ The Lovable project is available in `FlowWork-com/flowowork`. It is a TanStack S
 - Registers metadata through the `register_task_file` security-definer RPC only after Storage upload succeeds. It validates workspace membership, task status, uploader ownership, object path, content type, and size.
 - Supports PDF, TXT, CSV, TSV, XLS, and XLSX files up to 10 MiB per file. Files are private and downloaded through the authenticated Supabase Storage client.
 
-Files are not parsed or automatically executed in this phase. Spreadsheet/invoice processing comes later.
+Attachments establish the foundation for analysis, but no file is parsed merely by being uploaded.
+
+## Phase 4 — invoice CSV/TSV review
+
+**In progress:** the current feature branch implements a read-only, deterministic CSV/TSV invoice review tool.
+
+- Reads only a file ID from the current task; the server re-checks workspace membership and resolves the object path from persisted metadata.
+- Uses CSV/TSV parsing without evaluating formulas or running content as code.
+- Summarizes numeric totals by ISO currency without conversion; missing, invalid, and ambiguous amounts are not counted as zero.
+- Flags duplicates and incomplete rows, retaining duplicate values in totals but making that explicit for human review.
+- Adds the available attachment IDs to planner context as untrusted data. Signed-plan persistence independently requires the selected file to belong to the same task and have a supported CSV/TSV file type.
+- Does not edit the source, create output files, send messages, or execute external writes.
+
+This first slice does **not** parse XLS/XLSX workbooks or PDF/image invoices yet. Those require separate format-specific readers, limits, and tests before being exposed through the tool registry.
 
 ## Remaining phases
 
-1. Port selected invoice and spreadsheet processing logic into Main-Repo's existing authenticated execution model. Preserve originals; validate and verify generated outputs; use durable, idempotent checkpoints for external writes.
-2. Add private saved prompt templates using owner/workspace-scoped persistence and existing auth controls.
-3. Port Google integrations behind server-side credential handling and explicit workspace/user authorization. Start with read-only access; keep email sending approval-gated.
-4. Add richer recovery and execution orchestration only after each integration has a clear data model, tests, authorization rules, and observability.
+1. Add XLS/XLSX spreadsheet reading and deterministic spreadsheet summaries using a maintained parser and the same private file-resolution boundary. Preserve formulas as data; never evaluate them.
+2. Add PDF/image invoice extraction behind a server-side provider, strict response schema, confidence and correction tracking, and human review for uncertain fields.
+3. Add private saved prompt templates using workspace-scoped persistence and existing auth controls.
+4. Port Google integrations behind server-side credential handling and explicit workspace/user authorization. Start with read-only access; keep email sending approval-gated.
+5. Add richer recovery and execution orchestration only after each integration has a clear data model, tests, authorization rules, and observability.
 
 ## Security and migration rules
 

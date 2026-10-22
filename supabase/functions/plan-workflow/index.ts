@@ -33,12 +33,26 @@ const handler = createPlanWorkflowHandler<SupabaseClient>({
       .maybeSingle();
     if (membershipError) throw new Error('Unable to verify workspace membership.');
     if (!membership) return null;
+    const { data: attachments, error: attachmentsError } = await caller.context
+      .from('task_files')
+      .select('id, file_name, content_type')
+      .eq('workspace_id', task.workspaceId)
+      .eq('task_id', task.id)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (attachmentsError) throw new Error('Unable to load task attachment references.');
+
     return {
       id: task.id,
       workspaceId: task.workspaceId,
       ownerId: task.ownerId,
       title: task.title,
       details: task.details,
+      availableAttachments: (attachments ?? []).map((file) => ({
+        id: file.id,
+        fileName: file.file_name,
+        contentType: file.content_type,
+      })),
     };
   },
   persistPlan: async (caller, task, plan) => {

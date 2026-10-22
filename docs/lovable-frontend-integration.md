@@ -27,7 +27,7 @@ The Lovable project is available in `FlowWork-com/flowowork`. It is a TanStack S
 
 ## Phase 3 — private task attachments
 
-**In review:** PR #23 (or the current PR created from `feat/secure-task-attachments`).
+**In review:** [PR #23 — Private task attachments](https://github.com/FlowWork-com/Main-Repo/pull/23).
 
 - Adds a private Supabase Storage bucket named `workflow-files`.
 - Restricts upload to authenticated workspace members and Planning tasks.

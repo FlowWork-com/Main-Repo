@@ -4,9 +4,16 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { PersistedTask } from '../../backend/workflowRepository';
 import { TaskAttachmentsPanel } from './TaskAttachmentsPanel';
 
+const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  if (originalClipboardDescriptor) {
+    Object.defineProperty(navigator, 'clipboard', originalClipboardDescriptor);
+  } else {
+    Reflect.deleteProperty(navigator, 'clipboard');
+  }
 });
 
 const userId = '81000000-0000-4000-8000-000000000001';

@@ -5,7 +5,8 @@ import {
   type ToolDefinition,
   type ToolExecutionContext,
 } from './contracts';
-import { MVP_TOOL_UI_METADATA } from './toolMetadata';
+import { createInvoiceCsvReviewTool } from './invoiceCsvReview';
+import { MVP_PLANNER_TOOL_UI_METADATA } from './toolMetadata';
 
 export interface TaskFileMetadata {
   readonly id: string;
@@ -21,13 +22,27 @@ export interface TaskFileMetadataSource {
   ): Promise<TaskFileMetadata | null>;
 }
 
+export interface TaskFileContent {
+  readonly id: string;
+  readonly fileName: string;
+  readonly contentType: string;
+  readonly text: string;
+}
+
+export interface TaskFileContentSource {
+  getTaskFileContent(
+    context: ToolExecutionContext,
+    fileId: string,
+  ): Promise<TaskFileContent | null>;
+}
+
 const safeToolProperties = {
   riskLevel: 'low',
   requiresApproval: false,
 } as const;
 
 const [echoMetadata, fileMetadata, jsonInspectMetadata, textTransformMetadata] =
-  MVP_TOOL_UI_METADATA;
+  MVP_PLANNER_TOOL_UI_METADATA;
 
 const echo: ToolDefinition = {
   id: echoMetadata.id,
@@ -228,8 +243,15 @@ export function createFileMetadataTool(
 
 export function createMvpTools(
   fileMetadataSource: TaskFileMetadataSource,
+  fileContentSource?: TaskFileContentSource,
 ): readonly ToolDefinition[] {
-  return [echo, textTransform, jsonInspect, createFileMetadataTool(fileMetadataSource)];
+  return [
+    echo,
+    textTransform,
+    jsonInspect,
+    createFileMetadataTool(fileMetadataSource),
+    createInvoiceCsvReviewTool(fileContentSource),
+  ];
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

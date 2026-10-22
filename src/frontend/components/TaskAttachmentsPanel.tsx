@@ -145,6 +145,17 @@ export function TaskAttachmentsPanel({
     if (selected) void uploadFile(selected);
   }
 
+  async function copyFileId(file: TaskFileRecord) {
+    setError('');
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(file.id);
+      setNotice(`Copied the ID for ${file.file_name}. Choose Invoice CSV review and paste it into the fileId field to run the analysis.`);
+    } catch {
+      setError(`Could not copy the file ID. Use this ID manually: ${file.id}`);
+    }
+  }
+
   async function downloadFile(file: TaskFileRecord) {
     if (!canAccessWorkspace || activeFileId || busy) return;
     setActiveFileId(file.id);
@@ -253,6 +264,15 @@ export function TaskAttachmentsPanel({
                 </div>
               </div>
               <div className="attachments-list__actions">
+                <button
+                  className="button button--quiet"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void copyFileId(file)}
+                  aria-label={`Copy ID for ${file.file_name}`}
+                >
+                  Copy ID
+                </button>
                 <button
                   className="button button--quiet"
                   type="button"

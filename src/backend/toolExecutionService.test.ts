@@ -131,6 +131,7 @@ class MemoryExecutionRepository implements ToolExecutionRepository {
     },
   );
   getTaskFileMetadata = vi.fn(async () => null);
+  getTaskFileContent = vi.fn(async () => null);
 }
 
 function createRegistry(

@@ -1,5 +1,5 @@
 -- Extend the signed plan persistence boundary for read-only invoice CSV/TSV review.
--- Keep all existing authorization, signature, bounds, dependency, and plan-state checks intact.
+-- Preserve the existing authorization, signature, bounds, dependency, and task-state checks.
 begin;
 
 create or replace function public.create_workflow_plan(

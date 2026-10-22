@@ -51,6 +51,14 @@ create policy "workflow task attachments planning upload"
     and (storage.foldername(name))[1] ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
     and (storage.foldername(name))[2] ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
     and (storage.foldername(name))[3] ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    and (
+      (storage.filename(name) ~* '[.]pdf$' and lower(coalesce(metadata->>'mimetype', '')) = 'application/pdf')
+      or (storage.filename(name) ~* '[.]txt$' and lower(coalesce(metadata->>'mimetype', '')) = 'text/plain')
+      or (storage.filename(name) ~* '[.]csv$' and lower(coalesce(metadata->>'mimetype', '')) = 'text/csv')
+      or (storage.filename(name) ~* '[.]tsv$' and lower(coalesce(metadata->>'mimetype', '')) = 'text/tab-separated-values')
+      or (storage.filename(name) ~* '[.]xls$' and lower(coalesce(metadata->>'mimetype', '')) = 'application/vnd.ms-excel')
+      or (storage.filename(name) ~* '[.]xlsx$' and lower(coalesce(metadata->>'mimetype', '')) = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    )
     and exists (
       select 1
       from public.tasks t

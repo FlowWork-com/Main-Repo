@@ -31,6 +31,11 @@ export interface PlanWorkflowDependencies<Context> {
     readonly ownerId: string;
     readonly title: string;
     readonly details: string;
+    readonly availableAttachments?: readonly {
+      readonly id: string;
+      readonly fileName: string;
+      readonly contentType: string | null;
+    }[];
   } | null>;
   readonly persistPlan: (
     caller: AuthenticatedCaller<Context>,
@@ -125,6 +130,7 @@ export function createPlanWorkflowHandler<Context>(
       taskId: task.id,
       goal: payload.goal,
       toolCatalog: buildToolCatalogForPlanner(registry),
+      availableAttachments: task.availableAttachments ?? [],
     };
 
     try {

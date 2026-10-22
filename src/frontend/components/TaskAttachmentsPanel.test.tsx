@@ -44,11 +44,11 @@ function createClient(initialFiles: Record<string, unknown>[] = []) {
     return query;
   });
 
-  const upload = vi.fn(async (path: string, _file: File, _options: unknown) => ({
+  const upload = vi.fn(async (path: string) => ({
     data: { path },
     error: null,
   }));
-  const remove = vi.fn(async (_paths: string[]) => ({ data: [], error: null }));
+  const remove = vi.fn(async () => ({ data: [], error: null }));
   const download = vi.fn(async () => ({ data: new Blob(['evidence']), error: null }));
   const storageFrom = vi.fn(() => ({ upload, remove, download }));
   const rpc = vi.fn(async (name: string, args: Record<string, unknown>) => {

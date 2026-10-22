@@ -38,7 +38,8 @@ const handler = createPlanWorkflowHandler<SupabaseClient>({
       .select('id, file_name, content_type')
       .eq('workspace_id', task.workspaceId)
       .eq('task_id', task.id)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(50);
     if (attachmentsError) throw new Error('Unable to load task attachment references.');
 
     return {

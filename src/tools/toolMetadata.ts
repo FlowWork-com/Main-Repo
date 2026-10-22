@@ -1,6 +1,14 @@
 import type { JsonValue } from './contracts';
 
-export const MVP_TOOL_UI_METADATA = [
+interface ToolUiMetadata {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly version: string;
+  readonly exampleInput: JsonValue;
+}
+
+export const MVP_PLANNER_TOOL_UI_METADATA = [
   {
     id: 'echo',
     name: 'Echo',
@@ -29,10 +37,17 @@ export const MVP_TOOL_UI_METADATA = [
     version: '1.0.0',
     exampleInput: { operation: 'uppercase', text: 'hello, FlowWork' },
   },
-] satisfies readonly ({
-  readonly id: string;
-  readonly name: string;
-  readonly description: string;
-  readonly version: string;
-  readonly exampleInput: JsonValue;
-})[];
+] satisfies readonly ToolUiMetadata[];
+
+/** Tools exposed to the manual execution UI. New capabilities must be added to the planner catalogue separately. */
+export const MVP_TOOL_UI_METADATA: readonly ToolUiMetadata[] = [
+  ...MVP_PLANNER_TOOL_UI_METADATA.slice(0, 2),
+  {
+    id: 'invoice-csv-review',
+    name: 'Invoice CSV review',
+    description: 'Read an attached CSV/TSV invoice table and summarize totals by currency, with flagged rows for human review. Does not edit or send data.',
+    version: '1.0.0',
+    exampleInput: { fileId: '55000000-0000-4000-8000-000000000001' },
+  },
+  ...MVP_PLANNER_TOOL_UI_METADATA.slice(2),
+];

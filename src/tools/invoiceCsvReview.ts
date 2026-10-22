@@ -107,6 +107,14 @@ export function createInvoiceCsvReviewTool(
       if (!file) {
         return toolFailure('INVALID_TOOL_INPUT', 'Choose a CSV or TSV attachment registered to this workflow.');
       }
+      const expectedContentType = file.fileName.toLowerCase().endsWith('.csv')
+        ? 'text/csv'
+        : file.fileName.toLowerCase().endsWith('.tsv')
+        ? 'text/tab-separated-values'
+        : null;
+      if (file.id !== input.fileId || !expectedContentType || file.contentType !== expectedContentType) {
+        return toolFailure('INVALID_TOOL_INPUT', 'The attachment is not a supported CSV/TSV file registered to this workflow.');
+      }
       try {
         const report = reviewInvoiceCsv(file.text, file.fileName);
         const output: JsonValue = {

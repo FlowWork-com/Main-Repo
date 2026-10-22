@@ -38,11 +38,14 @@ export function taskAttachmentValidationError(
 }
 
 export function sanitizeTaskAttachmentFileName(fileName: string): string {
-  return fileName
-    .replace(/[\\/\u0000-\u001f\u007f]/g, '_')
-    .trim()
-    .replace(/[. ]+$/g, '')
-    .slice(0, 255);
+  const sanitized = Array.from(fileName, (character) => {
+    const code = character.charCodeAt(0);
+    return character === '/' || character === '\\' || code <= 31 || code === 127
+      ? '_'
+      : character;
+  }).join('');
+
+  return sanitized.trim().replace(/[. ]+$/g, '').slice(0, 255);
 }
 
 function fileExtension(fileName: string): string | null {

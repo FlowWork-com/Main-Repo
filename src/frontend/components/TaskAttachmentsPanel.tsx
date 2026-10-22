@@ -45,13 +45,15 @@ export function TaskAttachmentsPanel({
 
   useEffect(() => {
     let active = true;
-    void client
-      .from('task_files')
-      .select('id, workspace_id, task_id, file_name, storage_path, content_type, uploaded_by, created_at')
-      .eq('workspace_id', task.workspaceId)
-      .eq('task_id', task.id)
-      .order('created_at', { ascending: false })
-      .then(({ data, error: queryError }) => {
+
+    async function loadFiles() {
+      try {
+        const { data, error: queryError } = await client
+          .from('task_files')
+          .select('id, workspace_id, task_id, file_name, storage_path, content_type, uploaded_by, created_at')
+          .eq('workspace_id', task.workspaceId)
+          .eq('task_id', task.id)
+          .order('created_at', { ascending: false });
         if (!active) return;
         if (queryError) {
           setError('Could not load task attachments. Retry or check workspace access.');
@@ -59,15 +61,16 @@ export function TaskAttachmentsPanel({
           return;
         }
         setFiles((data ?? []) as unknown as TaskFileRecord[]);
-      })
-      .catch(() => {
+      } catch {
         if (!active) return;
         setError('Could not load task attachments. Retry or check workspace access.');
         setFiles([]);
-      })
-      .finally(() => {
+      } finally {
         if (active) setLoading(false);
-      });
+      }
+    }
+
+    void loadFiles();
     return () => {
       active = false;
     };

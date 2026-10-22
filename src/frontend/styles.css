@@ -1292,6 +1292,9 @@ select:focus {
   padding: 7px 9px;
   font-size: 11px;
 }
+.attachments-list__actions .button:first-child {
+  color: #176b58;
+}
 
 .attachments-list__remove {
   color: #922d2d;

@@ -416,7 +416,7 @@ function parseAmountCell(input: string): AmountResult {
   const lastDot = original.lastIndexOf('.');
   const trailingDigits = original.length - Math.max(lastComma, lastDot) - 1;
   let normalized = original;
-  let ambiguous = separators === 1 && trailingDigits === 3;
+  const ambiguous = separators === 1 && trailingDigits === 3;
 
   if (lastComma >= 0 && lastDot >= 0) {
     if (lastComma > lastDot) normalized = original.replace(/\./g, '').replace(',', '.').replace(/,/g, '');

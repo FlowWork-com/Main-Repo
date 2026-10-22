@@ -45,8 +45,6 @@ export function TaskAttachmentsPanel({
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
-    setError('');
     void client
       .from('task_files')
       .select('id, workspace_id, task_id, file_name, storage_path, content_type, uploaded_by, created_at')

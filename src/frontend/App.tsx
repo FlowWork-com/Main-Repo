@@ -509,6 +509,7 @@ function WorkspaceView({
               <TaskTimeline aggregate={selectedTask.workflow} />
 
               <TaskAttachmentsPanel
+                key={selectedTask.id}
                 client={client}
                 canAccessWorkspace={canAccessWorkspace}
                 task={selectedTask}

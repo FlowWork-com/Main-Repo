@@ -159,4 +159,31 @@ describe('TaskAttachmentsPanel', () => {
     expect(await screen.findByText('No attachments yet.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Attach file' })).not.toBeInTheDocument();
   });
+ 
+  it('copies the registered file ID for the manual review tool', async () => {
+    const { client } = createClient([{
+      id: 'task-file-1',
+      workspace_id: workspaceId,
+      task_id: taskId,
+      file_name: 'invoices.csv',
+      storage_path: `${workspaceId}/${taskId}/84000000-0000-4000-8000-000000000001/invoices.csv`,
+      content_type: 'text/csv',
+      uploaded_by: userId,
+      created_at: '2026-10-22T10:01:00.000Z',
+    }]);
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    render(
+      <TaskAttachmentsPanel
+        client={client}
+        task={makeTask()}
+        userId={userId}
+        canAccessWorkspace
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy ID for invoices.csv' }));
+    expect(writeText).toHaveBeenCalledWith('task-file-1');
+    expect(await screen.findByRole('status')).toHaveTextContent(/Copied the ID/);
+  });
 });

@@ -1,6 +1,6 @@
 begin;
 
-select plan(12);
+select plan(13);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -80,6 +80,12 @@ values
     '82000000-0000-4000-8000-000000000001/83000000-0000-4000-8000-000000000002/84000000-0000-4000-8000-000000000002/running.txt',
     '81000000-0000-4000-8000-000000000001',
     '{"mimetype":"text/plain","size":12}'::jsonb
+  ),
+  (
+    'workflow-files',
+    '82000000-0000-4000-8000-000000000001/83000000-0000-4000-8000-000000000001/84000000-0000-4000-8000-000000000003/payload.exe',
+    '81000000-0000-4000-8000-000000000001',
+    '{"mimetype":"text/plain","size":4}'::jsonb
   )
 on conflict (bucket_id, name) do nothing;
 
@@ -194,6 +200,19 @@ select throws_ok(
   '22023',
   'Invalid task file path.',
   'registered file name must match the object path'
+);
+
+select throws_ok(
+  $$ select public.register_task_file(
+       '82000000-0000-4000-8000-000000000001',
+       '83000000-0000-4000-8000-000000000001',
+       'payload.exe',
+       '82000000-0000-4000-8000-000000000001/83000000-0000-4000-8000-000000000001/84000000-0000-4000-8000-000000000003/payload.exe',
+       'text/plain'
+     ) $$,
+  '22023',
+  'Invalid task file metadata.',
+  'unsupported file extensions cannot be registered even with an allowed MIME type'
 );
 
 select * from finish();

@@ -94,6 +94,7 @@ class MemoryExecutionRepository implements ToolExecutionRepository {
     };
   };
   getTaskFileMetadata = async () => null;
+  getTaskFileContent = async () => null;
 }
 
 class TestWorkflowRepository implements WorkflowRepository {

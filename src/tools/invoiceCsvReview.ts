@@ -2,8 +2,11 @@ import { toolFailure, type JsonValue, type ToolDefinition, type ToolExecutionCon
 import type { TaskFileContentSource } from './mvpTools';
 import { MVP_TOOL_UI_METADATA } from './toolMetadata';
 
-const metadata = MVP_TOOL_UI_METADATA.find((tool) => tool.id === 'invoice-csv-review');
-if (!metadata) throw new Error('Invoice CSV review metadata is missing.');
+const metadata = (() => {
+  const selected = MVP_TOOL_UI_METADATA.find((tool) => tool.id === 'invoice-csv-review');
+  if (!selected) throw new Error('Invoice CSV review metadata is missing.');
+  return selected;
+})();
 
 const MAX_TEXT_BYTES = 10 * 1024 * 1024;
 const MAX_DATA_ROWS = 2500;

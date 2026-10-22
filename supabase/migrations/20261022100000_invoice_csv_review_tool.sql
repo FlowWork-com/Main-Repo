@@ -1,5 +1,5 @@
--- Extend the existing signed plan persistence boundary for read-only invoice CSV/TSV review.
--- The function body is redefined forward-only so existing authorization and signature checks stay intact.
+-- Extend the signed plan persistence boundary for read-only invoice CSV/TSV review.
+-- Keep all existing authorization, signature, bounds, dependency, and plan-state checks intact.
 begin;
 
 create or replace function public.create_workflow_plan(
@@ -279,7 +279,6 @@ begin
   );
 end;
 $$;
-
       or not exists (
         select 1
         from public.task_files f
@@ -371,8 +370,7 @@ $$;
     'created_at', now()
   );
 end;
-$$;
- and lower(coalesce(f.content_type, '')) = 'text/csv')
+$$; and lower(coalesce(f.content_type, '')) = 'text/csv')
             or (f.file_name ~* '[.]tsv
       jsonb_set(v_step, '{validation}', '{"valid":true,"blockingReasons":[]}'::jsonb, true)
     );
@@ -457,8 +455,7 @@ $$;
     'created_at', now()
   );
 end;
-$$;
- and lower(coalesce(f.content_type, '')) = 'text/tab-separated-values')
+$$; and lower(coalesce(f.content_type, '')) = 'text/tab-separated-values')
           )
       )
     ) then
@@ -550,6 +547,5 @@ $$;
   );
 end;
 $$;
-
 
 commit;

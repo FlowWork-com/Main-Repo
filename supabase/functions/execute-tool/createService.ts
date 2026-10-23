@@ -11,7 +11,7 @@ import { createInvoiceDocumentExtractorFromEnvironment } from './invoiceProvider
 export function createServerToolExecutionService(
   privilegedClient: SupabaseClient,
   workflowRepository: WorkflowRepository,
-  timeoutMs = 5_000,
+  timeoutMs = 50_000,
 ): ToolExecutionService {
   const executionRepository = new SupabaseToolExecutionRepository(privilegedClient);
   const registry = new ToolRegistry();

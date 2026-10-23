@@ -239,7 +239,7 @@ export function TaskAttachmentsPanel({
         )}
       </div>
       <p className="attachments-panel__hint">
-        PDF, JPG, PNG, TXT, CSV, TSV, XLS, or XLSX · Up to {MAX_TASK_ATTACHMENT_BYTES / (1024 * 1024)} MB per file
+        PDF, JPG/JPEG, PNG, TXT, CSV, TSV, XLS, or XLSX · Up to {MAX_TASK_ATTACHMENT_BYTES / (1024 * 1024)} MB per file
         {task.workflow.task.status !== 'Planning' && ' · Uploads are available while the workflow is in Planning'}
       </p>
       {error && <p role="alert" className="error-message">{error}</p>}

@@ -224,6 +224,7 @@ describe('TaskToolExecutionPanel', () => {
       tool_id: 'echo',
       tool_version: '1.0.0',
       status: 'succeeded',
+      input: { greeting: 'hello' },
       output: { value: 'saved' },
       error: null,
       created_at: '2026-10-11T10:03:00.000Z',
@@ -240,7 +241,7 @@ describe('TaskToolExecutionPanel', () => {
     expect(screen.queryByRole('button', { name: 'Run Echo' })).not.toBeInTheDocument();
     expect(client.from).toHaveBeenCalledWith('task_tool_executions');
     expect(query.select).toHaveBeenCalledWith(
-      'execution_id, tool_id, tool_version, status, output, error, created_at, started_at, completed_at',
+      'execution_id, tool_id, tool_version, status, input, output, error, created_at, started_at, completed_at',
     );
     expect(query.eq).toHaveBeenNthCalledWith(1, 'workspace_id', workspaceId);
     expect(query.eq).toHaveBeenNthCalledWith(2, 'task_id', taskId);

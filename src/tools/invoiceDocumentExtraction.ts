@@ -240,7 +240,6 @@ export function normalizeInvoiceExtraction(
 
   const requiredKeys = ['invoiceNumber', 'invoiceDate', 'vendor', 'totalAmount'];
   const availableRequiredFields = requiredKeys.filter((key) => fields[key]?.value !== null).length;
-  const lowConfidenceRequiredFields = requiredKeys.some((key) => fields[key]?.needsReview);
   const validationStatus = availableRequiredFields < 2
     ? 'insufficient_data'
     : 'needs_review';
@@ -253,7 +252,7 @@ export function normalizeInvoiceExtraction(
     fileName: clip(file.fileName, 180),
     sourceFormat: extension,
     reviewRequired: true,
-    validationStatus: validationStatus || (lowConfidenceRequiredFields ? 'needs_review' : 'needs_review'),
+    validationStatus,
     fields: fields as InvoiceDocumentExtractionReport['fields'],
     warnings,
     interpretationNotes: [

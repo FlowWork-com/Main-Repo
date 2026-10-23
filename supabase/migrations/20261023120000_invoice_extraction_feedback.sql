@@ -31,6 +31,7 @@ create table public.invoice_extraction_feedback (
   submitted_by uuid not null references auth.users (id) on delete restrict,
   created_at timestamptz not null default now(),
   unique (workspace_id, task_id, submission_id, field_name),
+  unique (workspace_id, task_id, execution_id, field_name),
   foreign key (workspace_id, task_id)
     references public.tasks (workspace_id, id) on delete cascade,
   foreign key (workspace_id, task_id, execution_id)
@@ -101,6 +102,7 @@ declare
   v_file public.task_files%rowtype;
   v_submission_fingerprint text;
   v_existing_fingerprint text;
+  v_existing_submission_id uuid;
   v_existing_count integer := 0;
   v_key_count integer := 0;
   v_field text;
@@ -176,30 +178,27 @@ begin
   end if;
 
   v_submission_fingerprint := encode(extensions.digest(p_reviewed_values::text, 'sha256'), 'hex');
-  select count(*), min(f.submission_fingerprint)
-    into v_existing_count, v_existing_fingerprint
+  select count(*), min(f.submission_fingerprint), min(f.submission_id)
+    into v_existing_count, v_existing_fingerprint, v_existing_submission_id
   from public.invoice_extraction_feedback f
   where f.workspace_id = v_workspace_id
     and f.task_id = p_task_id
-    and f.submission_id = p_submission_id;
+    and f.execution_id = p_execution_id;
 
   if v_existing_count > 0 then
-    if v_existing_count <> 8
-      or v_existing_fingerprint is distinct from v_submission_fingerprint
-      or exists (
-        select 1 from public.invoice_extraction_feedback f
-        where f.workspace_id = v_workspace_id
-          and f.task_id = p_task_id
-          and f.submission_id = p_submission_id
-          and f.submission_fingerprint is distinct from v_submission_fingerprint
-      ) then
+    if v_existing_count = 8
+      and v_existing_submission_id = p_submission_id
+      and v_existing_fingerprint = v_submission_fingerprint then
+      return jsonb_build_object(
+        'submissionId', p_submission_id,
+        'recordedFieldCount', v_existing_count,
+        'idempotentReplay', true
+      );
+    end if;
+    if v_existing_submission_id = p_submission_id then
       raise exception 'Invoice feedback submission ID was reused with different values.' using errcode = '23505';
     end if;
-    return jsonb_build_object(
-      'submissionId', p_submission_id,
-      'recordedFieldCount', v_existing_count,
-      'idempotentReplay', true
-    );
+    raise exception 'This invoice extraction has already been reviewed.' using errcode = '23505';
   end if;
 
   v_tool_version := v_execution.tool_version;

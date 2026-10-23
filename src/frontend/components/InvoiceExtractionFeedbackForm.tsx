@@ -99,11 +99,13 @@ export function InvoiceExtractionFeedbackForm({
       totalAmount,
     };
 
-    if (reviewedValues.invoiceDate !== null && !isValidDate(reviewedValues.invoiceDate)) {
+    const reviewedDate = reviewedValues.invoiceDate;
+    if (typeof reviewedDate === 'string' && !isValidDate(reviewedDate)) {
       setError('Enter a valid invoice date or leave it blank to mark it missing.');
       return;
     }
-    if (reviewedValues.currency !== null && !/^[A-Z]{3}$/.test(reviewedValues.currency)) {
+    const reviewedCurrency = reviewedValues.currency;
+    if (typeof reviewedCurrency === 'string' && !/^[A-Z]{3}$/.test(reviewedCurrency)) {
       setError('Enter a three-letter currency code (for example, INR) or leave it blank.');
       return;
     }

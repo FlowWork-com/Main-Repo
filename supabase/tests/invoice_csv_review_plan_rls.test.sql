@@ -147,29 +147,28 @@ select is(
 );
 
 select lives_ok(
-  $ select pg_temp.create_signed_workflow_plan(
+  $xlsx_test$ select pg_temp.create_signed_workflow_plan(
        '93000000-0000-4000-8000-000000000001',
        jsonb_set(
          (select value from csv_plan_payload),
          '{steps,0,input,fileId}',
          '"94000000-0000-4000-8000-000000000003"'::jsonb
        )
-     ) $,
+     ) $xlsx_test$,
   'a signed plan can reference an XLSX attachment owned by the same task'
 );
 
 select lives_ok(
-  $ select pg_temp.create_signed_workflow_plan(
+  $xlsx_test$ select pg_temp.create_signed_workflow_plan(
        '93000000-0000-4000-8000-000000000001',
        jsonb_set(
          (select value from csv_plan_payload),
          '{steps,0,input,fileId}',
          '"94000000-0000-4000-8000-000000000004"'::jsonb
        )
-     ) $,
+     ) $xlsx_test$,
   'a signed plan can reference an XLS attachment owned by the same task'
 );
-
 select throws_ok(
   $$ select pg_temp.create_signed_workflow_plan(
        '93000000-0000-4000-8000-000000000001',

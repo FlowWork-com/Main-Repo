@@ -9,6 +9,9 @@ import {
 describe('task attachment validation', () => {
   it('maps supported extensions to the bucket allowlist MIME types', () => {
     expect(taskAttachmentMimeType('invoice.PDF')).toBe('application/pdf');
+    expect(taskAttachmentMimeType('photo.JPG')).toBe('image/jpeg');
+    expect(taskAttachmentMimeType('photo.jpeg')).toBe('image/jpeg');
+    expect(taskAttachmentMimeType('scan.png')).toBe('image/png');
     expect(taskAttachmentMimeType('records.csv')).toBe('text/csv');
     expect(taskAttachmentMimeType('sheet.xlsx')).toBe(
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -20,6 +23,7 @@ describe('task attachment validation', () => {
 
   it('rejects unsupported file types and files over the configured size limit', () => {
     expect(taskAttachmentValidationError('malware.exe', 10)).toMatch(/Choose a PDF/);
+    expect(taskAttachmentValidationError('scan.png', 10)).toBeNull();
     expect(taskAttachmentValidationError('report.pdf', MAX_TASK_ATTACHMENT_BYTES + 1)).toMatch(/10 MB/);
     expect(taskAttachmentValidationError('report.pdf', MAX_TASK_ATTACHMENT_BYTES)).toBeNull();
   });

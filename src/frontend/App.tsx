@@ -24,6 +24,7 @@ import { PlanReviewPanel } from './components/PlanReviewPanel';
 import { TaskToolExecutionPanel } from './components/TaskToolExecutionPanel';
 import { TaskTimeline } from './components/TaskTimeline';
 import { TaskAttachmentsPanel } from './components/TaskAttachmentsPanel';
+import { PromptTemplatesPanel } from './components/PromptTemplatesPanel';
 
 export function App() {
   const [connection] = useState(initializeConnection);
@@ -33,7 +34,7 @@ export function App() {
   const [authError, setAuthError] = useState('');
   const [email, setEmail] = useState('');
   const [linkSent, setLinkSent] = useState(false);
-  const [activeView, setActiveView] = useState<'workspace' | 'history'>('workspace');
+  const [activeView, setActiveView] = useState<'workspace' | 'history' | 'templates'>('workspace');
 
   useEffect(() => {
     if (!client) return;
@@ -107,6 +108,14 @@ export function App() {
                 type="button"
               >
                 History
+              </button>
+              <button
+                className={`button button--quiet topbar-nav__button${activeView === 'templates' ? ' is-active' : ''}`}
+                aria-pressed={activeView === 'templates'}
+                onClick={() => setActiveView('templates')}
+                type="button"
+              >
+                Templates
               </button>
             </div>
             <button
@@ -204,8 +213,8 @@ function WorkspaceView({
 }: {
   readonly client: SupabaseClient;
   readonly userId: string;
-  readonly activeView: 'workspace' | 'history';
-  readonly onViewChange: (view: 'workspace' | 'history') => void;
+  readonly activeView: 'workspace' | 'history' | 'templates';
+  readonly onViewChange: (view: 'workspace' | 'history' | 'templates') => void;
 }) {
   const repository = useMemo(() => new SupabaseWorkflowRepository(client), [client]);
   const [workspace, setWorkspace] = useState<WorkspaceRecord | null>(null);
@@ -340,6 +349,19 @@ function WorkspaceView({
         <p>Your account is not a member of an available workspace.</p>
         {error && <p className="error-message">{error}</p>}
       </section>
+    );
+  }
+
+  if (activeView === 'templates') {
+    return (
+      <PromptTemplatesPanel
+        client={client}
+        workspaceId={workspace.id}
+        onUseTemplate={(prompt) => {
+          setDetails(prompt);
+          onViewChange('workspace');
+        }}
+      />
     );
   }
 

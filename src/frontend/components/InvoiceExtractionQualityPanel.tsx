@@ -62,38 +62,10 @@ export function InvoiceExtractionQualityPanel({
       setLoading(true);
       setError('');
       try {
-        const [summaryResult, bandResult] = await Promise.all([
-          client
-            .from('invoice_extraction_feedback_summary')
-            .select(
-              'workspace_id, field_name, tool_version, reviewed_field_count, corrected_field_count, unchanged_field_count, observed_correction_rate, mean_confidence_when_corrected, mean_confidence_when_unchanged, reviewed_as_missing_count',
-            )
-            .eq('workspace_id', workspaceId)
-            .order('field_name', { ascending: true })
-            .order('tool_version', { ascending: true }),
-          client
-            .from('invoice_extraction_confidence_summary')
-            .select(
-              'workspace_id, field_name, tool_version, confidence_band, confidence_band_order, reviewed_field_count, corrected_field_count, unchanged_field_count, observed_correction_rate, mean_reported_confidence',
-            )
-            .eq('workspace_id', workspaceId)
-            .order('field_name', { ascending: true })
-            .order('tool_version', { ascending: true })
-            .order('confidence_band_order', { ascending: true }),
-        ]);
+        const result = await refreshMetrics(client, workspaceId);
         if (!active) return;
-        if (summaryResult.error || bandResult.error) {
-          setError('Unable to load invoice review metrics. Check workspace access and retry.');
-          setSummary([]);
-          setConfidenceBands([]);
-          return;
-        }
-        setSummary(Array.isArray(summaryResult.data)
-          ? summaryResult.data as unknown as FeedbackSummaryRow[]
-          : []);
-        setConfidenceBands(Array.isArray(bandResult.data)
-          ? bandResult.data as unknown as ConfidenceBandRow[]
-          : []);
+        setSummary(result.summary);
+        setConfidenceBands(result.bands);
       } catch {
         if (active) {
           setError('Unable to load invoice review metrics. Check workspace access and retry.');

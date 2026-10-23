@@ -59,21 +59,22 @@ const bandRows = [
   },
 ];
 
-function resultQuery(result: { data: unknown; error: unknown }) {
-  const query: {
-    select: ReturnType<typeof vi.fn>;
-    eq: ReturnType<typeof vi.fn>;
-    order: ReturnType<typeof vi.fn>;
-    then: (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) => Promise<unknown>;
-  } = {
+function resultQuery(
+  result: { data: unknown; error: unknown },
+  finalOrderCount: number,
+) {
+  const query = {
     select: vi.fn(),
     eq: vi.fn(),
     order: vi.fn(),
-    then: (onFulfilled, onRejected) => Promise.resolve(result).then(onFulfilled, onRejected),
   };
+  let orderCount = 0;
   query.select.mockReturnValue(query);
   query.eq.mockReturnValue(query);
-  query.order.mockReturnValue(query);
+  query.order.mockImplementation(() => {
+    orderCount += 1;
+    return orderCount >= finalOrderCount ? Promise.resolve(result) : query;
+  });
   return query;
 }
 
@@ -85,11 +86,11 @@ function createClient(options: {
   const summaryQuery = resultQuery({
     data: options.summary ?? summaryRows,
     error: options.error ? { message: 'private database detail' } : null,
-  });
+  }, 2);
   const bandQuery = resultQuery({
     data: options.bands ?? bandRows,
     error: options.error ? { message: 'private database detail' } : null,
-  });
+  }, 3);
   const from = vi.fn((table: string) => {
     if (table === 'invoice_extraction_feedback_summary') return summaryQuery;
     if (table === 'invoice_extraction_confidence_summary') return bandQuery;

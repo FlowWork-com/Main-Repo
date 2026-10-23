@@ -1,5 +1,5 @@
 import { toolFailure, type JsonValue, type ToolDefinition, type ToolExecutionContext } from './contracts';
-import type { TaskFileContentSource } from './mvpTools';
+import type { SpreadsheetWorkbookData, SpreadsheetWorkbookReader, TaskFileContentSource } from './mvpTools';
 import { MVP_TOOL_UI_METADATA } from './toolMetadata';
 
 const metadata = (() => {
@@ -17,7 +17,11 @@ const MAX_CURRENCY_GROUPS = 25;
 
 export interface InvoiceCsvReviewReport {
   readonly fileName: string;
-  readonly delimiter: 'comma' | 'tab';
+  readonly delimiter: 'comma' | 'tab' | 'spreadsheet';
+  readonly sourceFormat: 'csv' | 'tsv' | 'xls' | 'xlsx';
+  readonly worksheetName: string | null;
+  readonly worksheetCount: number | null;
+  readonly formulaCellsExcluded: number;
   readonly rowsRead: number;
   readonly rowsWithUsableAmounts: number;
   readonly rowsIncludedInCurrencyTotals: number;
@@ -80,6 +84,7 @@ const HEADER_ALIASES = {
 
 export function createInvoiceCsvReviewTool(
   source?: TaskFileContentSource,
+  spreadsheetWorkbookReader?: SpreadsheetWorkbookReader,
 ): ToolDefinition {
   return {
     id: metadata.id,
@@ -96,10 +101,10 @@ export function createInvoiceCsvReviewTool(
     validateInput: isInvoiceCsvReviewInput,
     async execute(context: ToolExecutionContext, input: unknown) {
       if (!isInvoiceCsvReviewInput(input)) {
-        return toolFailure('INVALID_TOOL_INPUT', 'Input must identify a registered CSV or TSV attachment.');
+        return toolFailure('INVALID_TOOL_INPUT', 'Input must identify a registered CSV, TSV, XLS, or XLSX attachment.');
       }
       if (!source) {
-        return toolFailure('EXECUTOR_UNAVAILABLE', 'Invoice CSV review is not available in this environment.', true);
+        return toolFailure('EXECUTOR_UNAVAILABLE', 'Invoice spreadsheet review is not available in this environment.', true);
       }
       let file;
       try {
@@ -108,18 +113,33 @@ export function createInvoiceCsvReviewTool(
         return toolFailure('EXECUTOR_UNAVAILABLE', 'The attachment could not be read securely. Please retry.', true);
       }
       if (!file) {
-        return toolFailure('INVALID_TOOL_INPUT', 'Choose a CSV or TSV attachment registered to this workflow.');
+        return toolFailure('INVALID_TOOL_INPUT', 'Choose a supported CSV, TSV, XLS, or XLSX attachment registered to this workflow.');
       }
-      const expectedContentType = file.fileName.toLowerCase().endsWith('.csv')
-        ? 'text/csv'
-        : file.fileName.toLowerCase().endsWith('.tsv')
-        ? 'text/tab-separated-values'
-        : null;
+      const extension = getFileExtension(file.fileName);
+      const expectedContentType = expectedInvoiceContentType(extension);
       if (file.id !== input.fileId || !expectedContentType || file.contentType !== expectedContentType) {
-        return toolFailure('INVALID_TOOL_INPUT', 'The attachment is not a supported CSV/TSV file registered to this workflow.');
+        return toolFailure('INVALID_TOOL_INPUT', 'The attachment is not a supported spreadsheet registered to this workflow.');
+      }
+      if (file.bytes.byteLength === 0 || file.bytes.byteLength > MAX_TEXT_BYTES) {
+        return toolFailure('INVALID_TOOL_INPUT', 'The attachment must be between 1 byte and 10 MB.');
       }
       try {
-        const report = reviewInvoiceCsv(file.text, file.fileName);
+        let report: InvoiceCsvReviewReport;
+        if (extension === 'csv' || extension === 'tsv') {
+          let text: string;
+          try {
+            text = new TextDecoder('utf-8', { fatal: true }).decode(file.bytes);
+          } catch {
+            throw new Error('The attached CSV/TSV is not valid UTF-8 text.');
+          }
+          report = reviewInvoiceCsv(text, file.fileName);
+        } else {
+          if (!spreadsheetWorkbookReader) {
+            return toolFailure('EXECUTOR_UNAVAILABLE', 'Excel workbook review is not available in this environment.', true);
+          }
+          const workbook = spreadsheetWorkbookReader(file.bytes, file.fileName);
+          report = reviewInvoiceWorkbook(file.fileName, workbook);
+        }
         const output: JsonValue = {
           fileId: file.id,
           ...report,
@@ -136,7 +156,7 @@ export function createInvoiceCsvReviewTool(
       } catch (error) {
         return toolFailure(
           'INVALID_TOOL_INPUT',
-          error instanceof Error ? error.message : 'The CSV or TSV could not be reviewed safely.',
+          error instanceof Error ? error.message : 'The attached spreadsheet could not be reviewed safely.',
         );
       }
     },
@@ -258,6 +278,10 @@ export function reviewInvoiceCsv(text: string, fileName: string): InvoiceCsvRevi
   return {
     fileName: clip(fileName, 180),
     delimiter: delimiter === '\t' ? 'tab' : 'comma',
+    sourceFormat: fileName.toLowerCase().endsWith('.tsv') ? 'tsv' : 'csv',
+    worksheetName: null,
+    worksheetCount: null,
+    formulaCellsExcluded: 0,
     rowsRead: reviewRows.length,
     rowsWithUsableAmounts,
     rowsIncludedInCurrencyTotals,
@@ -287,6 +311,87 @@ export function reviewInvoiceCsv(text: string, fileName: string): InvoiceCsvRevi
       'This review reads CSV/TSV data only. It does not modify or send files, invoices, or messages.',
     ],
   };
+}
+
+export function reviewInvoiceWorkbook(
+  fileName: string,
+  workbook: SpreadsheetWorkbookData,
+): InvoiceCsvReviewReport {
+  const extension = getFileExtension(fileName);
+  if (extension !== 'xls' && extension !== 'xlsx') {
+    throw new Error('Excel review currently supports XLS and XLSX workbook files only.');
+  }
+  if (!Array.isArray(workbook.rows) || workbook.rows.length === 0) {
+    throw new Error('The workbook does not contain rows to review.');
+  }
+  if (workbook.rows.length > MAX_DATA_ROWS + 1) {
+    throw new Error(`Workbooks are limited to ${MAX_DATA_ROWS.toLocaleString()} invoice rows plus a header row.`);
+  }
+  if (!Number.isInteger(workbook.worksheetCount) || workbook.worksheetCount < 1) {
+    throw new Error('The workbook worksheet metadata is invalid.');
+  }
+  if (!Number.isInteger(workbook.formulaCellsExcluded) || workbook.formulaCellsExcluded < 0) {
+    throw new Error('The workbook formula metadata is invalid.');
+  }
+
+  const csvText = workbook.rows.map((row) => {
+    if (!Array.isArray(row) || row.length > MAX_COLUMNS) {
+      throw new Error(`Workbooks are limited to ${MAX_COLUMNS} columns per worksheet row.`);
+    }
+    return row.map((cell) => {
+      if (typeof cell !== 'string' || cell.length > MAX_CELL_CHARS) {
+        throw new Error('A workbook cell exceeds the supported text size or has an unsupported value.');
+      }
+      return serializeCsvCell(cell);
+    }).join(',');
+  }).join('\n');
+
+  if (new TextEncoder().encode(csvText).byteLength > MAX_TEXT_BYTES) {
+    throw new Error('The selected worksheet exceeds the 10 MB review limit after normalization.');
+  }
+
+  const report = reviewInvoiceCsv(csvText, 'workbook-normalized.csv');
+  const extraWarnings = workbook.formulaCellsExcluded > 0
+    ? [`${workbook.formulaCellsExcluded} formula cells were excluded from the selected worksheet.`]
+    : [];
+  const extraNotes = [
+    'Workbook formulas are not calculated. Cells containing formulas are excluded so cached results are not treated as verified values.',
+    ...(workbook.worksheetCount > 1
+      ? [`Only the first non-empty worksheet (${clip(workbook.worksheetName, 120)}) was included; the other ${workbook.worksheetCount - 1} worksheet(s) were not included in totals.`]
+      : []),
+  ];
+
+  return {
+    ...report,
+    fileName: clip(fileName, 180),
+    delimiter: 'spreadsheet',
+    sourceFormat: extension,
+    worksheetName: clip(workbook.worksheetName, 120),
+    worksheetCount: workbook.worksheetCount,
+    formulaCellsExcluded: workbook.formulaCellsExcluded,
+    headerWarnings: [...report.headerWarnings, ...extraWarnings],
+    interpretationNotes: [...report.interpretationNotes, ...extraNotes],
+  };
+}
+
+function serializeCsvCell(value: string): string {
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+function getFileExtension(fileName: string): string {
+  const name = fileName.toLowerCase();
+  const dot = name.lastIndexOf('.');
+  return dot < 0 ? '' : name.slice(dot + 1);
+}
+
+function expectedInvoiceContentType(extension: string): string | null {
+  switch (extension) {
+    case 'csv': return 'text/csv';
+    case 'tsv': return 'text/tab-separated-values';
+    case 'xls': return 'application/vnd.ms-excel';
+    case 'xlsx': return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    default: return null;
+  }
 }
 
 function parseDelimitedText(text: string, delimiter: string): string[][] {

@@ -37,17 +37,16 @@ export const MVP_PLANNER_TOOL_UI_METADATA: readonly ToolUiMetadata[] = [
     version: '1.0.0',
     exampleInput: { operation: 'uppercase', text: 'hello, FlowWork' },
   },
-];
-
-/** Tools exposed to the manual execution UI. New capabilities must be added to the planner catalogue separately. */
-export const MVP_TOOL_UI_METADATA: readonly ToolUiMetadata[] = [
-  ...MVP_PLANNER_TOOL_UI_METADATA.slice(0, 2),
   {
     id: 'invoice-csv-review',
-    name: 'Invoice CSV review',
-    description: 'Read an attached CSV/TSV invoice table and summarize totals by currency, with flagged rows for human review. Does not edit or send data.',
+    name: 'Invoice and spreadsheet review',
+    description: 'Review an attached CSV, TSV, XLS, or XLSX invoice table. Summarizes totals by currency and flags rows for human review. Does not edit or send data.',
     version: '1.0.0',
     exampleInput: { fileId: '55000000-0000-4000-8000-000000000001' },
   },
-  ...MVP_PLANNER_TOOL_UI_METADATA.slice(2),
+];
+
+/** Tools available to both the planner and the manual execution UI. */
+export const MVP_TOOL_UI_METADATA: readonly ToolUiMetadata[] = [
+  ...MVP_PLANNER_TOOL_UI_METADATA,
 ];

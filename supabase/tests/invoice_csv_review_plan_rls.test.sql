@@ -1,6 +1,6 @@
 begin;
 
-select plan(3);
+select plan(5);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -56,6 +56,24 @@ insert into public.task_files (
     'invoice.pdf',
     '92000000-0000-4000-8000-000000000001/93000000-0000-4000-8000-000000000001/95000000-0000-4000-8000-000000000002/invoice.pdf',
     'application/pdf',
+    '91000000-0000-4000-8000-000000000001'
+  ),
+  (
+    '94000000-0000-4000-8000-000000000003',
+    '92000000-0000-4000-8000-000000000001',
+    '93000000-0000-4000-8000-000000000001',
+    'invoices.xlsx',
+    '92000000-0000-4000-8000-000000000001/93000000-0000-4000-8000-000000000001/95000000-0000-4000-8000-000000000003/invoices.xlsx',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '91000000-0000-4000-8000-000000000001'
+  ),
+  (
+    '94000000-0000-4000-8000-000000000004',
+    '92000000-0000-4000-8000-000000000001',
+    '93000000-0000-4000-8000-000000000001',
+    'invoices.xls',
+    '92000000-0000-4000-8000-000000000001/93000000-0000-4000-8000-000000000001/95000000-0000-4000-8000-000000000004/invoices.xls',
+    'application/vnd.ms-excel',
     '91000000-0000-4000-8000-000000000001'
   );
 
@@ -125,9 +143,32 @@ select lives_ok(
 select is(
   (select plan->>'validationStatus' from public.workflow_plans limit 1),
   'valid',
-  'the CSV review tool is validated by the database before persistence'
+  'the invoice review tool is validated by the database before persistence'
 );
 
+select lives_ok(
+  $xlsx_test$ select pg_temp.create_signed_workflow_plan(
+       '93000000-0000-4000-8000-000000000001',
+       jsonb_set(
+         (select value from csv_plan_payload),
+         '{steps,0,input,fileId}',
+         '"94000000-0000-4000-8000-000000000003"'::jsonb
+       )
+     ) $xlsx_test$,
+  'a signed plan can reference an XLSX attachment owned by the same task'
+);
+
+select lives_ok(
+  $xlsx_test$ select pg_temp.create_signed_workflow_plan(
+       '93000000-0000-4000-8000-000000000001',
+       jsonb_set(
+         (select value from csv_plan_payload),
+         '{steps,0,input,fileId}',
+         '"94000000-0000-4000-8000-000000000004"'::jsonb
+       )
+     ) $xlsx_test$,
+  'a signed plan can reference an XLS attachment owned by the same task'
+);
 select throws_ok(
   $$ select pg_temp.create_signed_workflow_plan(
        '93000000-0000-4000-8000-000000000001',

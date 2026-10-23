@@ -44,7 +44,7 @@ function pdfFile(overrides: Partial<TaskFileContent> = {}): TaskFileContent {
 
 function sourceFor(file: TaskFileContent): TaskFileContentSource {
   return {
-    getTaskFileContent: vi.fn(async (_ctx: ToolExecutionContext, _id: string) => file),
+    getTaskFileContent: vi.fn(async () => file),
   };
 }
 

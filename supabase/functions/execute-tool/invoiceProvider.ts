@@ -194,5 +194,8 @@ function isAllowedBaseUrl(value: string): boolean {
 }
 
 function safeFileName(value: string): string {
-  return value.replace(/[\r\n\u0000-\u001f\u007f]/g, '_').slice(0, 180);
+  return Array.from(value, (character) => {
+    const code = character.charCodeAt(0);
+    return code <= 31 || code === 127 ? '_' : character;
+  }).join('').slice(0, 180);
 }

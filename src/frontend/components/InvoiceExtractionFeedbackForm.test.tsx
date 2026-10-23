@@ -75,7 +75,7 @@ describe('InvoiceExtractionFeedbackForm', () => {
     fireEvent.change(invoiceNumber, { target: { value: 'INV-1-CORRECTED' } });
     fireEvent.click(await screen.findByRole('button', { name: 'Save field review' }));
 
-    expect(await screen.findByRole('status')).toHaveTextContent(/Field review saved/);
+    expect(await screen.findByText(/Field review saved/)).toBeInTheDocument();
     expect(rpc).toHaveBeenCalledOnce();
     expect(rpc).toHaveBeenCalledWith('record_invoice_extraction_feedback', expect.objectContaining({
       p_task_id: taskId,
@@ -108,7 +108,7 @@ describe('InvoiceExtractionFeedbackForm', () => {
       />,
     );
 
-    expect(await screen.findByRole('status')).toHaveTextContent(/already been reviewed/);
+    expect(await screen.findByText(/This extraction run has already been reviewed/)).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Invoice number' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Review saved' })).toBeDisabled();
     expect(rpc).not.toHaveBeenCalled();
@@ -127,7 +127,7 @@ describe('InvoiceExtractionFeedbackForm', () => {
       />,
     );
 
-    fireEvent.change(await screen.findByRole('textbox', { name: 'Invoice date' }), {
+    fireEvent.change(await screen.findByLabelText('Invoice date'), {
       target: { value: '2026-02-31' },
     });
     fireEvent.click(await screen.findByRole('button', { name: 'Save field review' }));

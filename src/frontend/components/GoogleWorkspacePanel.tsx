@@ -81,7 +81,7 @@ export function GoogleWorkspacePanel({
       url.searchParams.delete('google_connection');
       window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
     }
-    void refreshStatus();
+    void Promise.resolve().then(refreshStatus);
   }, [refreshStatus]);
 
   async function connect() {

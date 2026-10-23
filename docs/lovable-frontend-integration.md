@@ -38,26 +38,28 @@ The Lovable project is available in `FlowWork-com/flowowork`. It is a TanStack S
 
 Attachments establish the foundation for analysis, but no file is parsed merely by being uploaded.
 
-## Phase 4 — invoice CSV/TSV review
+## Phase 4 — invoice CSV/TSV and Excel workbook review
 
-**In progress:** the current feature branch implements a read-only, deterministic CSV/TSV invoice review tool.
+**Merged:** PR #24 added the deterministic, read-only CSV/TSV invoice review. The current branch extends the same tool to XLS/XLSX workbooks.
 
-- Reads only a file ID from the current task; the server re-checks workspace membership and resolves the object path from persisted metadata.
-- Uses CSV/TSV parsing without evaluating formulas or running content as code.
-- Summarizes numeric totals by ISO currency without conversion; missing, invalid, and ambiguous amounts are not counted as zero.
-- Flags duplicates and incomplete rows, retaining duplicate values in totals but making that explicit for human review.
-- Adds the available attachment IDs to planner context as untrusted data. Signed-plan persistence independently requires the selected file to belong to the same task and have a supported CSV/TSV file type.
-- Does not edit the source, create output files, send messages, or execute external writes.
+- Reads only a registered file ID from the current task; server-side storage access re-checks workspace membership and resolves the object path from persisted metadata.
+- Supports CSV, TSV, XLS, and XLSX up to the existing 10 MiB attachment limit; workbook reads are further bounded by worksheet, row, column, and cell limits.
+- Summarizes totals by currency without conversion; missing, invalid, or ambiguous amounts are not counted as zero.
+- Flags duplicates and incomplete rows, retaining duplicate values in totals but making this explicit for human review.
+- Adds attachment IDs to planner context as untrusted data. Signed-plan persistence independently validates that the selected file belongs to the same task and has a supported extension/content-type pair.
+- Excel review includes only the first non-empty worksheet and reports that limitation. Formula cells are blanked before analysis: the parser does not calculate formulas or trust cached formula results.
+- Does not edit the source, generate spreadsheet output, send messages, or perform external writes.
 
-This first slice does **not** parse XLS/XLSX workbooks or PDF/image invoices yet. Those require separate format-specific readers, limits, and tests before being exposed through the tool registry.
+The workbook parser is loaded only in the server-side Edge Function and is pinned to SheetJS 0.20.3 from its official CDN rather than the stale npm registry package. The workbook reader has focused Deno tests for formula exclusion, worksheet selection, malformed files, and workbook limits.
+
+PDF/image invoice extraction remains separate: it requires a server-side extraction provider, strict response schema, confidence/correction tracking, and human review for uncertain fields.
 
 ## Remaining phases
 
-1. Add XLS/XLSX spreadsheet reading and deterministic spreadsheet summaries using a maintained parser and the same private file-resolution boundary. Preserve formulas as data; never evaluate them.
-2. Add PDF/image invoice extraction behind a server-side provider, strict response schema, confidence and correction tracking, and human review for uncertain fields.
-3. Add private saved prompt templates using workspace-scoped persistence and existing auth controls.
-4. Port Google integrations behind server-side credential handling and explicit workspace/user authorization. Start with read-only access; keep email sending approval-gated.
-5. Add richer recovery and execution orchestration only after each integration has a clear data model, tests, authorization rules, and observability.
+1. Add PDF/image invoice extraction and field-level validation, confidence calibration, and correction tracking.
+2. Add private saved prompt templates using workspace-scoped persistence and existing auth controls.
+3. Port Google integrations behind server-side credential handling and explicit workspace/user authorization. Start with read-only access; keep email sending approval-gated.
+4. Add richer recovery and execution orchestration only after each integration has a clear data model, tests, authorization rules, and observability.
 
 ## Security and migration rules
 

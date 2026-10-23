@@ -34,7 +34,7 @@ export function App() {
   const [authError, setAuthError] = useState('');
   const [email, setEmail] = useState('');
   const [linkSent, setLinkSent] = useState(false);
-  const [activeView, setActiveView] = useState<'workspace' | 'history' | 'templates'>('workspace');
+  const [activeView, setActiveView] = useState<'workspace' | 'history'>('workspace');
 
   useEffect(() => {
     if (!client) return;
@@ -205,8 +205,8 @@ function WorkspaceView({
 }: {
   readonly client: SupabaseClient;
   readonly userId: string;
-  readonly activeView: 'workspace' | 'history' | 'templates';
-  readonly onViewChange: (view: 'workspace' | 'history' | 'templates') => void;
+  readonly activeView: 'workspace' | 'history';
+  readonly onViewChange: (view: 'workspace' | 'history') => void;
 }) {
   const repository = useMemo(() => new SupabaseWorkflowRepository(client), [client]);
   const [workspace, setWorkspace] = useState<WorkspaceRecord | null>(null);

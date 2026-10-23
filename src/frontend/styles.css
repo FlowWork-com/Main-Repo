@@ -1448,3 +1448,92 @@ select:focus {
     flex: 1;
   }
 }
+
+.invoice-feedback {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #dce7de;
+  border-radius: 12px;
+  background: #f8fbf8;
+}
+
+.invoice-feedback h5 {
+  margin: 0;
+  color: #26372d;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.invoice-feedback__description {
+  margin: 0;
+  color: #65746b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.invoice-feedback .form-stack {
+  display: grid;
+  gap: 13px;
+}
+
+.invoice-feedback__field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.invoice-feedback__field label {
+  color: #35473b;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.invoice-feedback__source {
+  margin: 0;
+  color: #758278;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.invoice-feedback__field input {
+  width: 100%;
+  min-height: 38px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid #dce5dd;
+  border-radius: 8px;
+  background: #fff;
+  color: #26372d;
+  font: inherit;
+  font-size: 13px;
+}
+
+.invoice-feedback__field input:focus-visible {
+  outline: 2px solid #2f7961;
+  outline-offset: 2px;
+}
+
+.invoice-feedback__field input:disabled {
+  background: #f0f4f0;
+  color: #65746b;
+}
+
+.invoice-feedback .button {
+  justify-self: start;
+}
+
+@media (max-width: 560px) {
+  .invoice-feedback {
+    padding: 13px;
+  }
+
+  .invoice-feedback .button {
+    width: 100%;
+  }
+}

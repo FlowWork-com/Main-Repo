@@ -205,13 +205,13 @@ select lives_ok(
 );
 
 select lives_ok(
-  $ select public.register_task_file(
+  $png_register$ select public.register_task_file(
        '82000000-0000-4000-8000-000000000001',
        '83000000-0000-4000-8000-000000000001',
        'scan.png',
        '82000000-0000-4000-8000-000000000001/83000000-0000-4000-8000-000000000001/84000000-0000-4000-8000-000000000006/scan.png',
        'image/png'
-     ) $,
+     ) $png_register$,
   'the secure registration RPC accepts a supported PNG invoice image'
 );
 
@@ -223,13 +223,13 @@ select is(
 );
 
 select throws_ok(
-  $ insert into storage.objects (bucket_id, name, owner_id, metadata)
+  $image_spoof$ insert into storage.objects (bucket_id, name, owner_id, metadata)
      values (
        'workflow-files',
        '82000000-0000-4000-8000-000000000001/83000000-0000-4000-8000-000000000001/84000000-0000-4000-8000-000000000007/spoof.jpg',
        '81000000-0000-4000-8000-000000000001',
        '{"mimetype":"text/plain","size":8}'::jsonb
-     ) $,
+     ) $image_spoof$,
   '42501',
   'new row violates row-level security policy for table "objects"',
   'Storage rejects a JPEG extension with a mismatched text MIME type'

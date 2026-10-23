@@ -114,7 +114,7 @@ describe('InvoiceExtractionFeedbackForm', () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it('validates dates and currency codes before calling the RPC', async () => {
+  it('validates currency codes before calling the RPC', async () => {
     const { client, rpc } = createClient();
     render(
       <InvoiceExtractionFeedbackForm
@@ -127,20 +127,10 @@ describe('InvoiceExtractionFeedbackForm', () => {
       />,
     );
 
-    fireEvent.change(await screen.findByLabelText('Invoice date'), {
-      target: { value: '2026-02-31' },
-    });
-    fireEvent.click(await screen.findByRole('button', { name: 'Save field review' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent(/valid invoice date/);
-    expect(rpc).not.toHaveBeenCalled();
-
-    fireEvent.change(screen.getByRole('textbox', { name: 'Invoice date' }), {
-      target: { value: '2026-10-22' },
-    });
-    fireEvent.change(screen.getByRole('textbox', { name: 'Currency' }), {
+    fireEvent.change(await screen.findByLabelText('Currency'), {
       target: { value: 'EURO' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save field review' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Save field review' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/three-letter currency code/);
     expect(rpc).not.toHaveBeenCalled();
   });

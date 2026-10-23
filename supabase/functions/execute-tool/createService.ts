@@ -5,6 +5,7 @@ import { ToolRegistry } from '../../../src/tools/toolRegistry.ts';
 import { SupabaseToolExecutionRepository } from '../../../src/backend/toolExecutionRepository.ts';
 import { ToolExecutionService } from '../../../src/backend/toolExecutionService.ts';
 import type { WorkflowRepository } from '../../../src/backend/workflowRepository.ts';
+import { readSpreadsheetWorkbook } from './xlsxReader.ts';
 
 export function createServerToolExecutionService(
   privilegedClient: SupabaseClient,
@@ -13,7 +14,11 @@ export function createServerToolExecutionService(
 ): ToolExecutionService {
   const executionRepository = new SupabaseToolExecutionRepository(privilegedClient);
   const registry = new ToolRegistry();
-  for (const tool of createMvpTools(executionRepository, executionRepository)) {
+  for (const tool of createMvpTools(
+    executionRepository,
+    executionRepository,
+    readSpreadsheetWorkbook,
+  )) {
     registry.register(tool);
   }
   return new ToolExecutionService(

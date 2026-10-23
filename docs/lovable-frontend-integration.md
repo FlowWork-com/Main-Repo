@@ -50,31 +50,41 @@ Attachments establish the foundation for analysis, but no file is parsed merely 
 
 ## Phase 5 — PDF/image invoice extraction
 
-**In progress:** the `feat/invoice-document-extraction` branch implements approval-gated extraction for PDF, JPG/JPEG, and PNG attachments.
+**Merged:** [PR #26 — approval-gated PDF/image extraction](https://github.com/FlowWork-com/Main-Repo/pull/26).
 
 - Supports private PDF, JPG/JPEG, and PNG attachments after server-side MIME, extension, file-signature, size, workspace, and task checks.
-- Sends the original document to a separately configured server-side OpenAI-compatible vision endpoint only when the high-risk tool's approval gate has been satisfied.
+- Sends the original document to a separately configured server-side OpenAI-compatible vision endpoint only after the high-risk tool's persisted approval gate is satisfied.
 - Returns invoice number, date, vendor, description, currency, subtotal, tax, and grand total with per-field model-estimated confidence.
-- Adds deterministic validation warnings for missing/low-confidence fields, invalid dates/currency codes, and subtotal-plus-tax mismatches.
-- Every result requires human review. Confidence values are model self-estimates, not calibrated probabilities. This phase does not save an invoice record, modify the source, or send content anywhere except the explicitly configured provider.
+- Adds deterministic warnings for missing/low-confidence fields, invalid dates/currency codes, and subtotal-plus-tax mismatches.
+- Every result requires human review. Confidence values are model self-estimates, not calibrated probabilities. Extraction does not create or edit invoice records.
 
 ### Provider configuration
 
-Set the following as **server-side Supabase Edge Function secrets**, not browser `VITE_*` variables and never in Git:
+Set these as **server-side Supabase Edge Function secrets**, not browser `VITE_*` variables and never in Git:
 
 - `FLOWWORK_INVOICE_PROVIDER=openai-compatible`
-- `FLOWWORK_INVOICE_BASE_URL=https://api.openai.com/v1` (or the trusted base URL of an OpenAI-compatible service that supports image and file content parts)
+- `FLOWWORK_INVOICE_BASE_URL=https://api.openai.com/v1` (or a trusted compatible endpoint that supports the required PDF file and image content formats)
 - `FLOWWORK_INVOICE_MODEL=<vision-capable-model>`
 - `FLOWWORK_INVOICE_API_KEY=<server-side-api-key>`
 
-When these secrets are absent or incomplete, invoice document extraction fails closed as unavailable. Do not configure an endpoint that is not authorized to receive the invoice data users submit.
+When these secrets are absent or incomplete, extraction fails closed as unavailable. Do not configure a provider unless it is authorized to receive the invoice documents users submit.
+
+## Phase 6 — human extraction review and feedback metrics
+
+**In review:** the `feat/invoice-correction-feedback` branch adds review capture for saved extraction results.
+
+- The reviewer can confirm or correct all eight extracted fields from the saved run, including explicitly confirming that a field is missing.
+- Feedback is accepted only for a successful `invoice-document-extract` execution whose saved input/output reference the same private file and task.
+- The database derives the original values and confidence estimates from the saved server-side execution output; clients cannot submit a fabricated source value or confidence score.
+- Feedback is stored per field and extraction run, scoped by workspace, with a stable submission ID for safe retries. Duplicate reviews for the same extraction are rejected.
+- A workspace-protected summary groups review counts and observed correction rates by field and tool version, including mean confidence for corrected versus unchanged fields.
+- These metrics describe human review outcomes. They are **not independently verified accuracy or confidence calibration**, because the reviewer response itself is not an external ground-truth dataset.
 
 ## Remaining phases
 
-1. Add correction persistence and evaluation fixtures before treating model confidence as an operational reliability metric.
-2. Add private saved prompt templates using workspace-scoped persistence and existing auth controls.
-3. Port Google integrations behind server-side credential handling and explicit workspace/user authorization. Start with read-only access; keep email sending approval-gated.
-4. Add richer recovery and execution orchestration only after each integration has a clear data model, tests, authorization rules, and observability.
+1. Add private saved prompt templates using workspace-scoped persistence, explicit access boundaries, and an auditable version history.
+2. Add server-side Google Workspace integration groundwork with a clear provider interface, least-privilege scopes, and no browser-held OAuth secrets. Enable live API calls only after OAuth consent and token storage are configured.
+3. Add richer recovery and execution orchestration only after each integration has a clear data model, tests, authorization rules, and observability.
 
 ## Security and migration rules
 

@@ -294,8 +294,7 @@ begin
 end;
 $$;
 
-commit;
- and lower(coalesce(f.content_type, '')) = 'text/csv')
+commit; and lower(coalesce(f.content_type, '')) = 'text/csv')
             or (f.file_name ~* '[.]tsv
       )
     ) then
@@ -388,8 +387,7 @@ commit;
 end;
 $$;
 
-commit;
- and lower(coalesce(f.content_type, '')) = 'text/tab-separated-values')
+commit; and lower(coalesce(f.content_type, '')) = 'text/tab-separated-values')
             or (f.file_name ~* '[.]xls
       )
     ) then
@@ -482,8 +480,7 @@ commit;
 end;
 $$;
 
-commit;
- and lower(coalesce(f.content_type, '')) = 'application/vnd.ms-excel')
+commit; and lower(coalesce(f.content_type, '')) = 'application/vnd.ms-excel')
             or (f.file_name ~* '[.]xlsx
       )
     ) then
@@ -576,8 +573,7 @@ commit;
 end;
 $$;
 
-commit;
- and lower(coalesce(f.content_type, '')) = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+commit; and lower(coalesce(f.content_type, '')) = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
           )
       )
     ) then

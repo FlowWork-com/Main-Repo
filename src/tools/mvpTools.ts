@@ -260,9 +260,9 @@ export function createMvpTools(
 ): readonly ToolDefinition[] {
   return [
     echo,
-    textTransform,
-    jsonInspect,
     createFileMetadataTool(fileMetadataSource),
+    jsonInspect,
+    textTransform,
     createInvoiceCsvReviewTool(fileContentSource, spreadsheetWorkbookReader),
   ];
 }

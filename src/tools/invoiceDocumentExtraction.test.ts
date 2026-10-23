@@ -149,7 +149,7 @@ describe('createInvoiceDocumentExtractionTool', () => {
       evidence: { type: 'invoice-document-extraction', reference: file.id },
     });
     expect(source.getTaskFileContent).toHaveBeenCalledWith(context, file.id);
-    expect(extractor).toHaveBeenCalledWith(file);
+    expect(extractor).toHaveBeenCalledWith(file, context.signal);
   });
 
   it('rejects invalid bytes before provider calls', async () => {

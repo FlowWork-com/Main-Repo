@@ -1,4 +1,11 @@
-import { assertEquals, assertStringIncludes } from 'jsr:@std/assert';
+function assertEquals(actual: unknown, expected: unknown): void {
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new Error(`Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+  }
+}
+function assertStringIncludes(actual: string, expected: string): void {
+  if (!actual.includes(expected)) throw new Error(`Expected string to include ${expected}`);
+}
 import { createOpenAICompatibleInvoiceExtractor } from './invoiceProvider.ts';
 import type { TaskFileContent } from '../../../src/tools/mvpTools.ts';
 

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { JsonValue } from '../../tools/contracts';
 
@@ -42,8 +42,39 @@ export function InvoiceExtractionFeedbackForm({
   const [values, setValues] = useState<ReviewValues>(() => initialValues(extractionFields));
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [checkingExisting, setCheckingExisting] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [alreadyReviewed, setAlreadyReviewed] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    void client
+      .from('invoice_extraction_feedback')
+      .select('field_name')
+      .eq('workspace_id', workspaceId)
+      .eq('task_id', taskId)
+      .eq('execution_id', executionId)
+      .limit(1)
+      .then(({ data, error: queryError }) => {
+        if (!active) return;
+        if (queryError) {
+          setError('Could not check whether this extraction was already reviewed. The server will still prevent duplicate reviews.');
+        } else if (Array.isArray(data) && data.length > 0) {
+          setSaved(true);
+          setAlreadyReviewed(true);
+        }
+      })
+      .catch(() => {
+        if (active) setError('Could not check prior review status. The server will still prevent duplicate reviews.');
+      })
+      .finally(() => {
+        if (active) setCheckingExisting(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [client, executionId, taskId, workspaceId]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -122,7 +153,7 @@ export function InvoiceExtractionFeedbackForm({
               </p>
               <input
                 autoComplete="off"
-                disabled={busy || saved}
+                disabled={busy || saved || checkingExisting}
                 id={inputId}
                 inputMode={field.type === 'number' ? 'decimal' : undefined}
                 maxLength={field.type === 'text' ? 500 : undefined}
@@ -141,13 +172,16 @@ export function InvoiceExtractionFeedbackForm({
           );
         })}
         {error && <p className="error-message" role="alert">{error}</p>}
+        {checkingExisting && <p role="status">Checking prior review status…</p>}
         {saved && (
           <p className="notice" role="status">
-            Field review saved. This contributes to observed correction-rate metrics; it is not an independent accuracy certification.
+            {alreadyReviewed
+              ? 'This extraction run has already been reviewed. Duplicate submissions are prevented.'
+              : 'Field review saved. This contributes to observed correction-rate metrics; it is not an independent accuracy certification.'}
           </p>
         )}
         <button className="button button--secondary" disabled={busy || saved} type="submit">
-          {busy ? 'Saving review…' : saved ? 'Review saved' : 'Save field review'}
+          {checkingExisting ? 'Checking prior review…' : busy ? 'Saving review…' : saved ? 'Review saved' : 'Save field review'}
         </button>
       </form>
     </section>

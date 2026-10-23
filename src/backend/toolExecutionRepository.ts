@@ -32,6 +32,7 @@ export interface ToolExecutionHistoryEntry {
   readonly toolId: string;
   readonly toolVersion: string;
   readonly status: StoredExecutionStatus;
+  readonly input: JsonValue;
   readonly output: JsonValue | null;
   readonly error: ToolExecutionError | null;
   readonly createdAt: string;
@@ -44,6 +45,7 @@ interface ExecutionHistoryRow {
   readonly tool_id: string;
   readonly tool_version: string;
   readonly status: string;
+  readonly input: unknown;
   readonly output: unknown;
   readonly error: unknown;
   readonly created_at: string;
@@ -305,7 +307,7 @@ export class SupabaseToolExecutionHistoryRepository {
   ): Promise<ToolExecutionHistoryEntry[]> {
     const { data, error } = await this.client
       .from('task_tool_executions')
-      .select('execution_id, tool_id, tool_version, status, output, error, created_at, started_at, completed_at')
+      .select('execution_id, tool_id, tool_version, status, input, output, error, created_at, started_at, completed_at')
       .eq('workspace_id', workspaceId)
       .eq('task_id', taskId)
       .order('created_at', { ascending: false });
@@ -316,6 +318,10 @@ export class SupabaseToolExecutionHistoryRepository {
 
 function mapExecutionHistoryRow(row: ExecutionHistoryRow): ToolExecutionHistoryEntry {
   const status = asExecutionStatus(row.status);
+  if (!isPersistableJson(row.input)) {
+    throw new Error('Tool execution history contains invalid input.');
+  }
+  const input = row.input;
   let output: JsonValue | null = null;
   let error: ToolExecutionError | null = null;
   if (status === 'succeeded') {
@@ -331,6 +337,7 @@ function mapExecutionHistoryRow(row: ExecutionHistoryRow): ToolExecutionHistoryE
     toolId: row.tool_id,
     toolVersion: row.tool_version,
     status,
+    input,
     output,
     error,
     createdAt: row.created_at,

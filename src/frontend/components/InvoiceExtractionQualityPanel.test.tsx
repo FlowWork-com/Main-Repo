@@ -114,7 +114,7 @@ describe('InvoiceExtractionQualityPanel', () => {
     expect(screen.getByText('2', { selector: 'strong' })).toBeInTheDocument();
     expect(screen.getByText('33.3%', { selector: 'strong' })).toBeInTheDocument();
     expect(screen.getAllByRole('columnheader', { name: 'Observed correction rate' })).toHaveLength(2);
-    expect(screen.getByText('Invoice number')).toBeInTheDocument();
+    expect(screen.getAllByText('Invoice number')).toHaveLength(2);
     expect(screen.getByText('0.70–0.79')).toBeInTheDocument();
     expect(screen.getByText(/not independently verified extraction accuracy/i)).toBeInTheDocument();
     expect(from).toHaveBeenNthCalledWith(1, 'invoice_extraction_feedback_summary');

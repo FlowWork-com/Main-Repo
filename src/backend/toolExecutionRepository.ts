@@ -220,6 +220,10 @@ export class SupabaseToolExecutionRepository
       ? 'text/csv'
       : extension === 'tsv'
       ? 'text/tab-separated-values'
+      : extension === 'xls'
+      ? 'application/vnd.ms-excel'
+      : extension === 'xlsx'
+      ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       : null;
     if (!expectedContentType || file.content_type?.toLowerCase() !== expectedContentType) {
       return null;
@@ -244,21 +248,22 @@ export class SupabaseToolExecutionRepository
       return null;
     }
 
-    let text: string;
-    try {
-      text = new TextDecoder('utf-8', { fatal: true }).decode(
-        await downloaded.data.arrayBuffer(),
-      );
-    } catch {
-      return null;
+    const bytes = new Uint8Array(await downloaded.data.arrayBuffer());
+    if (extension === 'csv' || extension === 'tsv') {
+      let text: string;
+      try {
+        text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      } catch {
+        return null;
+      }
+      if (text.includes('\u0000')) return null;
     }
-    if (text.includes('\u0000')) return null;
 
     return {
       id: file.id,
       fileName: file.file_name,
       contentType: expectedContentType,
-      text,
+      bytes,
     };
   }
 

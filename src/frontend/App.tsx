@@ -24,6 +24,7 @@ import { PlanReviewPanel } from './components/PlanReviewPanel';
 import { TaskToolExecutionPanel } from './components/TaskToolExecutionPanel';
 import { TaskTimeline } from './components/TaskTimeline';
 import { TaskAttachmentsPanel } from './components/TaskAttachmentsPanel';
+import { PromptTemplatesPanel } from './components/PromptTemplatesPanel';
 import { GoogleWorkspacePanel } from './components/GoogleWorkspacePanel';
 
 export function App() {
@@ -453,6 +454,13 @@ function WorkspaceView({
         client={client}
         workspaceId={workspace.id}
         canAccessWorkspace={canAccessWorkspace}
+      />
+
+      <PromptTemplatesPanel
+        client={client}
+        workspaceId={workspace.id}
+        canAccessWorkspace={canAccessWorkspace}
+        onUseTemplate={(promptText) => setDetails(promptText)}
       />
 
       <form className="request-composer" onSubmit={submitTask}>

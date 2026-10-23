@@ -1325,6 +1325,219 @@ select:focus {
 }
 
 
+/* Private, versioned workflow prompt templates */
+.prompt-templates {
+  display: grid;
+  gap: 13px;
+  border-color: #e3e9e2;
+  border-radius: 14px;
+}
+
+.prompt-templates__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.prompt-templates__heading h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.prompt-templates__description,
+.prompt-templates__empty {
+  margin: 0;
+  color: #65746b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.prompt-templates__list {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.prompt-templates__item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px;
+  border: 1px solid #e3e9e2;
+  border-radius: 10px;
+  background: #fbfcfa;
+}
+
+.prompt-templates__item-main {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  flex: 1;
+}
+
+.prompt-templates__item-main strong {
+  color: #26372d;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.prompt-templates__item-main span {
+  color: #78867c;
+  font-size: 11px;
+}
+
+.prompt-templates__item-main p {
+  margin: 3px 0 0;
+  color: #526359;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.prompt-templates__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+
+.prompt-templates__actions .button {
+  min-height: 32px;
+  padding: 6px 9px;
+  font-size: 11px;
+}
+
+.prompt-templates__editor {
+  display: grid;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid #e6ece5;
+}
+
+.prompt-templates__editor h4 {
+  margin: 0;
+  color: #26372d;
+  font-size: 14px;
+}
+
+.prompt-templates__editor textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+@media (max-width: 680px) {
+  .prompt-templates__heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .prompt-templates__item {
+    flex-direction: column;
+  }
+
+  .prompt-templates__actions {
+    width: 100%;
+  }
+
+  .prompt-templates__actions .button {
+    flex: 1;
+  }
+}
+
+.invoice-feedback {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #dce7de;
+  border-radius: 12px;
+  background: #f8fbf8;
+}
+
+.invoice-feedback h5 {
+  margin: 0;
+  color: #26372d;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.invoice-feedback__description {
+  margin: 0;
+  color: #65746b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.invoice-feedback .form-stack {
+  display: grid;
+  gap: 13px;
+}
+
+.invoice-feedback__field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.invoice-feedback__field label {
+  color: #35473b;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.invoice-feedback__source {
+  margin: 0;
+  color: #758278;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.invoice-feedback__field input {
+  width: 100%;
+  min-height: 38px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid #dce5dd;
+  border-radius: 8px;
+  background: #fff;
+  color: #26372d;
+  font: inherit;
+  font-size: 13px;
+}
+
+.invoice-feedback__field input:focus-visible {
+  outline: 2px solid #2f7961;
+  outline-offset: 2px;
+}
+
+.invoice-feedback__field input:disabled {
+  background: #f0f4f0;
+  color: #65746b;
+}
+
+.invoice-feedback .button {
+  justify-self: start;
+}
+
+@media (max-width: 560px) {
+  .invoice-feedback {
+    padding: 13px;
+  }
+
+  .invoice-feedback .button {
+    width: 100%;
+  }
+}
+
 /* Read-only Google Workspace integration */
 .google-workspace {
   display: grid;

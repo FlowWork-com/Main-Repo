@@ -166,7 +166,7 @@ describe('reviewInvoiceCsv', () => {
         bytes,
       })),
     };
-    const workbookReader = vi.fn((_bytes: Uint8Array, fileName: string) => ({
+    const workbookReader = vi.fn((_bytes: Uint8Array, _fileName: string) => ({
       rows: [
         ['Invoice Number', 'Vendor', 'Grand Total', 'Currency'],
         ['INV-1', 'Acme', '10.00', 'USD'],

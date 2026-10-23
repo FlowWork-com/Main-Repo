@@ -1,6 +1,6 @@
 begin;
 
-select plan(11);
+select plan(14);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -211,6 +211,23 @@ select is(
   'the field summary reports the observed correction rate without labelling it accuracy'
 );
 
+select is(
+  (select confidence_band from public.invoice_extraction_confidence_summary
+   where workspace_id = 'a2000000-0000-4000-8000-000000000001'
+     and field_name = 'invoiceNumber' and tool_version = '1.0.0'),
+  '0.70–0.79'::text,
+  'the confidence summary assigns the reviewed field to its reported-confidence band'
+);
+
+select is(
+  (select observed_correction_rate from public.invoice_extraction_confidence_summary
+   where workspace_id = 'a2000000-0000-4000-8000-000000000001'
+     and field_name = 'invoiceNumber' and tool_version = '1.0.0'
+     and confidence_band_order = 3),
+  1.0000::numeric,
+  'confidence-band summary exposes observed correction rate, not calibrated accuracy'
+);
+
 reset role;
 select set_config('request.jwt.claim.sub', 'a1000000-0000-4000-8000-000000000002', true);
 set local role authenticated;
@@ -219,6 +236,12 @@ select is(
   (select count(*) from public.invoice_extraction_feedback),
   0::bigint,
   'non-members cannot read workspace extraction feedback'
+);
+
+select is(
+  (select count(*) from public.invoice_extraction_confidence_summary),
+  0::bigint,
+  'non-members cannot read workspace confidence summaries'
 );
 
 select throws_ok(

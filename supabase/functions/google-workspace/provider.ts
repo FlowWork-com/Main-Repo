@@ -291,7 +291,7 @@ function isSafeGoogleFileUrl(value: string): boolean {
   try {
     const url = new URL(value);
     return url.protocol === 'https:' &&
-      (url.hostname === 'drive.google.com' || url.hostname.endsWith('.google.com')) &&
+      ['drive.google.com', 'docs.google.com', 'sheets.google.com', 'slides.google.com', 'forms.google.com'].includes(url.hostname) &&
       !url.username && !url.password;
   } catch {
     return false;

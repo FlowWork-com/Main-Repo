@@ -33,7 +33,7 @@ function createHarness(options: {
   const secrets = new Map<string, string>();
   const states = new Map<string, GoogleOAuthState>();
   const connections = new Map<string, GoogleWorkspaceConnection>();
-  const allowedMembers = new Set([userId, ...(options.member === false ? [] : [])]);
+  const allowedMembers = new Set(options.member === false ? [] : [userId]);
   let secretCounter = 1;
   let now = Date.parse('2026-10-23T10:00:00.000Z');
 
@@ -98,7 +98,7 @@ function createHarness(options: {
       connected_at: new Date(now).toISOString(),
     });
   };
-  return { handler, post, secrets, states, connections, addConnection, setTime, now: () => now, workspaceId, userId, outsiderId };
+  return { handler, post, secrets, states, connections, addConnection, setTime, now: () => now, workspaceId, userId, outsiderId, key };
 }
 
 Deno.test('Google connect requires authenticated workspace access and returns state/PKCE authorization URL', async () => {

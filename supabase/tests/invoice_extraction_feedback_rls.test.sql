@@ -138,13 +138,13 @@ select throws_ok(
 );
 
 select lives_ok(
-  $ select public.record_invoice_extraction_feedback(
+  $$ select public.record_invoice_extraction_feedback(
        'a3000000-0000-4000-8000-000000000001',
        'a6000000-0000-4000-8000-000000000001',
        'a4000000-0000-4000-8000-000000000001',
        'a7000000-0000-4000-8000-000000000001',
        (select value from invoice_feedback_payload)
-     ) $,
+     ) $$,
   'workspace member can save human review for the matching extraction run'
 );
 

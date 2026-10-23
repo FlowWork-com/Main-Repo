@@ -50,11 +50,15 @@ const handler = createExecuteToolHandler<SupabaseClient>({
 
     // Opportunistically recover runs left in "running" after a worker/process interruption.
     // The database function is service-role-only, bounded, and never replays a tool.
-    const { error: recoveryError } = await serviceClient.rpc('recover_stale_tool_executions', {
-      p_older_than_seconds: 600,
-      p_batch_size: 50,
-    });
-    if (recoveryError) {
+    try {
+      const { error: recoveryError } = await serviceClient.rpc('recover_stale_tool_executions', {
+        p_older_than_seconds: 600,
+        p_batch_size: 50,
+      });
+      if (recoveryError) {
+        console.error('[execute-tool]', 'STALE_EXECUTION_RECOVERY_UNAVAILABLE');
+      }
+    } catch {
       console.error('[execute-tool]', 'STALE_EXECUTION_RECOVERY_UNAVAILABLE');
     }
 

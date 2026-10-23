@@ -6,6 +6,7 @@ import {
   type ToolExecutionContext,
 } from './contracts';
 import { createInvoiceCsvReviewTool } from './invoiceCsvReview';
+import { createInvoiceDocumentExtractionTool, type InvoiceDocumentExtractor } from './invoiceDocumentExtraction';
 import { MVP_PLANNER_TOOL_UI_METADATA } from './toolMetadata';
 
 export interface TaskFileMetadata {
@@ -257,6 +258,7 @@ export function createMvpTools(
   fileMetadataSource: TaskFileMetadataSource,
   fileContentSource?: TaskFileContentSource,
   spreadsheetWorkbookReader?: SpreadsheetWorkbookReader,
+  invoiceDocumentExtractor?: InvoiceDocumentExtractor,
 ): readonly ToolDefinition[] {
   return [
     echo,
@@ -264,6 +266,7 @@ export function createMvpTools(
     jsonInspect,
     textTransform,
     createInvoiceCsvReviewTool(fileContentSource, spreadsheetWorkbookReader),
+    createInvoiceDocumentExtractionTool(fileContentSource, invoiceDocumentExtractor),
   ];
 }
 

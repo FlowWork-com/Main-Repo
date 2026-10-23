@@ -117,7 +117,7 @@ export function InvoiceExtractionQualityPanel({
           onClick={() => {
             setError('');
             setLoading(true);
-            // Changing the workspace key triggers the same safe, RLS-scoped read path.
+            // Reuse the same safe, workspace-scoped aggregate read path.
             setSelectedField('all');
             setSelectedVersion('all');
             void refreshMetrics(client, workspaceId).then((result) => {

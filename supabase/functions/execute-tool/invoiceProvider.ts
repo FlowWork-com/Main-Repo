@@ -48,7 +48,7 @@ export function createOpenAICompatibleInvoiceExtractor(
   const endpoint = `${config.baseUrl.replace(/\/+$/, '')}/chat/completions`;
   const fetcher = config.fetcher ?? fetch;
 
-  return async (file: TaskFileContent): Promise<unknown> => {
+  return async (file: TaskFileContent, externalSignal?: AbortSignal): Promise<unknown> => {
     const dataUrl = `data:${file.contentType};base64,${bytesToBase64(file.bytes)}`;
     const documentPart = file.contentType === 'application/pdf'
       ? {
@@ -63,6 +63,9 @@ export function createOpenAICompatibleInvoiceExtractor(
         image_url: { url: dataUrl, detail: 'high' },
       };
     const controller = new AbortController();
+    const onExternalAbort = () => controller.abort();
+    if (externalSignal?.aborted) controller.abort();
+    else externalSignal?.addEventListener('abort', onExternalAbort, { once: true });
     const timeout = setTimeout(() => controller.abort(), config.timeoutMs ?? 45_000);
     try {
       const response = await fetcher(endpoint, {
@@ -124,6 +127,7 @@ export function createOpenAICompatibleInvoiceExtractor(
       return parsed;
     } finally {
       clearTimeout(timeout);
+      externalSignal?.removeEventListener('abort', onExternalAbort);
     }
   };
 }

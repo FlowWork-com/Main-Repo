@@ -75,7 +75,7 @@ function createHarness(options: {
     },
     fetcher: options.fetcher ?? (async () => Response.json({})) as typeof fetch,
     now: () => now,
-    logFailure: (_code: string) => {},
+    logFailure: () => {},
   };
   const handler = createGoogleWorkspaceHandler(dependencies);
   const post = (payload: unknown, token = 'valid-token') => new Request('https://project.example/functions/v1/google-workspace', {

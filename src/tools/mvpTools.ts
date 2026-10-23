@@ -26,7 +26,7 @@ export interface TaskFileContent {
   readonly id: string;
   readonly fileName: string;
   readonly contentType: string;
-  readonly text: string;
+  readonly bytes: Uint8Array;
 }
 
 export interface TaskFileContentSource {
@@ -35,6 +35,18 @@ export interface TaskFileContentSource {
     fileId: string,
   ): Promise<TaskFileContent | null>;
 }
+
+export interface SpreadsheetWorkbookData {
+  readonly rows: readonly (readonly string[])[];
+  readonly worksheetName: string;
+  readonly worksheetCount: number;
+  readonly formulaCellsExcluded: number;
+}
+
+export type SpreadsheetWorkbookReader = (
+  bytes: Uint8Array,
+  fileName: string,
+) => SpreadsheetWorkbookData;
 
 const safeToolProperties = {
   riskLevel: 'low',
@@ -244,13 +256,14 @@ export function createFileMetadataTool(
 export function createMvpTools(
   fileMetadataSource: TaskFileMetadataSource,
   fileContentSource?: TaskFileContentSource,
+  spreadsheetWorkbookReader?: SpreadsheetWorkbookReader,
 ): readonly ToolDefinition[] {
   return [
     echo,
     textTransform,
     jsonInspect,
     createFileMetadataTool(fileMetadataSource),
-    createInvoiceCsvReviewTool(fileContentSource),
+    createInvoiceCsvReviewTool(fileContentSource, spreadsheetWorkbookReader),
   ];
 }
 

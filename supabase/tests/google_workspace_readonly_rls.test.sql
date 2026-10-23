@@ -122,14 +122,14 @@ select throws_ok(
        'test-only secret'
      ) $$,
   '42501',
-  'Privileged server access is required.',
+  'permission denied for function store_google_workspace_secret',
   'authenticated users cannot write secrets to Vault through the RPC'
 );
 
 select throws_ok(
   $$ select public.read_google_workspace_secret('c4000000-0000-4000-8000-000000000001') $$,
   '42501',
-  'Privileged server access is required.',
+  'permission denied for function read_google_workspace_secret',
   'authenticated users cannot read Google OAuth secrets from Vault'
 );
 
@@ -162,7 +162,7 @@ select throws_ok(
 select throws_ok(
   $$ select public.delete_google_workspace_secret('c4000000-0000-4000-8000-000000000001') $$,
   '42501',
-  'Privileged server access is required.',
+  'permission denied for function delete_google_workspace_secret',
   'non-members cannot delete provider secrets through the RPC'
 );
 

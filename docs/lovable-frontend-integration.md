@@ -38,25 +38,40 @@ The Lovable project is available in `FlowWork-com/flowowork`. It is a TanStack S
 
 Attachments establish the foundation for analysis, but no file is parsed merely by being uploaded.
 
-## Phase 4 — invoice CSV/TSV and Excel workbook review
+## Phase 4 — CSV/TSV and Excel invoice review
 
-**Merged:** PR #24 added the deterministic, read-only CSV/TSV invoice review. The current branch extends the same tool to XLS/XLSX workbooks.
+**Merged:** [PR #24 — CSV/TSV review](https://github.com/FlowWork-com/Main-Repo/pull/24) and [PR #25 — XLS/XLSX review](https://github.com/FlowWork-com/Main-Repo/pull/25).
 
-- Reads only a registered file ID from the current task; server-side storage access re-checks workspace membership and resolves the object path from persisted metadata.
-- Supports CSV, TSV, XLS, and XLSX up to the existing 10 MiB attachment limit; workbook reads are further bounded by worksheet, row, column, and cell limits.
-- Summarizes totals by currency without conversion; missing, invalid, or ambiguous amounts are not counted as zero.
-- Flags duplicates and incomplete rows, retaining duplicate values in totals but making this explicit for human review.
-- Adds attachment IDs to planner context as untrusted data. Signed-plan persistence independently validates that the selected file belongs to the same task and has a supported extension/content-type pair.
-- Excel review includes only the first non-empty worksheet and reports that limitation. Formula cells are blanked before analysis: the parser does not calculate formulas or trust cached formula results.
-- Does not edit the source, generate spreadsheet output, send messages, or perform external writes.
+- Reads only a file ID from the current task; the server re-checks workspace membership and resolves the object path from persisted metadata.
+- Supports CSV, TSV, XLS, and XLSX; summarizes numeric totals by currency without conversion.
+- Missing, invalid, and ambiguous amounts are not counted as zero. Duplicate invoices and incomplete rows are flagged for review.
+- Workbook formulas are excluded and never calculated. Only the first non-empty worksheet is included.
+- The source document is not edited; no email, external write, or automatic workflow execution is triggered by the review.
 
-The workbook parser is loaded only in the server-side Edge Function and is pinned to SheetJS 0.20.3 from its official CDN rather than the stale npm registry package. The workbook reader has focused Deno tests for formula exclusion, worksheet selection, malformed files, and workbook limits.
+## Phase 5 — PDF/image invoice extraction
 
-PDF/image invoice extraction remains separate: it requires a server-side extraction provider, strict response schema, confidence/correction tracking, and human review for uncertain fields.
+**In progress:** the `feat/invoice-document-extraction` branch implements approval-gated extraction for PDF, JPG/JPEG, and PNG attachments.
+
+- Supports private PDF, JPG/JPEG, and PNG attachments after server-side MIME, extension, file-signature, size, workspace, and task checks.
+- Sends the original document to a separately configured server-side OpenAI-compatible vision endpoint only when the high-risk tool's approval gate has been satisfied.
+- Returns invoice number, date, vendor, description, currency, subtotal, tax, and grand total with per-field model-estimated confidence.
+- Adds deterministic validation warnings for missing/low-confidence fields, invalid dates/currency codes, and subtotal-plus-tax mismatches.
+- Every result requires human review. Confidence values are model self-estimates, not calibrated probabilities. This phase does not save an invoice record, modify the source, or send content anywhere except the explicitly configured provider.
+
+### Provider configuration
+
+Set the following as **server-side Supabase Edge Function secrets**, not browser `VITE_*` variables and never in Git:
+
+- `FLOWWORK_INVOICE_PROVIDER=openai-compatible`
+- `FLOWWORK_INVOICE_BASE_URL=https://api.openai.com/v1` (or the trusted base URL of an OpenAI-compatible service that supports image and file content parts)
+- `FLOWWORK_INVOICE_MODEL=<vision-capable-model>`
+- `FLOWWORK_INVOICE_API_KEY=<server-side-api-key>`
+
+When these secrets are absent or incomplete, invoice document extraction fails closed as unavailable. Do not configure an endpoint that is not authorized to receive the invoice data users submit.
 
 ## Remaining phases
 
-1. Add PDF/image invoice extraction and field-level validation, confidence calibration, and correction tracking.
+1. Add correction persistence and evaluation fixtures before treating model confidence as an operational reliability metric.
 2. Add private saved prompt templates using workspace-scoped persistence and existing auth controls.
 3. Port Google integrations behind server-side credential handling and explicit workspace/user authorization. Start with read-only access; keep email sending approval-gated.
 4. Add richer recovery and execution orchestration only after each integration has a clear data model, tests, authorization rules, and observability.

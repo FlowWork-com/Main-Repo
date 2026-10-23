@@ -292,7 +292,7 @@ function readableExecutionError(code: string): string {
     case 'INVALID_TOOL_INPUT':
       return 'The input does not match this tool’s requirements.';
     case 'EXECUTION_TIMEOUT':
-      return 'The tool did not finish before the execution limit.';
+      return 'Execution timed out or was recovered after interruption. Check task history before deciding whether a new attempt is safe.';
     case 'EXECUTOR_UNAVAILABLE':
       return 'The execution service is temporarily unavailable.';
     case 'TOOL_NOT_FOUND':

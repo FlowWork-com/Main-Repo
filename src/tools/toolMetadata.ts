@@ -44,6 +44,13 @@ export const MVP_PLANNER_TOOL_UI_METADATA: readonly ToolUiMetadata[] = [
     version: '1.0.0',
     exampleInput: { fileId: '55000000-0000-4000-8000-000000000001' },
   },
+  {
+    id: 'invoice-document-extract',
+    name: 'PDF/image invoice extraction',
+    description: 'Extract invoice fields from an attached PDF or image using the configured external vision provider. Returns field-level model-estimated confidence and validation warnings. Always requires human review and approval before document transfer.',
+    version: '1.0.0',
+    exampleInput: { fileId: '55000000-0000-4000-8000-000000000001' },
+  },
 ];
 
 /** Tools available to both the planner and the manual execution UI. */

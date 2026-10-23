@@ -178,7 +178,7 @@ begin
   end if;
 
   v_submission_fingerprint := encode(extensions.digest(p_reviewed_values::text, 'sha256'), 'hex');
-  select count(*), min(f.submission_fingerprint), min(f.submission_id)
+  select count(*), min(f.submission_fingerprint), min(f.submission_id::text)::uuid
     into v_existing_count, v_existing_fingerprint, v_existing_submission_id
   from public.invoice_extraction_feedback f
   where f.workspace_id = v_workspace_id

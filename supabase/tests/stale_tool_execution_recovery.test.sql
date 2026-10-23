@@ -75,7 +75,7 @@ insert into public.task_tool_executions (
     'echo', '1.0.0',
     'c4000000-0000-4000-8000-000000000004', 'recovery-already-failed',
     'c1000000-0000-4000-8000-000000000001',
-    'failed', '{"value":"finished earlier"}'::jsonb, null,
+    'failed', null, null,
     '{"code":"EXECUTION_FAILED","message":"Earlier failure","retryable":false}'::jsonb,
     null,
     now() - interval '3 hours', now() - interval '3 hours' + interval '1 second',

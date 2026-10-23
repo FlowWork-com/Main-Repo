@@ -60,7 +60,10 @@ export function createOpenAICompatibleInvoiceExtractor(
       }
       : {
         type: 'image_url',
-        image_url: { url: dataUrl, detail: 'high' },
+        image_url: {
+          url: `data:${file.contentType};base64,${base64Data}`,
+          detail: 'high',
+        },
       };
     const controller = new AbortController();
     const onExternalAbort = () => controller.abort();

@@ -8,7 +8,8 @@ import {
   executeTool,
   type ExecuteToolRequest,
 } from '../../backend/toolExecutionClient';
-import { isPersistableJson } from '../../tools/contracts';
+import { isPersistableJson, type JsonValue } from '../../tools/contracts';
+import { InvoiceExtractionFeedbackForm } from './InvoiceExtractionFeedbackForm';
 import { MVP_TOOL_UI_METADATA } from '../../tools/toolMetadata';
 import type { PersistedTask } from '../../backend/workflowRepository';
 
@@ -229,7 +230,9 @@ export function TaskToolExecutionPanel({
           <p>No tool executions have been saved for this task.</p>
         ) : (
           <ol className="tool-execution-history__list">
-            {history.map((entry) => (
+            {history.map((entry) => {
+              const reviewFileId = invoiceReviewFileId(entry);
+              return (
               <li key={entry.executionId}>
                 <div className="tool-execution-history__item-heading">
                   <strong>{toolName(entry.toolId)} <span>v{entry.toolVersion}</span></strong>
@@ -246,6 +249,16 @@ export function TaskToolExecutionPanel({
                 {entry.status === 'succeeded' && (
                   <pre>{JSON.stringify(entry.output, null, 2)}</pre>
                 )}
+                {reviewFileId && entry.output && (
+                  <InvoiceExtractionFeedbackForm
+                    client={client}
+                    workspaceId={task.workspaceId}
+                    taskId={task.id}
+                    executionId={entry.executionId}
+                    fileId={reviewFileId}
+                    output={entry.output}
+                  />
+                )}
                 {entry.status === 'failed' && entry.error && (
                   <p className="tool-execution-history__error">
                     {readableExecutionError(entry.error.code)}
@@ -257,12 +270,42 @@ export function TaskToolExecutionPanel({
                   </p>
                 )}
               </li>
-            ))}
+              );
+            })}
           </ol>
         )}
       </section>
     </>
   );
+}
+
+function invoiceReviewFileId(entry: ToolExecutionHistoryEntry): string | null {
+  if (entry.toolId !== 'invoice-document-extract' || entry.status !== 'succeeded' || !entry.output) {
+    return null;
+  }
+  if (!isRecord(entry.input) || typeof entry.input.fileId !== 'string') return null;
+  if (!isRecord(entry.output) || entry.output.fileId !== entry.input.fileId || !isRecord(entry.output.fields)) {
+    return null;
+  }
+  const fields = entry.output.fields;
+  const required = [
+    'invoiceNumber', 'invoiceDate', 'vendor', 'description',
+    'currency', 'subtotal', 'taxAmount', 'totalAmount',
+  ];
+  const valid = required.every((key) => {
+    const field = fields[key];
+    return isRecord(field) &&
+      (typeof field.value === 'string' || typeof field.value === 'number' || field.value === null) &&
+      typeof field.confidenceEstimate === 'number' &&
+      Number.isFinite(field.confidenceEstimate) &&
+      field.confidenceEstimate >= 0 &&
+      field.confidenceEstimate <= 1;
+  });
+  return valid ? entry.input.fileId : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function toolName(toolId: string): string {

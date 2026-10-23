@@ -45,7 +45,7 @@ jobs:
       - name: Check and test the Edge Function
         run: |
           deno check --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/execute-tool/index.ts
-          deno test --allow-import=cdn.sheetjs.com:443 --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/execute-tool/handler_test.ts supabase/functions/execute-tool/xlsxReader_test.ts
+          deno test --allow-import=cdn.sheetjs.com:443 --allow-net=cdn.sheetjs.com:443 --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/execute-tool/handler_test.ts supabase/functions/execute-tool/xlsxReader_test.ts
           deno check --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/plan-workflow/index.ts
           deno test --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/plan-workflow/handler_test.ts
 

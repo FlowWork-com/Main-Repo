@@ -3,6 +3,9 @@ export const MAX_TASK_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
 const MIME_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
   pdf: 'application/pdf',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
   txt: 'text/plain',
   csv: 'text/csv',
   tsv: 'text/tab-separated-values',
@@ -10,7 +13,7 @@ const MIME_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 };
 
-export const TASK_ATTACHMENT_ACCEPT = '.pdf,.txt,.csv,.tsv,.xls,.xlsx';
+export const TASK_ATTACHMENT_ACCEPT = '.pdf,.jpg,.jpeg,.png,.txt,.csv,.tsv,.xls,.xlsx';
 
 export function taskAttachmentMimeType(fileName: string): string | null {
   const extension = fileExtension(fileName);
@@ -22,7 +25,7 @@ export function taskAttachmentValidationError(
   sizeBytes: number,
 ): string | null {
   if (!taskAttachmentMimeType(fileName)) {
-    return 'Choose a PDF, TXT, CSV, TSV, XLS, or XLSX file.';
+    return 'Choose a PDF, JPG, JPEG, PNG, TXT, CSV, TSV, XLS, or XLSX file.';
   }
   if (!Number.isFinite(sizeBytes) || sizeBytes < 0) {
     return 'The selected file has an invalid size.';

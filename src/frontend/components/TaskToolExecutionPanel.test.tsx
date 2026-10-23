@@ -261,6 +261,26 @@ describe('TaskToolExecutionPanel', () => {
     expect(screen.getByRole('button', { name: 'Retry same request' })).toBeInTheDocument();
   });
 
+  it('guides users to inspect history after a timeout or recovered stale run', async () => {
+    const { client } = createClient();
+    vi.mocked(executeTool).mockResolvedValueOnce({
+      result: {
+        success: false,
+        error: {
+          code: 'EXECUTION_TIMEOUT',
+          message: 'internal recovery details',
+          retryable: true,
+        },
+      },
+      workflowStatus: 'Running',
+    });
+    render(<PanelHarness client={client} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Run Echo' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Check task history before deciding whether a new attempt is safe/);
+    expect(screen.getByRole('alert')).not.toHaveTextContent('internal recovery details');
+  });
+
   it('displays tool failures using safe messages instead of raw server text', async () => {
     const { client } = createClient();
     vi.mocked(executeTool).mockResolvedValueOnce({

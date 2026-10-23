@@ -24,13 +24,6 @@ export const MVP_PLANNER_TOOL_UI_METADATA: readonly ToolUiMetadata[] = [
     exampleInput: { fileId: '55000000-0000-4000-8000-000000000001' },
   },
   {
-    id: 'invoice-csv-review',
-    name: 'Invoice and spreadsheet review',
-    description: 'Review an attached CSV, TSV, XLS, or XLSX invoice table. Summarizes totals by currency and flags rows for human review. Does not edit or send data.',
-    version: '1.0.0',
-    exampleInput: { fileId: '55000000-0000-4000-8000-000000000001' },
-  },
-  {
     id: 'json-inspect',
     name: 'JSON inspect',
     description: 'Parse JSON text and report its top-level structure.',
@@ -43,6 +36,13 @@ export const MVP_PLANNER_TOOL_UI_METADATA: readonly ToolUiMetadata[] = [
     description: 'Apply a deterministic operation to a text value.',
     version: '1.0.0',
     exampleInput: { operation: 'uppercase', text: 'hello, FlowWork' },
+  },
+  {
+    id: 'invoice-csv-review',
+    name: 'Invoice and spreadsheet review',
+    description: 'Review an attached CSV, TSV, XLS, or XLSX invoice table. Summarizes totals by currency and flags rows for human review. Does not edit or send data.',
+    version: '1.0.0',
+    exampleInput: { fileId: '55000000-0000-4000-8000-000000000001' },
   },
 ];
 

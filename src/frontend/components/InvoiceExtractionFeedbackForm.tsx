@@ -49,15 +49,23 @@ export function InvoiceExtractionFeedbackForm({
     event.preventDefault();
     if (busy || saved) return;
 
+    const subtotal = normalizeAmount(values.subtotal);
+    const taxAmount = normalizeAmount(values.taxAmount);
+    const totalAmount = normalizeAmount(values.totalAmount);
+    if (subtotal === INVALID_AMOUNT || taxAmount === INVALID_AMOUNT || totalAmount === INVALID_AMOUNT) {
+      setError('Enter valid finite amounts within the supported range, or leave them blank.');
+      return;
+    }
+
     const reviewedValues: Record<FieldName, string | number | null> = {
       invoiceNumber: normalizeText(values.invoiceNumber),
       invoiceDate: normalizeText(values.invoiceDate),
       vendor: normalizeText(values.vendor),
       description: normalizeText(values.description),
       currency: normalizeText(values.currency)?.toUpperCase() ?? null,
-      subtotal: normalizeAmount(values.subtotal),
-      taxAmount: normalizeAmount(values.taxAmount),
-      totalAmount: normalizeAmount(values.totalAmount),
+      subtotal,
+      taxAmount,
+      totalAmount,
     };
 
     if (reviewedValues.invoiceDate !== null && !isValidDate(reviewedValues.invoiceDate)) {
@@ -66,14 +74,6 @@ export function InvoiceExtractionFeedbackForm({
     }
     if (reviewedValues.currency !== null && !/^[A-Z]{3}$/.test(reviewedValues.currency)) {
       setError('Enter a three-letter currency code (for example, INR) or leave it blank.');
-      return;
-    }
-    if (
-      reviewedValues.subtotal === INVALID_AMOUNT ||
-      reviewedValues.taxAmount === INVALID_AMOUNT ||
-      reviewedValues.totalAmount === INVALID_AMOUNT
-    ) {
-      setError('Enter valid finite amounts within the supported range, or leave them blank.');
       return;
     }
 

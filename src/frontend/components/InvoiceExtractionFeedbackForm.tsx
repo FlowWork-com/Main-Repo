@@ -49,14 +49,15 @@ export function InvoiceExtractionFeedbackForm({
 
   useEffect(() => {
     let active = true;
-    void client
-      .from('invoice_extraction_feedback')
-      .select('field_name')
-      .eq('workspace_id', workspaceId)
-      .eq('task_id', taskId)
-      .eq('execution_id', executionId)
-      .limit(1)
-      .then(({ data, error: queryError }) => {
+    void (async () => {
+      try {
+        const { data, error: queryError } = await client
+          .from('invoice_extraction_feedback')
+          .select('field_name')
+          .eq('workspace_id', workspaceId)
+          .eq('task_id', taskId)
+          .eq('execution_id', executionId)
+          .limit(1);
         if (!active) return;
         if (queryError) {
           setError('Could not check whether this extraction was already reviewed. The server will still prevent duplicate reviews.');
@@ -64,13 +65,12 @@ export function InvoiceExtractionFeedbackForm({
           setSaved(true);
           setAlreadyReviewed(true);
         }
-      })
-      .catch(() => {
+      } catch {
         if (active) setError('Could not check prior review status. The server will still prevent duplicate reviews.');
-      })
-      .finally(() => {
+      } finally {
         if (active) setCheckingExisting(false);
-      });
+      }
+    })();
     return () => {
       active = false;
     };

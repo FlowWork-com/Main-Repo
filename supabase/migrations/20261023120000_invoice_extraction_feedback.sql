@@ -155,7 +155,7 @@ begin
     and e.execution_id = p_execution_id
     and e.tool_id = 'invoice-document-extract'
     and e.status = 'succeeded'
-  for share;
+  for update;
   if not found
     or v_execution.input->>'fileId' is distinct from p_file_id::text
     or v_execution.output->>'fileId' is distinct from p_file_id::text
@@ -229,9 +229,15 @@ begin
       if jsonb_typeof(v_field_json) = 'string' and char_length(v_field_json #>> '{}') > 500 then
         raise exception 'A reviewed invoice text field is too long.' using errcode = '22023';
       end if;
-      if v_field = 'invoiceDate' and jsonb_typeof(v_field_json) = 'string'
-        and (v_field_json #>> '{}') !~ '^\d{4}-\d{2}-\d{2}$' then
-        raise exception 'Invoice date must use YYYY-MM-DD or be marked missing.' using errcode = '22023';
+      if v_field = 'invoiceDate' and jsonb_typeof(v_field_json) = 'string' then
+        if (v_field_json #>> '{}') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then
+          raise exception 'Invoice date must use YYYY-MM-DD or be marked missing.' using errcode = '22023';
+        end if;
+        begin
+          perform (v_field_json #>> '{}')::date;
+        exception when others then
+          raise exception 'Invoice date must be a valid calendar date or be marked missing.' using errcode = '22023';
+        end;
       end if;
       if v_field = 'currency' and jsonb_typeof(v_field_json) = 'string'
         and (v_field_json #>> '{}') !~ '^[A-Za-z]{3}$' then

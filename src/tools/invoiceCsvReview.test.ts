@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ToolExecutionContext } from './contracts';
-import { createInvoiceCsvReviewTool, reviewInvoiceCsv } from './invoiceCsvReview';
+import { createInvoiceCsvReviewTool, reviewInvoiceCsv, reviewInvoiceWorkbook } from './invoiceCsvReview';
 
 const context: ToolExecutionContext = {
   userId: '81000000-0000-4000-8000-000000000001',
@@ -96,7 +96,7 @@ describe('reviewInvoiceCsv', () => {
           id: fileId,
           fileName: 'invoices.csv',
           contentType: 'text/csv',
-          text: 'Invoice Number,Vendor,Amount,Currency\nINV-1,Acme,10.00,USD',
+          bytes: new TextEncoder().encode('Invoice Number,Vendor,Amount,Currency\nINV-1,Acme,10.00,USD'),
         };
       }),
     };
@@ -109,6 +109,80 @@ describe('reviewInvoiceCsv', () => {
     expect(source.getTaskFileContent).toHaveBeenCalledOnce();
     expect(tool.validateInput({ storagePath: 'other-workspace/invoice.csv' })).toBe(false);
     expect(tool.validateInput({ fileId: '85000000-0000-4000-8000-000000000001', path: 'unsafe' })).toBe(false);
+  });
+
+  it('reviews workbook rows, separates currencies, and reports formula exclusions', () => {
+    const report = reviewInvoiceWorkbook('invoices.xlsx', {
+      rows: [
+        ['Invoice Number', 'Vendor', 'Grand Total', 'Currency'],
+        ['INV-1', 'Acme', '1180.00', 'INR'],
+        ['INV-2', 'Beta', '', 'USD'],
+      ],
+      worksheetName: 'Invoices',
+      worksheetCount: 2,
+      formulaCellsExcluded: 1,
+    });
+
+    expect(report).toMatchObject({
+      fileName: 'invoices.xlsx',
+      sourceFormat: 'xlsx',
+      delimiter: 'spreadsheet',
+      worksheetName: 'Invoices',
+      worksheetCount: 2,
+      formulaCellsExcluded: 1,
+      rowsRead: 2,
+      rowsWithUsableAmounts: 1,
+      rowsIncludedInCurrencyTotals: 1,
+      totalsByCurrency: [{ currency: 'INR', amount: 1180, rows: 1 }],
+      flaggedRowCount: 1,
+      headerWarnings: ['1 formula cells were excluded from the selected worksheet.'],
+    });
+    expect(report.interpretationNotes.join(' ')).toContain('formulas are not calculated');
+    expect(report.interpretationNotes.join(' ')).toContain('Only the first non-empty worksheet');
+  });
+
+  it('rejects invalid workbook metadata and excessive columns or rows', () => {
+    expect(() => reviewInvoiceWorkbook('file.pdf', {
+      rows: [['Invoice Number', 'Grand Total'], ['INV-1', '10']],
+      worksheetName: 'Invoices',
+      worksheetCount: 1,
+      formulaCellsExcluded: 0,
+    })).toThrow(/XLS and XLSX/);
+    expect(() => reviewInvoiceWorkbook('file.xlsx', {
+      rows: Array.from({ length: 2502 }, () => ['INV-1', 'Acme', '10', 'USD']),
+      worksheetName: 'Invoices',
+      worksheetCount: 1,
+      formulaCellsExcluded: 0,
+    })).toThrow(/2,500/);
+  });
+
+  it('reads XLSX bytes through the injected workbook reader', async () => {
+    const bytes = new Uint8Array([1, 2, 3, 4]);
+    const source = {
+      getTaskFileContent: vi.fn(async (_receivedContext: ToolExecutionContext, fileId: string) => ({
+        id: fileId,
+        fileName: 'invoices.xlsx',
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        bytes,
+      })),
+    };
+    const workbookReader = vi.fn((_bytes: Uint8Array, fileName: string) => ({
+      rows: [
+        ['Invoice Number', 'Vendor', 'Grand Total', 'Currency'],
+        ['INV-1', 'Acme', '10.00', 'USD'],
+      ],
+      worksheetName: 'Invoices',
+      worksheetCount: 1,
+      formulaCellsExcluded: 0,
+    }));
+    const tool = createInvoiceCsvReviewTool(source, workbookReader);
+    const result = await tool.execute(context, { fileId: '85000000-0000-4000-8000-000000000001' });
+
+    expect(result).toMatchObject({
+      success: true,
+      output: { sourceFormat: 'xlsx', worksheetName: 'Invoices', rowsRead: 1 },
+    });
+    expect(workbookReader).toHaveBeenCalledWith(bytes, 'invoices.xlsx');
   });
 
   it('does not claim to execute when content access is unavailable', async () => {

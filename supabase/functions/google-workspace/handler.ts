@@ -29,7 +29,9 @@ export interface GoogleOAuthState {
   readonly user_id: string;
   readonly pkce_verifier_secret_id: string;
   readonly redirect_uri: string;
+  readonly created_at: string;
   readonly expires_at: string;
+  readonly consumed_at: string | null;
 }
 
 export interface GoogleWorkspaceConnection {

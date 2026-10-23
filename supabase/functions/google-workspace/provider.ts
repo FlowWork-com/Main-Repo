@@ -158,7 +158,7 @@ export async function listGoogleDriveFiles(
   if (!accessToken.trim() || accessToken.length > 8192 ||
     !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100 ||
     (pageToken !== undefined && pageToken !== null &&
-      (pageToken.length > 2048 || /[\u0000-\u001f\u007f]/.test(pageToken)))) {
+      (pageToken.length > 2048 || hasControlCharacter(pageToken)))) {
     throw new GoogleProviderError('GOOGLE_DRIVE_REQUEST_INVALID');
   }
   const url = new URL('https://www.googleapis.com/drive/v3/files');
@@ -278,6 +278,13 @@ function isValidOAuthConfiguration(config: GoogleOAuthConfiguration): boolean {
   } catch {
     return false;
   }
+}
+
+function hasControlCharacter(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const code = character.charCodeAt(0);
+    return code <= 31 || code === 127;
+  });
 }
 
 function isSafeGoogleFileUrl(value: string): boolean {

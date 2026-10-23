@@ -1,6 +1,6 @@
 begin;
 
-select plan(10);
+select plan(11);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -124,14 +124,27 @@ select throws_ok(
   'the database rejects a string supplied for a numeric amount field'
 );
 
+select throws_ok(
+  $invalid_calendar_date$ select public.record_invoice_extraction_feedback(
+       'a3000000-0000-4000-8000-000000000001',
+       'a6000000-0000-4000-8000-000000000001',
+       'a4000000-0000-4000-8000-000000000001',
+       'a7000000-0000-4000-8000-000000000004',
+       jsonb_set((select value from invoice_feedback_payload), '{invoiceDate}', '"2026-02-31"'::jsonb)
+     ) $invalid_calendar_date$,
+  '22023',
+  'Invoice date must be a valid calendar date or be marked missing.',
+  'the server rejects a well-shaped but impossible calendar date'
+);
+
 select lives_ok(
-  $$ select public.record_invoice_extraction_feedback(
+  $ select public.record_invoice_extraction_feedback(
        'a3000000-0000-4000-8000-000000000001',
        'a6000000-0000-4000-8000-000000000001',
        'a4000000-0000-4000-8000-000000000001',
        'a7000000-0000-4000-8000-000000000001',
        (select value from invoice_feedback_payload)
-     ) $$,
+     ) $,
   'workspace member can save human review for the matching extraction run'
 );
 

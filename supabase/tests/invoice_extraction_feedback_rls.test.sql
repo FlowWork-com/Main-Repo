@@ -1,6 +1,6 @@
 begin;
 
-select plan(8);
+select plan(10);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -157,6 +157,32 @@ select throws_ok(
   '23505',
   'Invoice feedback submission ID was reused with different values.',
   'the database rejects reusing a submission ID for different field values'
+);
+
+select throws_ok(
+  $ select public.record_invoice_extraction_feedback(
+       'a3000000-0000-4000-8000-000000000001',
+       'a6000000-0000-4000-8000-000000000001',
+       'a4000000-0000-4000-8000-000000000001',
+       'a7000000-0000-4000-8000-000000000002',
+       (select value from invoice_feedback_payload)
+     ) $,
+  '23505',
+  'This invoice extraction has already been reviewed.',
+  'the same extraction cannot create a second review batch with a new submission ID'
+);
+
+select throws_ok(
+  $ select public.record_invoice_extraction_feedback(
+       'a3000000-0000-4000-8000-000000000001',
+       'a6000000-0000-4000-8000-000000000001',
+       'a4000000-0000-4000-8000-000000000001',
+       'a7000000-0000-4000-8000-000000000003',
+       jsonb_set((select value from invoice_feedback_payload), '{subtotal}', '"1000"'::jsonb)
+     ) $,
+  '22023',
+  'A reviewed invoice amount field has the wrong type.',
+  'the database rejects a string supplied for a numeric amount field'
 );
 
 select is(

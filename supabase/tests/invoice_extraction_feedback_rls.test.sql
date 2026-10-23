@@ -110,6 +110,19 @@ insert into invoice_feedback_payload values (jsonb_build_object(
 select set_config('request.jwt.claim.sub', 'a1000000-0000-4000-8000-000000000001', true);
 set local role authenticated;
 
+select throws_ok(
+  $bad_amount$ select public.record_invoice_extraction_feedback(
+       'a3000000-0000-4000-8000-000000000001',
+       'a6000000-0000-4000-8000-000000000001',
+       'a4000000-0000-4000-8000-000000000001',
+       'a7000000-0000-4000-8000-000000000003',
+       jsonb_set((select value from invoice_feedback_payload), '{subtotal}', '"1000"'::jsonb)
+     ) $bad_amount$,
+  '22023',
+  'A reviewed invoice amount field has the wrong type.',
+  'the database rejects a string supplied for a numeric amount field'
+);
+
 select lives_ok(
   $$ select public.record_invoice_extraction_feedback(
        'a3000000-0000-4000-8000-000000000001',
@@ -160,30 +173,21 @@ select throws_ok(
 );
 
 select throws_ok(
-  $ select public.record_invoice_extraction_feedback(
+  $duplicate_submission$ select public.record_invoice_extraction_feedback(
        'a3000000-0000-4000-8000-000000000001',
        'a6000000-0000-4000-8000-000000000001',
        'a4000000-0000-4000-8000-000000000001',
        'a7000000-0000-4000-8000-000000000002',
        (select value from invoice_feedback_payload)
-     ) $,
+     ) $duplicate_submission$,
   '23505',
   'This invoice extraction has already been reviewed.',
   'the same extraction cannot create a second review batch with a new submission ID'
 );
 
-select throws_ok(
-  $ select public.record_invoice_extraction_feedback(
-       'a3000000-0000-4000-8000-000000000001',
-       'a6000000-0000-4000-8000-000000000001',
-       'a4000000-0000-4000-8000-000000000001',
-       'a7000000-0000-4000-8000-000000000003',
-       jsonb_set((select value from invoice_feedback_payload), '{subtotal}', '"1000"'::jsonb)
-     ) $,
-  '22023',
-  'A reviewed invoice amount field has the wrong type.',
-  'the database rejects a string supplied for a numeric amount field'
-);
+
+
+
 
 select is(
   (select observed_correction_rate from public.invoice_extraction_feedback_summary

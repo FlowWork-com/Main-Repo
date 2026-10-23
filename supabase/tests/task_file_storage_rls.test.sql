@@ -181,26 +181,26 @@ select is(
 );
 
 select throws_ok(
-  $ insert into storage.objects (bucket_id, name, owner_id, metadata)
+  $$ insert into storage.objects (bucket_id, name, owner_id, metadata)
      values (
        'workflow-files',
        '82000000-0000-4000-8000-000000000001/83000000-0000-4000-8000-000000000001/84000000-0000-4000-8000-000000000005/payload.exe',
        '81000000-0000-4000-8000-000000000001',
        '{"mimetype":"text/plain","size":4}'::jsonb
-     ) $,
+     ) $$,
   '42501',
   'new row violates row-level security policy for table "objects"',
   'Storage RLS rejects unsupported extensions even when MIME is spoofed'
 );
 
 select lives_ok(
-  $ insert into storage.objects (bucket_id, name, owner_id, metadata)
+  $$ insert into storage.objects (bucket_id, name, owner_id, metadata)
      values (
        'workflow-files',
        '82000000-0000-4000-8000-000000000001/83000000-0000-4000-8000-000000000001/84000000-0000-4000-8000-000000000006/scan.png',
        '81000000-0000-4000-8000-000000000001',
        '{"mimetype":"image/png","size":8}'::jsonb
-     ) $,
+     ) $$,
   'Storage allows a workspace member to upload a supported PNG invoice image'
 );
 

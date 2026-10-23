@@ -106,6 +106,7 @@ insert into invoice_feedback_payload values (jsonb_build_object(
   'taxAmount', 180,
   'totalAmount', 1180
 ));
+grant select on invoice_feedback_payload to authenticated;
 
 select set_config('request.jwt.claim.sub', 'a1000000-0000-4000-8000-000000000001', true);
 set local role authenticated;

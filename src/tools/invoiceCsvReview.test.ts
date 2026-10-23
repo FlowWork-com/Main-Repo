@@ -166,12 +166,14 @@ describe('reviewInvoiceCsv', () => {
         bytes,
       })),
     };
-    const workbookReader = vi.fn((_bytes: Uint8Array, _fileName: string) => ({
-      rows: [
-        ['Invoice Number', 'Vendor', 'Grand Total', 'Currency'],
-        ['INV-1', 'Acme', '10.00', 'USD'],
-      ],
-      worksheetName: 'Invoices',
+    const workbookReader = vi.fn((bytes: Uint8Array, fileName: string) => ({
+      rows: bytes.byteLength > 0 && fileName.toLowerCase().endsWith('.xlsx')
+        ? [
+          ['Invoice Number', 'Vendor', 'Grand Total', 'Currency'],
+          ['INV-1', 'Acme', '10.00', 'USD'],
+        ]
+        : [],
+      worksheetName: fileName.toLowerCase().endsWith('.xlsx') ? 'Invoices' : 'Unknown',
       worksheetCount: 1,
       formulaCellsExcluded: 0,
     }));

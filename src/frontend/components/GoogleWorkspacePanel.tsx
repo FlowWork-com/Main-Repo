@@ -1,0 +1,268 @@
+import { useCallback, useEffect, useState } from 'react';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+interface GoogleDriveFile {
+  readonly id: string;
+  readonly name: string;
+  readonly mimeType: string;
+  readonly modifiedTime: string | null;
+  readonly webViewLink: string | null;
+}
+
+interface GoogleConnectionStatus {
+  readonly connected: boolean;
+  readonly email: string | null;
+  readonly connectedAt: string | null;
+  readonly scopes: readonly string[];
+}
+
+interface GoogleWorkspacePanelProps {
+  readonly client: SupabaseClient;
+  readonly workspaceId: string;
+  readonly canAccessWorkspace: boolean;
+}
+
+export function GoogleWorkspacePanel({
+  client,
+  workspaceId,
+  canAccessWorkspace,
+}: GoogleWorkspacePanelProps) {
+  const [connection, setConnection] = useState<GoogleConnectionStatus>({
+    connected: false,
+    email: null,
+    connectedAt: null,
+    scopes: [],
+  });
+  const [files, setFiles] = useState<GoogleDriveFile[]>([]);
+  const [nextPageToken, setNextPageToken] = useState<string | null>(null);
+  const [statusLoading, setStatusLoading] = useState(true);
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState(() => {
+    const result = new URL(window.location.href).searchParams.get('google_connection');
+    if (!result) return '';
+    const messages: Record<string, string> = {
+      connected: 'Google Workspace is connected. You can list accessible Drive file metadata.',
+      denied: 'Google authorization was cancelled.',
+      expired: 'The Google authorization link expired or was already used. Start a new connection attempt.',
+      error: 'Google authorization could not be completed. Check configuration and try again.',
+    };
+    return messages[result] ?? 'Google authorization returned an unknown status.';
+  });
+
+  const refreshStatus = useCallback(async () => {
+    if (!canAccessWorkspace) return;
+    try {
+      const { data, error: invokeError } = await client.functions.invoke<unknown>('google-workspace', {
+        body: { action: 'status', workspaceId },
+      });
+      if (invokeError || !isRecord(data) || typeof data.connected !== 'boolean') {
+        throw new Error('Google status unavailable.');
+      }
+      setConnection({
+        connected: data.connected,
+        email: typeof data.email === 'string' ? data.email : null,
+        connectedAt: typeof data.connectedAt === 'string' ? data.connectedAt : null,
+        scopes: Array.isArray(data.scopes) && data.scopes.every((scope) => typeof scope === 'string')
+          ? data.scopes
+          : [],
+      });
+    } catch {
+      setError('Unable to check Google Workspace connection status. Check configuration and workspace access.');
+    } finally {
+      setStatusLoading(false);
+    }
+  }, [canAccessWorkspace, client, workspaceId]);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('google_connection')) {
+      url.searchParams.delete('google_connection');
+      window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+    }
+    void Promise.resolve().then(refreshStatus);
+  }, [refreshStatus]);
+
+  async function connect() {
+    if (!canAccessWorkspace || busy) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const { data, error: invokeError } = await client.functions.invoke<unknown>('google-workspace', {
+        body: { action: 'connect', workspaceId },
+      });
+      if (invokeError || !isRecord(data) || typeof data.authorizationUrl !== 'string') {
+        throw new Error('Google authorization is unavailable.');
+      }
+      const authorizationUrl = new URL(data.authorizationUrl);
+      if (authorizationUrl.protocol !== 'https:' || authorizationUrl.hostname !== 'accounts.google.com') {
+        throw new Error('Google authorization endpoint is invalid.');
+      }
+      window.location.assign(authorizationUrl.toString());
+    } catch {
+      setError('Unable to start Google authorization. Confirm the server-side OAuth client and redirect URI are configured.');
+      setBusy(false);
+    }
+  }
+
+  async function disconnect() {
+    if (!canAccessWorkspace || busy) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const { data, error: invokeError } = await client.functions.invoke<unknown>('google-workspace', {
+        body: { action: 'disconnect', workspaceId },
+      });
+      if (invokeError || !isRecord(data) || data.connected !== false) {
+        throw new Error('Google disconnect failed.');
+      }
+      setConnection({ connected: false, email: null, connectedAt: null, scopes: [] });
+      setFiles([]);
+      setNextPageToken(null);
+      setNotice(data.credentialCleanupPending === true
+        ? 'Google disconnected. Credential cleanup is pending on the server.'
+        : 'Google Workspace disconnected.');
+    } catch {
+      setError('Unable to disconnect Google Workspace. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadFiles(pageToken?: string | null) {
+    if (!canAccessWorkspace || !connection.connected || filesLoading) return;
+    setFilesLoading(true);
+    setError('');
+    try {
+      const body: Record<string, unknown> = { action: 'list_files', workspaceId, pageSize: 20 };
+      if (pageToken) body.pageToken = pageToken;
+      const { data, error: invokeError } = await client.functions.invoke<unknown>('google-workspace', { body });
+      if (invokeError || !isRecord(data) || data.connected !== true || !Array.isArray(data.files)) {
+        throw new Error('Drive list is unavailable.');
+      }
+      const parsed = data.files.flatMap((candidate): GoogleDriveFile[] => {
+        if (!isRecord(candidate) ||
+          typeof candidate.id !== 'string' || !candidate.id ||
+          typeof candidate.name !== 'string' ||
+          typeof candidate.mimeType !== 'string') return [];
+        return [{
+          id: candidate.id,
+          name: candidate.name,
+          mimeType: candidate.mimeType,
+          modifiedTime: typeof candidate.modifiedTime === 'string' ? candidate.modifiedTime : null,
+          webViewLink: typeof candidate.webViewLink === 'string' && isSafeGoogleFileUrl(candidate.webViewLink)
+            ? candidate.webViewLink
+            : null,
+        }];
+      });
+      setFiles((current) => pageToken ? [...current, ...parsed] : parsed);
+      setNextPageToken(typeof data.nextPageToken === 'string' ? data.nextPageToken : null);
+    } catch {
+      setError('Unable to list Google Drive file metadata. Reconnect if authorization has expired.');
+    } finally {
+      setFilesLoading(false);
+    }
+  }
+
+  return (
+    <section className="google-workspace panel" aria-labelledby="google-workspace-title">
+      <header className="google-workspace__heading">
+        <div>
+          <p className="eyebrow">Connected services</p>
+          <h3 id="google-workspace-title">Google Workspace</h3>
+        </div>
+        {connection.connected && <span className="status-pill">Connected</span>}
+      </header>
+      <p className="google-workspace__description">
+        Connect Google to list file metadata from Drive. This integration is read-only: it does not edit, create, download, or share files and does not access Gmail.
+      </p>
+
+      {canAccessWorkspace && statusLoading ? (
+        <p role="status">Checking Google connection…</p>
+      ) : canAccessWorkspace && connection.connected ? (
+        <div className="google-workspace__connection">
+          <p>
+            Connected as <strong>{connection.email ?? 'Google account'}</strong>
+            {connection.connectedAt && (
+              <span className="google-workspace__date">
+                {' · '}Connected {new Date(connection.connectedAt).toLocaleString()}
+              </span>
+            )}
+          </p>
+          {canAccessWorkspace && (
+            <div className="task-actions">
+              <button className="button button--secondary" disabled={busy || filesLoading} onClick={() => void loadFiles(null)} type="button">
+                {filesLoading ? 'Loading files…' : 'List Drive files'}
+              </button>
+              <button className="button button--quiet" disabled={busy} onClick={() => void disconnect()} type="button">
+                Disconnect
+              </button>
+            </div>
+          )}
+          {files.length > 0 && (
+            <ul className="google-workspace__files">
+              {files.map((file) => (
+                <li key={file.id} className="google-workspace__file">
+                  <div className="google-workspace__file-main">
+                    {file.webViewLink ? (
+                      <a href={file.webViewLink} rel="noopener noreferrer" target="_blank">{file.name || 'Untitled file'}</a>
+                    ) : (
+                      <strong>{file.name || 'Untitled file'}</strong>
+                    )}
+                    <span>{file.mimeType}</span>
+                    {file.modifiedTime && <small>Modified {new Date(file.modifiedTime).toLocaleString()}</small>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {files.length === 0 && !filesLoading && (
+            <p className="google-workspace__empty">No Drive files loaded yet. Listing returns metadata for files that Google makes available to this app.</p>
+          )}
+          {nextPageToken && (
+            <button className="button button--secondary" disabled={filesLoading} onClick={() => void loadFiles(nextPageToken)} type="button">
+              {filesLoading ? 'Loading…' : 'Load more files'}
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="google-workspace__connect">
+          <p className="google-workspace__empty">
+            {canAccessWorkspace
+              ? 'Connect a Google account to list metadata for files available to this app.'
+              : 'Workspace access is required to connect an account.'}
+          </p>
+          {canAccessWorkspace && (
+            <button className="button" disabled={busy} onClick={() => void connect()} type="button">
+              {busy ? 'Connecting…' : 'Connect Google account'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {notice && <p className="notice" role="status">{notice}</p>}
+      {error && <p className="error-message" role="alert">{error}</p>}
+      <p className="google-workspace__scope-note">
+        Google OAuth credentials and refresh tokens are server-only. File listing uses the limited Drive `drive.file` scope; no credentials are placed in the browser.
+      </p>
+    </section>
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function isSafeGoogleFileUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' &&
+      ['drive.google.com', 'docs.google.com', 'sheets.google.com', 'slides.google.com', 'forms.google.com'].includes(url.hostname) &&
+      !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}

@@ -25,6 +25,7 @@ import { TaskToolExecutionPanel } from './components/TaskToolExecutionPanel';
 import { TaskTimeline } from './components/TaskTimeline';
 import { TaskAttachmentsPanel } from './components/TaskAttachmentsPanel';
 import { PromptTemplatesPanel } from './components/PromptTemplatesPanel';
+import { GoogleWorkspacePanel } from './components/GoogleWorkspacePanel';
 
 export function App() {
   const [connection] = useState(initializeConnection);
@@ -448,6 +449,12 @@ function WorkspaceView({
       </p>
 
       {error && <p className="error-message" role="alert">{error}</p>}
+
+      <GoogleWorkspacePanel
+        client={client}
+        workspaceId={workspace.id}
+        canAccessWorkspace={canAccessWorkspace}
+      />
 
       <PromptTemplatesPanel
         client={client}

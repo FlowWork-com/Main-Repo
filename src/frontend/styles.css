@@ -1537,3 +1537,110 @@ select:focus {
     width: 100%;
   }
 }
+
+/* Read-only Google Workspace integration */
+.google-workspace {
+  display: grid;
+  gap: 12px;
+  border-color: #e3e9e2;
+  border-radius: 14px;
+}
+
+.google-workspace__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.google-workspace__heading h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.google-workspace__description,
+.google-workspace__empty,
+.google-workspace__scope-note {
+  margin: 0;
+  color: #65746b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.google-workspace__connection,
+.google-workspace__connect {
+  display: grid;
+  gap: 12px;
+}
+
+.google-workspace__connection > p {
+  margin: 0;
+  color: #35473b;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.google-workspace__date {
+  color: #7a887e;
+}
+
+.google-workspace__files {
+  display: grid;
+  gap: 0;
+  margin: 4px 0 0;
+  padding: 0;
+  border-top: 1px solid #e7ece6;
+  list-style: none;
+}
+
+.google-workspace__file {
+  min-width: 0;
+  padding: 11px 0;
+  border-bottom: 1px solid #e7ece6;
+}
+
+.google-workspace__file-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.google-workspace__file-main a,
+.google-workspace__file-main strong {
+  color: #176b58;
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.google-workspace__file-main a:hover {
+  text-decoration: underline;
+}
+
+.google-workspace__file-main span,
+.google-workspace__file-main small {
+  color: #78867c;
+  font-size: 10px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.google-workspace__scope-note {
+  padding-top: 9px;
+  border-top: 1px solid #e7ece6;
+  font-size: 11px;
+}
+
+@media (max-width: 560px) {
+  .google-workspace .task-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .google-workspace .task-actions .button,
+  .google-workspace > .button {
+    width: 100%;
+  }
+}

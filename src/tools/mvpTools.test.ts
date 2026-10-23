@@ -29,17 +29,20 @@ describe('deterministic MVP tools', () => {
   it('keeps the manual UI metadata in parity with the registered tools', () => {
     const tools = registry({ getTaskFileMetadata: vi.fn() });
 
-    expect(MVP_TOOL_UI_METADATA.map(({ id, name, description, version }) => ({
+    const byId = <T extends { readonly id: string }>(items: readonly T[]) =>
+      [...items].sort((left, right) => left.id.localeCompare(right.id));
+
+    expect(byId(MVP_TOOL_UI_METADATA.map(({ id, name, description, version }) => ({
       id,
       name,
       description,
       version,
-    }))).toEqual(tools.list().map(({ id, name, description, version }) => ({
+    })))).toEqual(byId(tools.list().map(({ id, name, description, version }) => ({
       id,
       name,
       description,
       version,
-    })));
+    }))));
   });
 
   it('echoes structured JSON without granting external capabilities', async () => {

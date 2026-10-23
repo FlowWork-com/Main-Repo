@@ -112,7 +112,7 @@ describe('InvoiceExtractionQualityPanel', () => {
     expect(screen.getByText('6', { selector: 'strong' })).toBeInTheDocument();
     expect(screen.getByText('2', { selector: 'strong' })).toBeInTheDocument();
     expect(screen.getByText('33.3%', { selector: 'strong' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Observed correction rate' })).toBeInTheDocument();
+    expect(screen.getAllByRole('columnheader', { name: 'Observed correction rate' })).toHaveLength(2);
     expect(screen.getByText('Invoice number')).toBeInTheDocument();
     expect(screen.getByText('0.70–0.79')).toBeInTheDocument();
     expect(screen.getByText(/not independently verified extraction accuracy/i)).toBeInTheDocument();
@@ -126,7 +126,10 @@ describe('InvoiceExtractionQualityPanel', () => {
     const { client } = createClient();
     render(<InvoiceExtractionQualityPanel client={client} workspaceId={workspaceId} />);
 
-    const bandTable = screen.getByRole('table', { name: '' }) as HTMLTableElement;
+    const bandHeading = screen.getByRole('heading', { name: 'Observed corrections by confidence band' });
+    const bandSection = bandHeading.closest('section');
+    if (!bandSection) throw new Error('Confidence-band section not found.');
+    const bandTable = within(bandSection).getByRole('table') as HTMLTableElement;
     await screen.findByText('0.70–0.79');
     fireEvent.change(screen.getByLabelText('Field'), { target: { value: 'invoiceNumber' } });
     expect(within(bandTable).getByText('0.70–0.79')).toBeInTheDocument();

@@ -43,7 +43,7 @@ export interface InvoiceDocumentExtractionReport {
   readonly interpretationNotes: readonly string[];
 }
 
-export type InvoiceDocumentExtractor = (file: TaskFileContent) => Promise<unknown>;
+export type InvoiceDocumentExtractor = (file: TaskFileContent, signal?: AbortSignal) => Promise<unknown>;
 
 type FieldKind = 'string' | 'number';
 
@@ -108,7 +108,7 @@ export function createInvoiceDocumentExtractionTool(
 
       let extracted: unknown;
       try {
-        extracted = await extractor(file);
+        extracted = await extractor(file, context.signal);
       } catch {
         return toolFailure(
           'EXECUTOR_UNAVAILABLE',

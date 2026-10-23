@@ -49,13 +49,13 @@ export function createOpenAICompatibleInvoiceExtractor(
   const fetcher = config.fetcher ?? fetch;
 
   return async (file: TaskFileContent, externalSignal?: AbortSignal): Promise<unknown> => {
-    const dataUrl = `data:${file.contentType};base64,${bytesToBase64(file.bytes)}`;
+    const base64Data = bytesToBase64(file.bytes);
     const documentPart = file.contentType === 'application/pdf'
       ? {
         type: 'file',
         file: {
           filename: file.fileName,
-          file_data: dataUrl,
+          file_data: base64Data,
         },
       }
       : {

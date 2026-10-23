@@ -39,7 +39,17 @@ export function GoogleWorkspacePanel({
   const [filesLoading, setFilesLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState(() => {
+    const result = new URL(window.location.href).searchParams.get('google_connection');
+    if (!result) return '';
+    const messages: Record<string, string> = {
+      connected: 'Google Workspace is connected. You can list accessible Drive file metadata.',
+      denied: 'Google authorization was cancelled.',
+      expired: 'The Google authorization link expired or was already used. Start a new connection attempt.',
+      error: 'Google authorization could not be completed. Check configuration and try again.',
+    };
+    return messages[result] ?? 'Google authorization returned an unknown status.';
+  });
 
   const refreshStatus = useCallback(async () => {
     if (!canAccessWorkspace) {
@@ -73,15 +83,7 @@ export function GoogleWorkspacePanel({
 
   useEffect(() => {
     const url = new URL(window.location.href);
-    const result = url.searchParams.get('google_connection');
-    if (result) {
-      const messages: Record<string, string> = {
-        connected: 'Google Workspace is connected. You can list accessible Drive file metadata.',
-        denied: 'Google authorization was cancelled.',
-        expired: 'The Google authorization link expired or was already used. Start a new connection attempt.',
-        error: 'Google authorization could not be completed. Check configuration and try again.',
-      };
-      setNotice(messages[result] ?? 'Google authorization returned an unknown status.');
+    if (url.searchParams.has('google_connection')) {
       url.searchParams.delete('google_connection');
       window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
     }

@@ -24,6 +24,7 @@ import { PlanReviewPanel } from './components/PlanReviewPanel';
 import { TaskToolExecutionPanel } from './components/TaskToolExecutionPanel';
 import { TaskTimeline } from './components/TaskTimeline';
 import { TaskAttachmentsPanel } from './components/TaskAttachmentsPanel';
+import { GoogleWorkspacePanel } from './components/GoogleWorkspacePanel';
 
 export function App() {
   const [connection] = useState(initializeConnection);
@@ -447,6 +448,12 @@ function WorkspaceView({
       </p>
 
       {error && <p className="error-message" role="alert">{error}</p>}
+
+      <GoogleWorkspacePanel
+        client={client}
+        workspaceId={workspace.id}
+        canAccessWorkspace={canAccessWorkspace}
+      />
 
       <form className="request-composer" onSubmit={submitTask}>
         <label className="request-composer__label" htmlFor="work-request">Describe your request</label>

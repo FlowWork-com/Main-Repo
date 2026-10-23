@@ -68,15 +68,15 @@ describe('invoice document validation', () => {
       fileName: 'invoice.pdf',
       contentType: 'image/jpeg',
       bytes: new TextEncoder().encode('%PDF-1.7'),
-    })).toMatch(/matching file type/);
+    }))).toMatch(/matching file type/);
     expect(validateInvoiceDocumentBytes(pdfFile({
       fileName: 'invoice.png',
       contentType: 'image/png',
       bytes: new TextEncoder().encode('not a png'),
-    })).toMatch(/do not match a PNG/);
+    }))).toMatch(/do not match a PNG/);
     expect(validateInvoiceDocumentBytes(pdfFile({
       bytes: new Uint8Array(10 * 1024 * 1024 + 1),
-    })).toMatch(/10 MB/);
+    }))).toMatch(/10 MB/);
   });
 });
 

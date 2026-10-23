@@ -111,7 +111,6 @@ declare
   v_confidence_json jsonb;
   v_confidence numeric;
   v_tool_version text;
-  v_value_type text;
   v_max_length integer;
   v_inserted_count integer := 0;
   v_required_fields constant text[] := array[

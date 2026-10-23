@@ -52,13 +52,7 @@ export function GoogleWorkspacePanel({
   });
 
   const refreshStatus = useCallback(async () => {
-    if (!canAccessWorkspace) {
-      setConnection({ connected: false, email: null, connectedAt: null, scopes: [] });
-      setStatusLoading(false);
-      return;
-    }
-    setStatusLoading(true);
-    setError('');
+    if (!canAccessWorkspace) return;
     try {
       const { data, error: invokeError } = await client.functions.invoke<unknown>('google-workspace', {
         body: { action: 'status', workspaceId },
@@ -186,9 +180,9 @@ export function GoogleWorkspacePanel({
         Connect Google to list file metadata from Drive. This integration is read-only: it does not edit, create, download, or share files and does not access Gmail.
       </p>
 
-      {statusLoading ? (
+      {canAccessWorkspace && statusLoading ? (
         <p role="status">Checking Google connection…</p>
-      ) : connection.connected ? (
+      ) : canAccessWorkspace && connection.connected ? (
         <div className="google-workspace__connection">
           <p>
             Connected as <strong>{connection.email ?? 'Google account'}</strong>

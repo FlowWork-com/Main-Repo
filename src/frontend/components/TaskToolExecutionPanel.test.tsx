@@ -26,6 +26,7 @@ interface HistoryQuery {
   readonly select: ReturnType<typeof vi.fn>;
   readonly eq: ReturnType<typeof vi.fn>;
   readonly order: ReturnType<typeof vi.fn>;
+  readonly limit: ReturnType<typeof vi.fn>;
 }
 
 function createClient(rows: readonly Record<string, unknown>[] = []) {
@@ -33,12 +34,15 @@ function createClient(rows: readonly Record<string, unknown>[] = []) {
     select: vi.fn(),
     eq: vi.fn(),
     order: vi.fn(),
+    limit: vi.fn(),
   };
   query.select.mockReturnValue(query);
   query.eq.mockReturnValue(query);
   query.order.mockResolvedValue({ data: rows, error: null });
-  const client = { from: vi.fn(() => query) } as unknown as SupabaseClient;
-  return { client, query };
+  query.limit.mockResolvedValue({ data: [], error: null });
+  const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
+  const client = { from: vi.fn(() => query), rpc } as unknown as SupabaseClient;
+  return { client, query, rpc };
 }
 
 function taskWithStatus(status: WorkflowStatus): PersistedTask {
@@ -246,6 +250,51 @@ describe('TaskToolExecutionPanel', () => {
     expect(query.eq).toHaveBeenNthCalledWith(1, 'workspace_id', workspaceId);
     expect(query.eq).toHaveBeenNthCalledWith(2, 'task_id', taskId);
     expect(query.order).toHaveBeenCalledWith('created_at', { ascending: false });
+  });
+
+  it('offers a saved PDF extraction for field review in task history', async () => {
+    const { client, rpc } = createClient([{
+      execution_id: 'a6000000-0000-4000-8000-000000000001',
+      tool_id: 'invoice-document-extract',
+      tool_version: '1.0.0',
+      status: 'succeeded',
+      input: { fileId: 'a4000000-0000-4000-8000-000000000001' },
+      output: {
+        fileId: 'a4000000-0000-4000-8000-000000000001',
+        fileName: 'invoice.pdf',
+        fields: {
+          invoiceNumber: { value: 'INV-1', confidenceEstimate: 0.72, needsReview: true },
+          invoiceDate: { value: '2026-10-22', confidenceEstimate: 0.96, needsReview: false },
+          vendor: { value: 'Acme Ltd', confidenceEstimate: 0.94, needsReview: false },
+          description: { value: 'Services', confidenceEstimate: 0.91, needsReview: false },
+          currency: { value: 'INR', confidenceEstimate: 0.99, needsReview: false },
+          subtotal: { value: 1000, confidenceEstimate: 0.95, needsReview: false },
+          taxAmount: { value: 180, confidenceEstimate: 0.92, needsReview: false },
+          totalAmount: { value: 1180, confidenceEstimate: 0.98, needsReview: false },
+        },
+        warnings: [],
+        interpretationNotes: [],
+      },
+      error: null,
+      created_at: '2026-10-11T10:03:00.000Z',
+      started_at: '2026-10-11T10:03:00.000Z',
+      completed_at: '2026-10-11T10:03:01.000Z',
+    }]);
+    render(<PanelHarness client={client} initialStatus="Verifying" />);
+
+    const input = await screen.findByRole('textbox', { name: 'Invoice number' });
+    expect(input).toHaveValue('INV-1');
+    fireEvent.change(input, { target: { value: 'INV-1-CORRECTED' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save field review' }));
+
+    await waitFor(() => expect(rpc).toHaveBeenCalledWith(
+      'record_invoice_extraction_feedback',
+      expect.objectContaining({
+        p_task_id: taskId,
+        p_execution_id: 'a6000000-0000-4000-8000-000000000001',
+        p_file_id: 'a4000000-0000-4000-8000-000000000001',
+      }),
+    ));
   });
 
   it('shows a safe message for an invalid Edge Function response', async () => {

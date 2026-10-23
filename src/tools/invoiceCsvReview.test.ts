@@ -114,9 +114,9 @@ describe('reviewInvoiceCsv', () => {
   it('reviews workbook rows, separates currencies, and reports formula exclusions', () => {
     const report = reviewInvoiceWorkbook('invoices.xlsx', {
       rows: [
-        ['Invoice Number', 'Vendor', 'Grand Total', 'Currency'],
-        ['INV-1', 'Acme', '1180.00', 'INR'],
-        ['INV-2', 'Beta', '', 'USD'],
+        ['Invoice Number', 'Vendor', 'Date', 'Grand Total', 'Currency'],
+        ['INV-1', 'Acme', '2026-10-01', '1180.00', 'INR'],
+        ['INV-2', 'Beta', '2026-10-02', '', 'USD'],
       ],
       worksheetName: 'Invoices',
       worksheetCount: 2,

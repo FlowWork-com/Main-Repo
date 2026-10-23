@@ -1,6 +1,6 @@
 begin;
 
-select plan(16);
+select plan(20);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -191,6 +191,48 @@ select throws_ok(
   '42501',
   'new row violates row-level security policy for table "objects"',
   'Storage RLS rejects unsupported extensions even when MIME is spoofed'
+);
+
+select lives_ok(
+  $$ insert into storage.objects (bucket_id, name, owner_id, metadata)
+     values (
+       'workflow-files',
+       '82000000-0000-4000-8000-000000000001/83000000-0000-4000-8000-000000000001/84000000-0000-4000-8000-000000000006/scan.png',
+       '81000000-0000-4000-8000-000000000001',
+       '{"mimetype":"image/png","size":8}'::jsonb
+     ) $$,
+  'Storage allows a workspace member to upload a supported PNG invoice image'
+);
+
+select lives_ok(
+  $png_register$ select public.register_task_file(
+       '82000000-0000-4000-8000-000000000001',
+       '83000000-0000-4000-8000-000000000001',
+       'scan.png',
+       '82000000-0000-4000-8000-000000000001/83000000-0000-4000-8000-000000000001/84000000-0000-4000-8000-000000000006/scan.png',
+       'image/png'
+     ) $png_register$,
+  'the secure registration RPC accepts a supported PNG invoice image'
+);
+
+select is(
+  (select count(*) from public.task_files
+   where task_id = '83000000-0000-4000-8000-000000000001' and file_name = 'scan.png'),
+  1::bigint,
+  'PNG attachment metadata is saved for the authorized task'
+);
+
+select throws_ok(
+  $image_spoof$ insert into storage.objects (bucket_id, name, owner_id, metadata)
+     values (
+       'workflow-files',
+       '82000000-0000-4000-8000-000000000001/83000000-0000-4000-8000-000000000001/84000000-0000-4000-8000-000000000007/spoof.jpg',
+       '81000000-0000-4000-8000-000000000001',
+       '{"mimetype":"text/plain","size":8}'::jsonb
+     ) $image_spoof$,
+  '42501',
+  'new row violates row-level security policy for table "objects"',
+  'Storage rejects a JPEG extension with a mismatched text MIME type'
 );
 
 select throws_ok(

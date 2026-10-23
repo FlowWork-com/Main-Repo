@@ -166,7 +166,34 @@ describe('TaskAttachmentsPanel', () => {
     expect(await screen.findByText('No attachments yet.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Attach file' })).not.toBeInTheDocument();
   });
- 
+
+  it('uploads and registers a supported PNG image', async () => {
+    const { client, upload, rpc } = createClient();
+    render(
+      <TaskAttachmentsPanel
+        client={client}
+        task={makeTask()}
+        userId={userId}
+        canAccessWorkspace
+      />,
+    );
+
+    await screen.findByRole('button', { name: 'Attach file' });
+    const file = new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], 'invoice-scan.png', { type: 'image/png' });
+    fireEvent.change(screen.getByLabelText('Choose attachment'), { target: { files: [file] } });
+
+    expect(await screen.findByText('Uploaded invoice-scan.png.')).toBeInTheDocument();
+    expect(upload).toHaveBeenCalledWith(
+      expect.stringContaining(`${workspaceId}/${taskId}/`),
+      file,
+      { contentType: 'image/png', upsert: false },
+    );
+    expect(rpc).toHaveBeenCalledWith('register_task_file', expect.objectContaining({
+      p_file_name: 'invoice-scan.png',
+      p_content_type: 'image/png',
+    }));
+  });
+
   it('copies the registered file ID for the manual review tool', async () => {
     const { client } = createClient([{
       id: 'task-file-1',

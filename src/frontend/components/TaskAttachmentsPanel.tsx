@@ -150,7 +150,7 @@ export function TaskAttachmentsPanel({
     try {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
       await navigator.clipboard.writeText(file.id);
-      setNotice(`Copied the ID for ${file.file_name}. Choose Invoice CSV review and paste it into the fileId field to run the analysis.`);
+      setNotice(`Copied the ID for ${file.file_name}. Choose the matching review tool and paste it into the fileId field to run the analysis.`);
     } catch {
       setError(`Could not copy the file ID. Use this ID manually: ${file.id}`);
     }
@@ -239,7 +239,7 @@ export function TaskAttachmentsPanel({
         )}
       </div>
       <p className="attachments-panel__hint">
-        PDF, TXT, CSV, TSV, XLS, or XLSX · Up to {MAX_TASK_ATTACHMENT_BYTES / (1024 * 1024)} MB per file
+        PDF, JPG/JPEG, PNG, TXT, CSV, TSV, XLS, or XLSX · Up to {MAX_TASK_ATTACHMENT_BYTES / (1024 * 1024)} MB per file
         {task.workflow.task.status !== 'Planning' && ' · Uploads are available while the workflow is in Planning'}
       </p>
       {error && <p role="alert" className="error-message">{error}</p>}

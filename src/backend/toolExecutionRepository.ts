@@ -224,6 +224,12 @@ export class SupabaseToolExecutionRepository
       ? 'application/vnd.ms-excel'
       : extension === 'xlsx'
       ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      : extension === 'pdf'
+      ? 'application/pdf'
+      : extension === 'jpg' || extension === 'jpeg'
+      ? 'image/jpeg'
+      : extension === 'png'
+      ? 'image/png'
       : null;
     if (!expectedContentType || file.content_type?.toLowerCase() !== expectedContentType) {
       return null;

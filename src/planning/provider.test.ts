@@ -90,6 +90,8 @@ describe('planner provider adapter', () => {
     expect(sentBody.response_format).toEqual({ type: 'json_object' });
     expect(sentBody.messages[0]?.content).toContain('55000000-0000-4000-8000-000000000001');
     expect(sentBody.messages[0]?.content).toContain('untrusted data');
+    expect(sentBody.messages[0]?.content).toContain('XLS or XLSX');
+    expect(sentBody.messages[0]?.content).toContain('formula cells are excluded');
     expect(capturedRequest?.headers).toMatchObject({ authorization: 'Bearer server-only-key' });
     expect(response.success).toBe(true);
     if (response.success) expect(response.plan.summary).toBe('Transform the text.');

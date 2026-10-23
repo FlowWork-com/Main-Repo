@@ -8,7 +8,7 @@ import {
   executeTool,
   type ExecuteToolRequest,
 } from '../../backend/toolExecutionClient';
-import { isPersistableJson, type JsonValue } from '../../tools/contracts';
+import { isPersistableJson } from '../../tools/contracts';
 import { InvoiceExtractionFeedbackForm } from './InvoiceExtractionFeedbackForm';
 import { MVP_TOOL_UI_METADATA } from '../../tools/toolMetadata';
 import type { PersistedTask } from '../../backend/workflowRepository';

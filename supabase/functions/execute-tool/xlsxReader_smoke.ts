@@ -48,9 +48,53 @@ function testRejectsUnsupportedAndMalformedFiles(): void {
   try {
     readSpreadsheetWorkbook(new Uint8Array([1, 2, 3]), 'invoices.xlsx');
   } catch (error) {
-    malformed = error instanceof Error && error.message.includes('could not be parsed');
+    malformed = error instanceof Error && error.message.includes('XLSX ZIP archive');
   }
   assert(malformed, 'malformed workbook data is rejected');
+}
+
+function createLegacyWorkbookBytes(): Uint8Array {
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+    ['Invoice Number', 'Vendor', 'Grand Total', 'Currency'],
+    ['INV-OLD', 'Legacy Co', 42, 'USD'],
+  ]), 'Legacy invoices');
+  return new Uint8Array(XLSX.write(workbook, { bookType: 'xls', type: 'array' }));
+}
+
+function testReadsLegacyXls(): void {
+  const result = readSpreadsheetWorkbook(createLegacyWorkbookBytes(), 'legacy.xls');
+  equal(result.worksheetName, 'Legacy invoices', 'legacy XLS worksheet is selected');
+  equal(result.rows[1], ['INV-OLD', 'Legacy Co', '42', 'USD'], 'legacy XLS cells are preserved');
+}
+
+function testRejectsExpandedZipEntryBeforeParsing(): void {
+  const bytes = createWorkbookBytes();
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const signature = (offset: number) => view.getUint32(offset, true);
+  let endRecord = -1;
+  const minimumEndRecord = Math.max(0, bytes.length - 22 - 65_535);
+  for (let offset = bytes.length - 22; offset >= minimumEndRecord; offset -= 1) {
+    if (
+      signature(offset) === 0x06054b50 &&
+      offset + 22 + view.getUint16(offset + 20, true) === bytes.length
+    ) {
+      endRecord = offset;
+      break;
+    }
+  }
+  assert(endRecord >= 0, 'test workbook has a ZIP end-of-central-directory record');
+  const centralDirectoryOffset = view.getUint32(endRecord + 16, true);
+  assert(signature(centralDirectoryOffset) === 0x02014b50, 'test workbook has a central directory entry');
+  view.setUint32(centralDirectoryOffset + 24, 25 * 1024 * 1024, true);
+
+  let rejected = false;
+  try {
+    readSpreadsheetWorkbook(bytes, 'expanded.xlsx');
+  } catch (error) {
+    rejected = error instanceof Error && error.message.includes('uncompressed size limit');
+  }
+  assert(rejected, 'oversized expanded entries are rejected before workbook parsing');
 }
 
 function testRejectsTooManyWorksheets(): void {
@@ -73,6 +117,8 @@ function testRejectsTooManyWorksheets(): void {
 }
 
 testReadsWorkbookAndExcludesFormulas();
+testReadsLegacyXls();
 testRejectsUnsupportedAndMalformedFiles();
+testRejectsExpandedZipEntryBeforeParsing();
 testRejectsTooManyWorksheets();
 console.log('XLS/XLSX workbook reader smoke tests passed.');

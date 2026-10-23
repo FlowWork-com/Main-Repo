@@ -71,20 +71,51 @@ When these secrets are absent or incomplete, extraction fails closed as unavaila
 
 ## Phase 6 — human extraction review and feedback metrics
 
-**In review:** the `feat/invoice-correction-feedback` branch adds review capture for saved extraction results.
+**Merged:** [PR #27 — human extraction corrections and review metrics](https://github.com/FlowWork-com/Main-Repo/pull/27).
 
-- The reviewer can confirm or correct all eight extracted fields from the saved run, including explicitly confirming that a field is missing.
-- Feedback is accepted only for a successful `invoice-document-extract` execution whose saved input/output reference the same private file and task.
-- The database derives the original values and confidence estimates from the saved server-side execution output; clients cannot submit a fabricated source value or confidence score.
-- Feedback is stored per field and extraction run, scoped by workspace, with a stable submission ID for safe retries. Duplicate reviews for the same extraction are rejected.
-- A workspace-protected summary groups review counts and observed correction rates by field and tool version, including mean confidence for corrected versus unchanged fields.
-- These metrics describe human review outcomes. They are **not independently verified accuracy or confidence calibration**, because the reviewer response itself is not an external ground-truth dataset.
+- Reviewers can accept or correct all eight extracted fields from a saved PDF/image extraction, including explicitly confirming a field is missing.
+- Feedback is accepted only for a successful extraction execution whose saved input/output reference the same private file and task.
+- The database derives source values and confidence estimates from the saved execution output; clients cannot submit fabricated source values or confidence estimates.
+- Feedback is stored per field and extraction run, scoped by workspace, with stable submission IDs for safe retries. Duplicate reviews are rejected.
+- Workspace-protected summaries report reviewed counts and observed correction rates by field and tool version, plus mean reported confidence for corrected and unchanged values.
+- These metrics describe reviewer outcomes, not independently verified accuracy.
 
-## Remaining phases
+## Phase 7 — private versioned workspace prompt templates
 
-1. Add private saved prompt templates using workspace-scoped persistence, explicit access boundaries, and an auditable version history.
-2. Add server-side Google Workspace integration groundwork with a clear provider interface, least-privilege scopes, and no browser-held OAuth secrets. Enable live API calls only after OAuth consent and token storage are configured.
-3. Add richer recovery and execution orchestration only after each integration has a clear data model, tests, authorization rules, and observability.
+**Merged:** [PR #28 — versioned prompt templates](https://github.com/FlowWork-com/Main-Repo/pull/28).
+
+- Workspace members can create, use, version, and archive prompt templates.
+- Each edit creates an immutable version. Optimistic concurrency prevents stale edits from silently overwriting newer ones.
+- Templates only fill the request composer; they do not create tasks, bypass plan review, or execute work automatically.
+- Workspace RLS and membership-checked RPCs protect access and mutations.
+
+## Phase 8 — read-only Google Workspace connection
+
+**Merged:** [PR #29 — Google Workspace connection](https://github.com/FlowWork-com/Main-Repo/pull/29).
+
+- OAuth uses state and PKCE; token material is stored server-side in Vault.
+- Workspace members can explicitly connect an account and list allowed Drive file metadata using the limited `drive.file` scope.
+- No Google Drive file downloads or writes, Gmail access, or email sending are included.
+- No provider calls occur until an authenticated member initiates connection and grants consent.
+
+## Phase 9 — stale tool-execution recovery
+
+**Merged:** [PR #31 — stale execution recovery](https://github.com/FlowWork-com/Main-Repo/pull/31).
+
+- Old execution rows left in `running` after worker interruption are finalized as failed with `EXECUTION_TIMEOUT`.
+- Recovery is bounded, service-role-only, and uses row locks to avoid competing workers processing the same execution.
+- It does not rerun tools or infer whether an external side effect happened. Users must inspect history before deciding whether to retry.
+- Recovery is opportunistic on the next authenticated tool request, not a background scheduler.
+
+## Phase 10 — extraction quality monitoring
+
+**In progress:** the `feat/invoice-extraction-quality` branch adds a workspace Quality view using the correction feedback already collected by Phase 6.
+
+- Shows field-level reviewed counts, corrections, observed correction rates, and mean reported confidence when fields were corrected or unchanged.
+- Groups correction rates into reported-confidence bands, by field and parser/tool version, so teams can see where reviewers frequently intervene.
+- Low sample sizes are called out instead of hidden.
+- Queries use workspace-scoped aggregate views. The UI does not retrieve or display raw extracted/reviewed invoice values in its metrics tables.
+- These are descriptive human-review signals, not independent ground truth, a parser accuracy benchmark, or proof that confidence is calibrated. A separate held-out, human-verified dataset is still needed for a defensible accuracy evaluation.
 
 ## Security and migration rules
 

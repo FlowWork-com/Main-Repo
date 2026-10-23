@@ -26,6 +26,7 @@ import { TaskTimeline } from './components/TaskTimeline';
 import { TaskAttachmentsPanel } from './components/TaskAttachmentsPanel';
 import { PromptTemplatesPanel } from './components/PromptTemplatesPanel';
 import { GoogleWorkspacePanel } from './components/GoogleWorkspacePanel';
+import { InvoiceExtractionQualityPanel } from './components/InvoiceExtractionQualityPanel';
 
 export function App() {
   const [connection] = useState(initializeConnection);
@@ -35,7 +36,7 @@ export function App() {
   const [authError, setAuthError] = useState('');
   const [email, setEmail] = useState('');
   const [linkSent, setLinkSent] = useState(false);
-  const [activeView, setActiveView] = useState<'workspace' | 'history'>('workspace');
+  const [activeView, setActiveView] = useState<'workspace' | 'history' | 'quality'>('workspace');
 
   useEffect(() => {
     if (!client) return;
@@ -109,6 +110,14 @@ export function App() {
                 type="button"
               >
                 History
+              </button>
+              <button
+                className={`button button--quiet topbar-nav__button${activeView === 'quality' ? ' is-active' : ''}`}
+                aria-pressed={activeView === 'quality'}
+                onClick={() => setActiveView('quality')}
+                type="button"
+              >
+                Quality
               </button>
             </div>
             <button
@@ -206,7 +215,7 @@ function WorkspaceView({
 }: {
   readonly client: SupabaseClient;
   readonly userId: string;
-  readonly activeView: 'workspace' | 'history';
+  readonly activeView: 'workspace' | 'history' | 'quality';
   readonly onViewChange: (view: 'workspace' | 'history') => void;
 }) {
   const repository = useMemo(() => new SupabaseWorkflowRepository(client), [client]);
@@ -430,6 +439,27 @@ function WorkspaceView({
             ))}
           </div>
         )}
+      </section>
+    );
+  }
+
+  if (activeView === 'quality') {
+    return (
+      <section className="history-view" aria-labelledby="invoice-quality-page-title">
+        <div className="workspace__heading">
+          <div>
+            <p className="eyebrow">Workspace insights</p>
+            <h2 id="invoice-quality-page-title">Quality</h2>
+          </div>
+          <button className="button" onClick={() => onViewChange('workspace')} type="button">
+            Back to workspace
+          </button>
+        </div>
+        <p className="workspace-note">
+          Monitor field-level corrections from reviewed invoice extractions and compare them
+          with the model's reported confidence bands.
+        </p>
+        <InvoiceExtractionQualityPanel client={client} workspaceId={workspace.id} />
       </section>
     );
   }

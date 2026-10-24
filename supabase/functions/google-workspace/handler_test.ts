@@ -286,7 +286,8 @@ Deno.test('Drive-only connection cannot read Gmail without explicit Gmail consen
   await harness.addConnection();
   const response = await harness.handler(harness.post({ action: 'list_gmail', workspaceId }));
   assertEquals(response.status, 409);
-  assertEquals(asRecord(await response.json()).error && asRecord(asRecord(await response.clone().json()).error).code, 'GOOGLE_GMAIL_RECONNECT_REQUIRED');
+  const body = asRecord(await response.json());
+  assertEquals(asRecord(body.error).code, 'GOOGLE_GMAIL_RECONNECT_REQUIRED');
   assertEquals(externalCalls, 0);
 });
 

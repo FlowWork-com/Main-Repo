@@ -271,6 +271,27 @@ Deno.test('Gmail preview returns inline plain text only and ignores attachments'
   assert(!preview.content.includes('ATTACHMENT SECRET'), 'Attachment content must not be previewed.');
 });
 
+Deno.test('Gmail preview skips text parts explicitly marked as attachments even without filenames', async () => {
+  const preview = await previewGmailMessage('short-lived-token', 'msg-5', async () => Response.json({
+    id: 'msg-5',
+    snippet: 'Safe snippet.',
+    payload: {
+      mimeType: 'multipart/mixed',
+      parts: [
+        {
+          mimeType: 'text/plain',
+          headers: [{ name: 'Content-Disposition', value: 'attachment' }],
+          body: { data: 'QVRUQUNITUVOVCBTRUNSRVQ=' },
+        },
+        { mimeType: 'text/plain', body: { data: 'SW5saW5lIGJvZHk=' } },
+      ],
+    },
+  }));
+  assertEquals(preview.content, 'Inline body');
+  assertEquals(preview.contentSource, 'text/plain');
+  assert(!preview.content.includes('ATTACHMENT SECRET'));
+});
+
 Deno.test('Gmail preview falls back to snippet and rejects oversized message bodies', async () => {
   const snippetPreview = await previewGmailMessage('short-lived-token', 'msg-3', async () => Response.json({
     id: 'msg-3', snippet: 'HTML-only snippet', payload: {

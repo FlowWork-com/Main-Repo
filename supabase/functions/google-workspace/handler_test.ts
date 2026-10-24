@@ -188,6 +188,59 @@ Deno.test('Drive list refreshes the secret server-side and returns only safe fil
   assert(!JSON.stringify(body).includes('refresh-token'), 'Refresh token must never be returned to the browser.');
 });
 
+Deno.test('selected Drive text preview requires membership and returns bounded content without tokens', async () => {
+  const requests: string[] = [];
+  const harness = createHarness({
+    fetcher: async (input) => {
+      const url = String(input);
+      requests.push(url);
+      if (url === 'https://oauth2.googleapis.com/token') {
+        return Response.json({ access_token: 'short-lived-access-token', expires_in: 3600, token_type: 'Bearer' });
+      }
+      if (url.startsWith(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=`)) {
+        return Response.json({
+          id: fileId,
+          name: 'Selected notes',
+          mimeType: 'application/vnd.google-apps.document',
+          capabilities: { canDownload: true },
+        });
+      }
+      if (url.startsWith(`https://www.googleapis.com/drive/v3/files/${fileId}/export?`)) {
+        return new Response('Invoice total: 125.00', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+      }
+      throw new Error('Unexpected external request.');
+    },
+  });
+  await harness.addConnection();
+  const response = await harness.handler(harness.post({ action: 'preview_file', workspaceId, fileId }));
+  const body = asRecord(await response.json());
+  const preview = asRecord(body.preview);
+  assertEquals(response.status, 200);
+  assertEquals(body.connected, true);
+  assertEquals(preview.id, fileId);
+  assertEquals(preview.name, 'Selected notes');
+  assertEquals(preview.content, 'Invoice total: 125.00');
+  assert(!JSON.stringify(body).includes('refresh-token'), 'Refresh token must not be returned to the browser.');
+  assertEquals(requests.filter((url) => url.includes('/export?')).length, 1);
+});
+
+Deno.test('Drive preview rejects malformed IDs and does not call the provider for them', async () => {
+  let externalCalls = 0;
+  const harness = createHarness({
+    fetcher: async () => {
+      externalCalls += 1;
+      return Response.json({});
+    },
+  });
+  const response = await harness.handler(harness.post({
+    action: 'preview_file',
+    workspaceId,
+    fileId: '../other-user-file',
+  }));
+  assertEquals(response.status, 400);
+  assertEquals(externalCalls, 0);
+});
+
 Deno.test('non-members cannot start OAuth and wrong-origin calls are rejected', async () => {
   const harness = createHarness({ member: false });
   const response = await harness.handler(harness.post({ action: 'connect', workspaceId }));

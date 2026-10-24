@@ -62,6 +62,50 @@ describe('GoogleWorkspacePanel', () => {
     });
   });
 
+  it('previews supported Drive text only after an explicit user click', async () => {
+    const { client, invoke } = createClient([
+      { data: { connected: true, email: 'person@example.test' }, error: null },
+      {
+        data: {
+          connected: true,
+          files: [{
+            id: 'drive-doc-1',
+            name: 'Invoice notes',
+            mimeType: 'application/vnd.google-apps.document',
+            modifiedTime: null,
+            webViewLink: null,
+            canPreview: true,
+          }],
+          nextPageToken: null,
+        },
+        error: null,
+      },
+      {
+        data: {
+          connected: true,
+          preview: {
+            id: 'drive-doc-1',
+            name: 'Invoice notes',
+            mimeType: 'application/vnd.google-apps.document',
+            content: 'Invoice total: 125.00',
+          },
+        },
+        error: null,
+      },
+    ]);
+    render(<GoogleWorkspacePanel client={client} workspaceId={workspaceId} canAccessWorkspace />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'List Drive files' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview text' }));
+
+    const preview = await screen.findByRole('region', { name: 'Drive text preview' });
+    expect(preview).toHaveTextContent('Invoice notes');
+    expect(preview).toHaveTextContent('Invoice total: 125.00');
+    expect(invoke).toHaveBeenNthCalledWith(3, 'google-workspace', {
+      body: { action: 'preview_file', workspaceId, fileId: 'drive-doc-1' },
+    });
+  });
+
   it('shows a connect action when no account is linked and access is available', async () => {
     const { client, invoke } = createClient([{ data: { connected: false }, error: null }]);
     render(<GoogleWorkspacePanel client={client} workspaceId={workspaceId} canAccessWorkspace />);

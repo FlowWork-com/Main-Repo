@@ -29,6 +29,33 @@ export interface GoogleDriveFile {
   readonly mimeType: string;
   readonly modifiedTime: string | null;
   readonly webViewLink: string | null;
+  readonly canPreview: boolean;
+}
+
+export interface GoogleDriveFilePreview {
+  readonly id: string;
+  readonly name: string;
+  readonly mimeType: string;
+  readonly content: string;
+}
+
+const MAX_DRIVE_PREVIEW_BYTES = 256 * 1024;
+
+function previewExportMimeType(mimeType: string): string | null {
+  switch (mimeType) {
+    case 'application/vnd.google-apps.document':
+    case 'application/vnd.google-apps.presentation':
+      return 'text/plain';
+    case 'application/vnd.google-apps.spreadsheet':
+      return 'text/csv';
+    case 'text/plain':
+    case 'text/csv':
+    case 'text/tab-separated-values':
+    case 'text/markdown':
+      return mimeType;
+    default:
+      return null;
+  }
 }
 
 export class GoogleProviderError extends Error {
@@ -165,7 +192,7 @@ export async function listGoogleDriveFiles(
   url.searchParams.set('pageSize', String(pageSize));
   url.searchParams.set('q', 'trashed = false');
   url.searchParams.set('orderBy', 'modifiedTime desc');
-  url.searchParams.set('fields', 'files(id,name,mimeType,modifiedTime,webViewLink),nextPageToken');
+  url.searchParams.set('fields', 'files(id,name,mimeType,modifiedTime,webViewLink,capabilities(canDownload)),nextPageToken');
   if (pageToken) url.searchParams.set('pageToken', pageToken);
 
   const response = await fetcher(url.toString(), {
@@ -196,11 +223,112 @@ export async function listGoogleDriveFiles(
       mimeType: candidate.mimeType,
       modifiedTime,
       webViewLink,
+      canPreview: isRecord(candidate.capabilities) &&
+        candidate.capabilities.canDownload === true &&
+        previewExportMimeType(candidate.mimeType) !== null,
     }];
   });
   const nextPageToken = typeof value.nextPageToken === 'string' &&
     value.nextPageToken.length <= 2048 ? value.nextPageToken : null;
   return { files, nextPageToken };
+}
+
+/**
+ * Fetches a user-selected, read-only text preview from Google Drive.
+ * Native Docs and Slides are exported as plain text; Sheets exports the first sheet as CSV.
+ * Binary files are deliberately excluded. Preview content is bounded and never persisted here.
+ */
+export async function previewGoogleDriveFile(
+  accessToken: string,
+  fileId: string,
+  fetcher: typeof fetch = fetch,
+): Promise<GoogleDriveFilePreview> {
+  if (!accessToken.trim() || accessToken.length > 8192 ||
+    !/^[A-Za-z0-9_-]{1,512}$/.test(fileId)) {
+    throw new GoogleProviderError('GOOGLE_DRIVE_REQUEST_INVALID');
+  }
+
+  const metadataUrl = new URL(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`);
+  metadataUrl.searchParams.set('fields', 'id,name,mimeType,trashed,capabilities(canDownload)');
+  const metadataResponse = await fetcher(metadataUrl.toString(), {
+    method: 'GET',
+    redirect: 'error',
+    headers: { authorization: `Bearer ${accessToken}`, accept: 'application/json' },
+    signal: AbortSignal.timeout(15_000),
+  });
+  const metadata = await readBoundedJson(metadataResponse, 16_384);
+  if (!metadataResponse.ok) throw new GoogleProviderError('GOOGLE_DRIVE_PREVIEW_FAILED');
+  if (!isRecord(metadata) || metadata.id !== fileId ||
+    typeof metadata.name !== 'string' || metadata.name.length > 1000 ||
+    typeof metadata.mimeType !== 'string' || metadata.trashed === true) {
+    throw new GoogleProviderError('GOOGLE_DRIVE_RESPONSE_INVALID');
+  }
+  if (!isRecord(metadata.capabilities) || metadata.capabilities.canDownload !== true) {
+    throw new GoogleProviderError('GOOGLE_FILE_NOT_DOWNLOADABLE');
+  }
+
+  const exportMimeType = previewExportMimeType(metadata.mimeType);
+  if (!exportMimeType) throw new GoogleProviderError('GOOGLE_FILE_PREVIEW_UNSUPPORTED');
+
+  const nativeWorkspaceFile = metadata.mimeType.startsWith('application/vnd.google-apps.');
+  const contentUrl = nativeWorkspaceFile
+    ? new URL(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/export`)
+    : new URL(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`);
+  if (nativeWorkspaceFile) contentUrl.searchParams.set('mimeType', exportMimeType);
+  else contentUrl.searchParams.set('alt', 'media');
+
+  const contentResponse = await fetcher(contentUrl.toString(), {
+    method: 'GET',
+    redirect: 'error',
+    headers: { authorization: `Bearer ${accessToken}`, accept: exportMimeType },
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!contentResponse.ok) {
+    throw new GoogleProviderError('GOOGLE_DRIVE_PREVIEW_FAILED');
+  }
+  const responseType = contentResponse.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase();
+  if (responseType !== exportMimeType) {
+    throw new GoogleProviderError('GOOGLE_DRIVE_PREVIEW_TYPE_MISMATCH');
+  }
+  const text = await readBoundedText(contentResponse, MAX_DRIVE_PREVIEW_BYTES);
+  return {
+    id: fileId,
+    name: metadata.name,
+    mimeType: metadata.mimeType,
+    content: text,
+  };
+}
+
+async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
+  if (!response.body) throw new GoogleProviderError('GOOGLE_PROVIDER_RESPONSE_EMPTY');
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        throw new GoogleProviderError('GOOGLE_FILE_PREVIEW_TOO_LARGE');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    throw new GoogleProviderError('GOOGLE_DRIVE_PREVIEW_TYPE_MISMATCH');
+  }
 }
 
 export function parseGrantedScopes(value: unknown): string[] {

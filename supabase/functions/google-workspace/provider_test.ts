@@ -3,6 +3,8 @@ import {
   exchangeGoogleAuthorizationCode,
   GOOGLE_REQUIRED_SCOPES,
   listGoogleDriveFiles,
+  previewGoogleDriveFile,
+  GoogleProviderError,
   refreshGoogleAccessToken,
 } from './provider.ts';
 
@@ -92,6 +94,97 @@ Deno.test('Drive listing uses GET, limits output to file metadata, and rejects u
   assertEquals(result.files[0].webViewLink, 'https://drive.google.com/file/d/drive-1/view');
   assertEquals(result.files[1].webViewLink, null);
   assertEquals(result.nextPageToken, 'next-page');
+});
+
+Deno.test('preview exports a selected Google Doc as bounded plain text', async () => {
+  const requests: Array<{ url: string; method: string; auth: string | null }> = [];
+  const preview = await previewGoogleDriveFile('access-token', 'doc-123', async (input, init) => {
+    const url = String(input);
+    requests.push({ url, method: init?.method ?? 'GET', auth: new Headers(init?.headers).get('authorization') });
+    if (url.startsWith('https://www.googleapis.com/drive/v3/files/doc-123?fields=')) {
+      return Response.json({
+        id: 'doc-123',
+        name: 'Invoice notes',
+        mimeType: 'application/vnd.google-apps.document',
+        trashed: false,
+        capabilities: { canDownload: true },
+      });
+    }
+    if (url.startsWith('https://www.googleapis.com/drive/v3/files/doc-123/export?')) {
+      assertEquals(new URL(url).searchParams.get('mimeType'), 'text/plain');
+      return new Response('Invoice total: 125.00', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+    }
+    throw new Error('Unexpected provider URL.');
+  });
+  assertEquals(preview, {
+    id: 'doc-123',
+    name: 'Invoice notes',
+    mimeType: 'application/vnd.google-apps.document',
+    content: 'Invoice total: 125.00',
+  });
+  assertEquals(requests.length, 2);
+  assert(requests.every((request) => request.method === 'GET' && request.auth === 'Bearer access-token'),
+    'Both metadata and export requests must be authenticated GET requests.');
+});
+
+Deno.test('preview exports a selected Google Sheet as CSV only after download permission check', async () => {
+  let exportCount = 0;
+  const preview = await previewGoogleDriveFile('access-token', 'sheet-123', async (input) => {
+    const url = String(input);
+    if (url.includes('/export?')) {
+      exportCount += 1;
+      assertEquals(new URL(url).searchParams.get('mimeType'), 'text/csv');
+      return new Response('Vendor,Total\\nAcme,120.00', { headers: { 'content-type': 'text/csv; charset=utf-8' } });
+    }
+    return Response.json({
+      id: 'sheet-123',
+      name: 'AP sheet',
+      mimeType: 'application/vnd.google-apps.spreadsheet',
+      capabilities: { canDownload: true },
+    });
+  });
+  assertEquals(preview.content, 'Vendor,Total\\nAcme,120.00');
+  assertEquals(exportCount, 1);
+});
+
+Deno.test('preview rejects binary files, files without download permission, and wrong response types', async () => {
+  const pdfFetcher: typeof fetch = async () => Response.json({
+    id: 'pdf-123', name: 'Invoice.pdf', mimeType: 'application/pdf',
+    capabilities: { canDownload: true },
+  });
+  let errorCode = '';
+  try { await previewGoogleDriveFile('access-token', 'pdf-123', pdfFetcher); } catch (error) {
+    errorCode = error instanceof GoogleProviderError ? error.code : '';
+  }
+  assertEquals(errorCode, 'GOOGLE_FILE_PREVIEW_UNSUPPORTED');
+
+  const deniedFetcher: typeof fetch = async () => Response.json({
+    id: 'doc-123', name: 'Private doc', mimeType: 'application/vnd.google-apps.document',
+    capabilities: { canDownload: false },
+  });
+  errorCode = '';
+  try { await previewGoogleDriveFile('access-token', 'doc-123', deniedFetcher); } catch (error) {
+    errorCode = error instanceof GoogleProviderError ? error.code : '';
+  }
+  assertEquals(errorCode, 'GOOGLE_FILE_NOT_DOWNLOADABLE');
+});
+
+Deno.test('preview rejects content that exceeds the inline limit', async () => {
+  let errorCode = '';
+  try {
+    await previewGoogleDriveFile('access-token', 'doc-123', async (input) => {
+      if (String(input).includes('/export?')) {
+        return new Response('x'.repeat(256 * 1024 + 1), { headers: { 'content-type': 'text/plain' } });
+      }
+      return Response.json({
+        id: 'doc-123', name: 'Large doc', mimeType: 'application/vnd.google-apps.document',
+        capabilities: { canDownload: true },
+      });
+    });
+  } catch (error) {
+    errorCode = error instanceof GoogleProviderError ? error.code : '';
+  }
+  assertEquals(errorCode, 'GOOGLE_FILE_PREVIEW_TOO_LARGE');
 });
 
 Deno.test('refresh token errors are sanitized', async () => {

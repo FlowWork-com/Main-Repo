@@ -5,6 +5,7 @@ import {
   GoogleProviderError,
   hasRequiredGoogleScopes,
   listGoogleDriveFiles,
+  previewGoogleDriveFile,
   refreshGoogleAccessToken,
   type GoogleOAuthConfiguration,
 } from './provider.ts';
@@ -114,12 +115,14 @@ export function createGoogleWorkspaceHandler<Context>(
 
     const action = payload.action;
     const workspaceId = payload.workspaceId;
-    if (typeof action !== 'string' || !['connect', 'status', 'list_files', 'disconnect'].includes(action) ||
+    if (typeof action !== 'string' || !['connect', 'status', 'list_files', 'preview_file', 'disconnect'].includes(action) ||
       !isUuid(workspaceId)) {
       return errorResponse(400, 'INVALID_REQUEST', 'Request fields are invalid.', corsHeaders);
     }
     const permittedKeys = action === 'list_files'
       ? new Set(['action', 'workspaceId', 'pageSize', 'pageToken'])
+      : action === 'preview_file'
+      ? new Set(['action', 'workspaceId', 'fileId'])
       : new Set(['action', 'workspaceId']);
     if (Object.keys(payload).some((key) => !permittedKeys.has(key))) {
       return errorResponse(400, 'INVALID_REQUEST', 'Request fields are invalid.', corsHeaders);
@@ -131,6 +134,10 @@ export function createGoogleWorkspaceHandler<Context>(
         (payload.pageToken !== undefined &&
           (typeof payload.pageToken !== 'string' || payload.pageToken.length > 2048)))) {
       return errorResponse(400, 'INVALID_REQUEST', 'Drive list options are invalid.', corsHeaders);
+    }
+    if (action === 'preview_file' &&
+      (typeof payload.fileId !== 'string' || !/^[A-Za-z0-9_-]{1,512}$/.test(payload.fileId))) {
+      return errorResponse(400, 'INVALID_REQUEST', 'A valid Drive file ID is required.', corsHeaders);
     }
 
     try {
@@ -238,6 +245,10 @@ export function createGoogleWorkspaceHandler<Context>(
         return errorResponse(409, 'GOOGLE_RECONNECT_REQUIRED', 'Reconnect Google to restore the expired connection.', corsHeaders);
       }
       const accessToken = await refreshGoogleAccessToken(config.oauth, refreshToken, fetcher);
+      if (action === 'preview_file') {
+        const preview = await previewGoogleDriveFile(accessToken, payload.fileId as string, fetcher);
+        return jsonResponse(200, { connected: true, preview }, corsHeaders);
+      }
       const result = await listGoogleDriveFiles(
         accessToken,
         typeof payload.pageSize === 'number' ? payload.pageSize : 20,
@@ -255,8 +266,24 @@ export function createGoogleWorkspaceHandler<Context>(
         }
         return errorResponse(409, 'GOOGLE_RECONNECT_REQUIRED', 'Google authorization expired or was revoked. Reconnect to continue.', corsHeaders);
       }
+      if (error instanceof GoogleProviderError) {
+        if (error.code === 'GOOGLE_FILE_PREVIEW_UNSUPPORTED') {
+          return errorResponse(415, error.code, 'Preview is available only for Google Docs, Sheets, Slides, and supported text files.', corsHeaders);
+        }
+        if (error.code === 'GOOGLE_FILE_PREVIEW_TOO_LARGE') {
+          return errorResponse(413, error.code, 'This file is too large for an inline preview. Open it in Google Drive instead.', corsHeaders);
+        }
+        if (error.code === 'GOOGLE_FILE_NOT_DOWNLOADABLE') {
+          return errorResponse(403, error.code, 'Google does not allow this file to be previewed.', corsHeaders);
+        }
+        if (error.code === 'GOOGLE_DRIVE_PREVIEW_TYPE_MISMATCH') {
+          return errorResponse(415, error.code, 'This file could not be safely previewed as text.', corsHeaders);
+        }
+      }
       dependencies.logFailure?.(error instanceof GoogleProviderError ? error.code : 'GOOGLE_DRIVE_LIST_FAILED');
-      return errorResponse(502, 'GOOGLE_DRIVE_LIST_FAILED', 'Google Drive file metadata is temporarily unavailable.', corsHeaders);
+      return errorResponse(502, action === 'preview_file' ? 'GOOGLE_DRIVE_PREVIEW_FAILED' : 'GOOGLE_DRIVE_LIST_FAILED',
+        action === 'preview_file' ? 'Drive file preview is temporarily unavailable.' : 'Google Drive file metadata is temporarily unavailable.',
+        corsHeaders);
     }
   };
 

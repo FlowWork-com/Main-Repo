@@ -95,7 +95,8 @@ When these secrets are absent or incomplete, extraction fails closed as unavaila
 
 - OAuth uses state and PKCE; token material is stored server-side in Vault.
 - Workspace members can explicitly connect an account and list allowed Drive file metadata using the limited `drive.file` scope.
-- No Google Drive file downloads or writes, Gmail access, or email sending are included.
+- A selected-file preview supports Google Docs and Slides as plain text, Google Sheets as first-sheet CSV, and common text files. It requires `capabilities.canDownload`, is bounded to 256 KiB, and is not saved to task history or sent to the planner.
+- Binary previews and all Drive writes remain out of scope. Gmail access and email sending are not included.
 - No provider calls occur until an authenticated member initiates connection and grants consent.
 
 ## Phase 9 — stale tool-execution recovery

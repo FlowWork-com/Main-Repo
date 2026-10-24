@@ -20,7 +20,7 @@ describe('GoogleWorkspacePanel', () => {
 
   it('loads connection status and lists only safe Drive metadata', async () => {
     const { client, invoke } = createClient([
-      { data: { connected: true, email: 'person@example.test', connectedAt: '2026-10-23T10:00:00.000Z', scopes: ['drive.file'] }, error: null },
+      { data: { connected: true, email: 'person@example.test', connectedAt: '2026-10-23T10:00:00.000Z', scopes: ['https://www.googleapis.com/auth/drive.file'] }, error: null },
       {
         data: {
           connected: true,
@@ -64,7 +64,7 @@ describe('GoogleWorkspacePanel', () => {
 
   it('previews supported Drive text only after an explicit user click', async () => {
     const { client, invoke } = createClient([
-      { data: { connected: true, email: 'person@example.test' }, error: null },
+      { data: { connected: true, email: 'person@example.test', scopes: ['https://www.googleapis.com/auth/drive.file'] }, error: null },
       {
         data: {
           connected: true,

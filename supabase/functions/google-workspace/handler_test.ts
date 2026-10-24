@@ -294,7 +294,7 @@ Deno.test('Drive-only connection cannot read Gmail without explicit Gmail consen
 Deno.test('Gmail list and preview require a Gmail grant and never expose refresh tokens', async () => {
   const requests: string[] = [];
   const harness = createHarness({
-    fetcher: async (input, init) => {
+    fetcher: async (input) => {
       const url = String(input);
       requests.push(url);
       if (url === 'https://oauth2.googleapis.com/token') {

@@ -475,8 +475,16 @@ function findInlinePlainTextBody(payload: unknown): string | null {
     if (!isRecord(value) || depth > 16 || ++visited > 256) return null;
     const filename = typeof value.filename === 'string' ? value.filename : '';
     const mimeType = typeof value.mimeType === 'string' ? value.mimeType.toLowerCase() : '';
+    const headers = Array.isArray(value.headers) ? value.headers : [];
+    const disposition = headers.find((header) =>
+      isRecord(header) && typeof header.name === 'string' &&
+      header.name.toLowerCase() === 'content-disposition'
+    );
+    const isAttachment = isRecord(disposition) && typeof disposition.value === 'string' &&
+      /^\\s*attachment\\b/i.test(disposition.value);
+    if (filename.trim() || isAttachment) return null;
     const body = isRecord(value.body) ? value.body : null;
-    if (!filename && mimeType === 'text/plain' && body &&
+    if (mimeType === 'text/plain' && body &&
       typeof body.data === 'string' && body.data.length > 0) {
       return body.data;
     }

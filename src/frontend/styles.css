@@ -1558,8 +1558,15 @@ select:focus {
   font-size: 16px;
 }
 
+
 .google-workspace__description,
 .google-workspace__empty,
+.google-workspace__scope-note {
+  margin: 0;
+  color: #65746b;
+  font-size: 12px;
+  line-height: 1.6;
+}
 
 .google-workspace__preview {
   display: grid;
@@ -1596,12 +1603,6 @@ select:focus {
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-.google-workspace__scope-note {
-  margin: 0;
-  color: #65746b;
-  font-size: 12px;
-  line-height: 1.6;
 }
 
 .google-workspace__connection,

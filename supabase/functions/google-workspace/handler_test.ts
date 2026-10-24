@@ -307,8 +307,8 @@ Deno.test('incremental Gmail consent preserves the existing Drive refresh token 
   const updated = harness.connections.get(harness.key());
   assertEquals(updated?.refresh_secret_id, priorSecretId);
   assertEquals(harness.secrets.get(priorSecretId), priorSecret);
-  assert(updated?.granted_scopes.includes('https://www.googleapis.com/auth/drive.file') ?? false);
-  assert(updated?.granted_scopes.includes('https://www.googleapis.com/auth/gmail.readonly') ?? false);
+  assert(updated?.granted_scopes.includes('https://www.googleapis.com/auth/drive.file') ?? false, 'Incremental Gmail consent must preserve Drive access.');
+  assert(updated?.granted_scopes.includes('https://www.googleapis.com/auth/gmail.readonly') ?? false, 'Incremental consent must add Gmail read-only access.');
 });
 
 Deno.test('Drive-only connection cannot read Gmail without explicit Gmail consent', async () => {

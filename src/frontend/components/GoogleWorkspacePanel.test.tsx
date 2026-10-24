@@ -150,15 +150,20 @@ describe('GoogleWorkspacePanel', () => {
       data: [{ id: 'planning-task-1', title: 'Review the budget', status: 'Planning' }],
       error: null,
     });
-    const upload = vi.fn(async (storagePath: string, _file: File, _options: { contentType: string; upsert: boolean }) => ({
-      data: { path: storagePath },
-      error: null,
-    }));
-    const remove = vi.fn(async (_paths: string[]) => ({ data: [], error: null }));
-    const rpc = vi.fn(async (_name: string, _args: Record<string, unknown>) => ({
-      data: 'registered-file-id',
-      error: null,
-    }));
+    const upload = vi.fn(async (storagePath: string, file: File, options: { contentType: string; upsert: boolean }) => {
+      void file;
+      void options;
+      return { data: { path: storagePath }, error: null };
+    });
+    const remove = vi.fn(async (paths: string[]) => {
+      void paths;
+      return { data: [], error: null };
+    });
+    const rpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      void name;
+      void args;
+      return { data: 'registered-file-id', error: null };
+    });
     const client = {
       functions: { invoke },
       from: vi.fn(() => taskChain),
@@ -239,15 +244,20 @@ describe('GoogleWorkspacePanel', () => {
       data: [{ id: 'planning-task-2', title: 'Review vendors', status: 'Planning' }],
       error: null,
     });
-    const upload = vi.fn(async (storagePath: string, _file: File, _options: { contentType: string; upsert: boolean }) => ({
-      data: { path: storagePath },
-      error: null,
-    }));
-    const remove = vi.fn(async (_paths: string[]) => ({ data: [], error: null }));
-    const rpc = vi.fn(async (_name: string, _args: Record<string, unknown>) => ({
-      data: null,
-      error: { message: 'private detail' },
-    }));
+    const upload = vi.fn(async (storagePath: string, file: File, options: { contentType: string; upsert: boolean }) => {
+      void file;
+      void options;
+      return { data: { path: storagePath }, error: null };
+    });
+    const remove = vi.fn(async (paths: string[]) => {
+      void paths;
+      return { data: [], error: null };
+    });
+    const rpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      void name;
+      void args;
+      return { data: null, error: { message: 'private detail' } };
+    });
     const client = {
       functions: { invoke },
       from: vi.fn(() => taskChain),

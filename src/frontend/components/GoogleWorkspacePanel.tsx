@@ -92,7 +92,7 @@ export function GoogleWorkspacePanel({
     const result = new URL(window.location.href).searchParams.get('google_connection');
     if (!result) return '';
     const messages: Record<string, string> = {
-      connected: 'Google connected. Return to the panel to use the services you authorized.',
+      connected: 'Google Workspace is connected. Return to the panel to use the services you authorized.',
       gmail_connected: 'Gmail read-only access connected. You can now list and preview messages.',
       denied: 'Google authorization was cancelled.',
       expired: 'The Google authorization link expired or was already used. Start a new connection attempt.',

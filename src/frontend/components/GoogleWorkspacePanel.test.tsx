@@ -20,7 +20,7 @@ describe('GoogleWorkspacePanel', () => {
 
   it('loads connection status and lists only safe Drive metadata', async () => {
     const { client, invoke } = createClient([
-      { data: { connected: true, email: 'person@example.test', connectedAt: '2026-10-23T10:00:00.000Z', scopes: ['drive.file'] }, error: null },
+      { data: { connected: true, email: 'person@example.test', connectedAt: '2026-10-23T10:00:00.000Z', scopes: ['https://www.googleapis.com/auth/drive.file'] }, error: null },
       {
         data: {
           connected: true,
@@ -64,7 +64,7 @@ describe('GoogleWorkspacePanel', () => {
 
   it('previews supported Drive text only after an explicit user click', async () => {
     const { client, invoke } = createClient([
-      { data: { connected: true, email: 'person@example.test' }, error: null },
+      { data: { connected: true, email: 'person@example.test', scopes: ['https://www.googleapis.com/auth/drive.file'] }, error: null },
       {
         data: {
           connected: true,
@@ -108,7 +108,7 @@ describe('GoogleWorkspacePanel', () => {
 
   it('imports selected Drive text into a user-selected Planning workflow', async () => {
     const invoke = vi.fn()
-      .mockResolvedValueOnce({ data: { connected: true, email: 'person@example.test' }, error: null })
+      .mockResolvedValueOnce({ data: { connected: true, email: 'person@example.test', scopes: ['https://www.googleapis.com/auth/drive.file'] }, error: null })
       .mockResolvedValueOnce({
         data: {
           connected: true,
@@ -203,7 +203,7 @@ describe('GoogleWorkspacePanel', () => {
 
   it('removes an uploaded Drive copy if secure attachment registration fails', async () => {
     const invoke = vi.fn()
-      .mockResolvedValueOnce({ data: { connected: true }, error: null })
+      .mockResolvedValueOnce({ data: { connected: true, scopes: ['https://www.googleapis.com/auth/drive.file'] }, error: null })
       .mockResolvedValueOnce({
         data: {
           connected: true,
@@ -277,11 +277,85 @@ describe('GoogleWorkspacePanel', () => {
     expect(remove).toHaveBeenCalledWith([expect.stringContaining(workspaceId + '/planning-task-2/')]);
   });
 
+  it('lists and previews Gmail only after separate read-only consent', async () => {
+    const gmailScope = 'https://www.googleapis.com/auth/gmail.readonly';
+    const { client, invoke } = createClient([
+      {
+        data: {
+          connected: true,
+          email: 'person@example.test',
+          scopes: ['openid', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile', gmailScope],
+        },
+        error: null,
+      },
+      {
+        data: {
+          connected: true,
+          messages: [{
+            id: 'gmail-message-1',
+            threadId: 'gmail-thread-1',
+            subject: 'October invoice',
+            from: 'vendor@example.test',
+            date: '2026-10-23T10:00:00.000Z',
+            snippet: 'Invoice snippet',
+            labelIds: ['INBOX'],
+          }],
+          nextPageToken: null,
+        },
+        error: null,
+      },
+      {
+        data: {
+          connected: true,
+          preview: {
+            id: 'gmail-message-1',
+            threadId: 'gmail-thread-1',
+            subject: 'October invoice',
+            from: 'vendor@example.test',
+            date: '2026-10-23T10:00:00.000Z',
+            snippet: 'Invoice snippet',
+            labelIds: ['INBOX'],
+            content: 'Invoice total: 125.00',
+            contentSource: 'text/plain',
+          },
+        },
+        error: null,
+      },
+    ]);
+    render(<GoogleWorkspacePanel client={client} workspaceId={workspaceId} canAccessWorkspace />);
+
+    expect(await screen.findByRole('button', { name: 'List recent Gmail messages' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'List Drive files' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Connect Drive access' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'List recent Gmail messages' }));
+    expect(await screen.findByText('October invoice')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview message' }));
+
+    const preview = await screen.findByRole('region', { name: 'Gmail message preview' });
+    expect(preview).toHaveTextContent('vendor@example.test');
+    expect(preview).toHaveTextContent('Invoice total: 125.00');
+    expect(invoke).toHaveBeenNthCalledWith(2, 'google-workspace', {
+      body: { action: 'list_gmail', workspaceId, pageSize: 10 },
+    });
+    expect(invoke).toHaveBeenNthCalledWith(3, 'google-workspace', {
+      body: { action: 'preview_gmail_message', workspaceId, messageId: 'gmail-message-1' },
+    });
+  });
+
+  it('offers Gmail as a separate consent action when no Google account is connected', async () => {
+    const { client } = createClient([{ data: { connected: false, scopes: [] }, error: null }]);
+    render(<GoogleWorkspacePanel client={client} workspaceId={workspaceId} canAccessWorkspace />);
+
+    expect(await screen.findByRole('button', { name: 'Connect Google Drive' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Connect Gmail read-only' })).toBeInTheDocument();
+  });
+
   it('shows a connect action when no account is linked and access is available', async () => {
     const { client, invoke } = createClient([{ data: { connected: false }, error: null }]);
     render(<GoogleWorkspacePanel client={client} workspaceId={workspaceId} canAccessWorkspace />);
 
-    expect(await screen.findByRole('button', { name: 'Connect Google account' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Connect Google Drive' })).toBeInTheDocument();
     expect(invoke).toHaveBeenCalledWith('google-workspace', { body: { action: 'status', workspaceId } });
   });
 
@@ -290,7 +364,7 @@ describe('GoogleWorkspacePanel', () => {
     render(<GoogleWorkspacePanel client={client} workspaceId={workspaceId} canAccessWorkspace={false} />);
 
     expect(await screen.findByText(/Workspace access is required to connect/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Connect Google account' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Connect Google Drive' })).not.toBeInTheDocument();
     expect(invoke).not.toHaveBeenCalled();
   });
 

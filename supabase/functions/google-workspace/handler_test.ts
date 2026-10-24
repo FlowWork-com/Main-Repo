@@ -4,7 +4,7 @@ import {
   type GoogleWorkspaceConnection,
   type GoogleWorkspaceEnvironment,
 } from './handler.ts';
-import { GOOGLE_REQUIRED_SCOPES } from './provider.ts';
+import { GOOGLE_GMAIL_SCOPES, GOOGLE_REQUIRED_SCOPES } from './provider.ts';
 
 const userId = 'c1000000-0000-4000-8000-000000000001';
 const outsiderId = 'c1000000-0000-4000-8000-000000000002';
@@ -237,6 +237,160 @@ Deno.test('Drive preview rejects malformed IDs and does not call the provider fo
     workspaceId,
     fileId: '../other-user-file',
   }));
+  assertEquals(response.status, 400);
+  assertEquals(externalCalls, 0);
+});
+
+Deno.test('Gmail authorization is explicit, separate from Drive, and recorded in single-use state', async () => {
+  const harness = createHarness({
+    fetcher: async (input) => {
+      if (String(input) === 'https://oauth2.googleapis.com/token') {
+        return Response.json({
+          access_token: 'short-lived-gmail-token',
+          refresh_token: 'gmail-refresh-token',
+          scope: GOOGLE_GMAIL_SCOPES.join(' '),
+        });
+      }
+      if (String(input) === 'https://openidconnect.googleapis.com/v1/userinfo') {
+        return Response.json({ sub: 'google-subject', email: 'person@example.test', email_verified: true });
+      }
+      throw new Error('Unexpected external request.');
+    },
+  });
+  const started = await harness.handler(harness.post({ action: 'connect_gmail', workspaceId }));
+  assertEquals(started.status, 200);
+  const body = asRecord(await started.json());
+  const authorizationUrl = new URL(String(body.authorizationUrl));
+  assertEquals(authorizationUrl.searchParams.get('scope'), GOOGLE_GMAIL_SCOPES.join(' '));
+  assert(!(authorizationUrl.searchParams.get('scope') ?? '').includes(GOOGLE_REQUIRED_SCOPES[3]),
+    'Gmail-only authorization must not ask for Drive scope.');
+  const state = [...harness.states.values()][0];
+  assertEquals(state.requested_scope_set, 'gmail');
+
+  const callback = await harness.handler(new Request(
+    `https://project.example/functions/v1/google-workspace?state=${authorizationUrl.searchParams.get('state')}&code=gmail-code`,
+  ));
+  assertEquals(new URL(callback.headers.get('location') ?? '').searchParams.get('google_connection'), 'gmail_connected');
+  const connection = harness.connections.get(harness.key());
+  assertEquals(connection?.granted_scopes, [...GOOGLE_GMAIL_SCOPES]);
+});
+
+Deno.test('incremental Gmail consent preserves the existing Drive refresh token when Google omits a new one', async () => {
+  const harness = createHarness({
+    fetcher: async (input) => {
+      if (String(input) === 'https://oauth2.googleapis.com/token') {
+        return Response.json({
+          access_token: 'short-lived-combined-token',
+          scope: [...GOOGLE_REQUIRED_SCOPES, 'https://www.googleapis.com/auth/gmail.readonly'].join(' '),
+        });
+      }
+      if (String(input) === 'https://openidconnect.googleapis.com/v1/userinfo') {
+        return Response.json({ sub: 'google-subject', email: 'person@example.test', email_verified: true });
+      }
+      throw new Error('Unexpected external request.');
+    },
+  });
+  await harness.addConnection();
+  const prior = harness.connections.get(harness.key());
+  if (!prior) throw new Error('Fixture Drive connection missing.');
+  const priorSecretId = prior.refresh_secret_id;
+  const priorSecret = harness.secrets.get(priorSecretId);
+
+  const started = await harness.handler(harness.post({ action: 'connect_gmail', workspaceId }));
+  const startedBody = asRecord(await started.json());
+  const authorizationUrl = new URL(String(startedBody.authorizationUrl));
+  const callback = await harness.handler(new Request(
+    `https://project.example/functions/v1/google-workspace?state=${authorizationUrl.searchParams.get('state')}&code=gmail-code`,
+  ));
+  assertEquals(new URL(callback.headers.get('location') ?? '').searchParams.get('google_connection'), 'gmail_connected');
+
+  const updated = harness.connections.get(harness.key());
+  assertEquals(updated?.refresh_secret_id, priorSecretId);
+  assertEquals(harness.secrets.get(priorSecretId), priorSecret);
+  assert(updated?.granted_scopes.includes('https://www.googleapis.com/auth/drive.file') ?? false, 'Incremental Gmail consent must preserve Drive access.');
+  assert(updated?.granted_scopes.includes('https://www.googleapis.com/auth/gmail.readonly') ?? false, 'Incremental consent must add Gmail read-only access.');
+});
+
+Deno.test('Drive-only connection cannot read Gmail without explicit Gmail consent', async () => {
+  let externalCalls = 0;
+  const harness = createHarness({
+    fetcher: async () => {
+      externalCalls += 1;
+      return Response.json({ access_token: 'token' });
+    },
+  });
+  await harness.addConnection();
+  const response = await harness.handler(harness.post({ action: 'list_gmail', workspaceId }));
+  assertEquals(response.status, 409);
+  const body = asRecord(await response.json());
+  assertEquals(asRecord(body.error).code, 'GOOGLE_GMAIL_RECONNECT_REQUIRED');
+  assertEquals(externalCalls, 0);
+});
+
+Deno.test('Gmail list and preview require a Gmail grant and never expose refresh tokens', async () => {
+  const requests: string[] = [];
+  const harness = createHarness({
+    fetcher: async (input) => {
+      const url = String(input);
+      requests.push(url);
+      if (url === 'https://oauth2.googleapis.com/token') {
+        return Response.json({ access_token: 'short-lived-gmail-token', expires_in: 3600, token_type: 'Bearer' });
+      }
+      if (url.startsWith('https://gmail.googleapis.com/gmail/v1/users/me/messages?')) {
+        return Response.json({ messages: [{ id: 'msg-1', threadId: 'thread-1' }] });
+      }
+      if (url.includes('/messages/msg-1?') && url.includes('format=metadata')) {
+        return Response.json({
+          id: 'msg-1', threadId: 'thread-1', snippet: 'Invoice snippet', internalDate: '1792742400000', labelIds: ['INBOX'],
+          payload: { headers: [
+            { name: 'From', value: 'vendor@example.test' },
+            { name: 'Subject', value: 'October invoice' },
+            { name: 'Date', value: 'Thu, 23 Oct 2026 10:00:00 +0000' },
+          ] },
+        });
+      }
+      if (url.includes('/messages/msg-1?') && url.includes('format=full')) {
+        return Response.json({
+          id: 'msg-1', threadId: 'thread-1', snippet: 'Invoice snippet', internalDate: '1792742400000', labelIds: ['INBOX'],
+          payload: { mimeType: 'text/plain', headers: [
+            { name: 'From', value: 'vendor@example.test' },
+            { name: 'Subject', value: 'October invoice' },
+          ], body: { data: 'SW52b2ljZSB0b3RhbDogMTI1LjAw' } },
+        });
+      }
+      throw new Error('Unexpected external request.');
+    },
+  });
+  await harness.addConnection();
+  const existing = harness.connections.get(harness.key());
+  if (!existing) throw new Error('Fixture connection missing.');
+  harness.connections.set(harness.key(), { ...existing, granted_scopes: [...GOOGLE_GMAIL_SCOPES] });
+
+  const listed = await harness.handler(harness.post({ action: 'list_gmail', workspaceId, pageSize: 10 }));
+  const listBody = asRecord(await listed.json());
+  assertEquals(listed.status, 200);
+  assertEquals((listBody.messages as Array<Record<string, unknown>>)[0].subject, 'October invoice');
+  assert(!JSON.stringify(listBody).includes('refresh-token'), 'Refresh token must not reach the browser.');
+
+  const previewed = await harness.handler(harness.post({ action: 'preview_gmail_message', workspaceId, messageId: 'msg-1' }));
+  const previewBody = asRecord(await previewed.json());
+  const preview = asRecord(previewBody.preview);
+  assertEquals(previewed.status, 200);
+  assertEquals(preview.subject, 'October invoice');
+  assertEquals(preview.content, 'Invoice total: 125.00');
+  assertEquals(preview.contentSource, 'text/plain');
+  assert(!JSON.stringify(previewBody).includes('refresh-token'), 'Refresh token must never be returned.');
+  assert(requests.every((url) => !url.includes('/send') && !url.includes('/modify') && !url.includes('/trash')),
+    'Read-only Gmail flow must not call mutation endpoints.');
+});
+
+Deno.test('Gmail preview rejects malformed IDs before external requests', async () => {
+  let externalCalls = 0;
+  const harness = createHarness({ fetcher: async () => {
+    externalCalls += 1;
+    return Response.json({});
+  } });
+  const response = await harness.handler(harness.post({ action: 'preview_gmail_message', workspaceId, messageId: '../other-user' }));
   assertEquals(response.status, 400);
   assertEquals(externalCalls, 0);
 });

@@ -1,6 +1,6 @@
 begin;
 
-select plan(10);
+select plan(12);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -131,6 +131,32 @@ select throws_ok(
   '42501',
   'permission denied for function read_google_workspace_secret',
   'authenticated users cannot read Google OAuth secrets from Vault'
+);
+
+reset role;
+
+select lives_ok(
+  $$ update public.workspace_google_connections
+     set granted_scopes = array[
+       'openid',
+       'https://www.googleapis.com/auth/userinfo.email',
+       'https://www.googleapis.com/auth/userinfo.profile',
+       'https://www.googleapis.com/auth/gmail.readonly'
+     ]::text[]
+     where id = 'c3000000-0000-4000-8000-000000000001' $$,
+  'a Gmail-only connection is permitted after explicit gmail.readonly consent'
+);
+
+select lives_ok(
+  $$ update public.workspace_google_connections
+     set granted_scopes = array[
+       'openid',
+       'https://www.googleapis.com/auth/userinfo.email',
+       'https://www.googleapis.com/auth/userinfo.profile',
+       'https://www.googleapis.com/auth/drive.file'
+     ]::text[]
+     where id = 'c3000000-0000-4000-8000-000000000001' $$,
+  'a Drive-only connection remains valid without Gmail consent'
 );
 
 reset role;

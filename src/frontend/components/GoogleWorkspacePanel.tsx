@@ -28,12 +28,30 @@ interface PlanningTaskOption {
   readonly title: string;
 }
 
+interface GoogleGmailMessageSummary {
+  readonly id: string;
+  readonly threadId: string | null;
+  readonly subject: string;
+  readonly from: string;
+  readonly date: string | null;
+  readonly snippet: string;
+  readonly labelIds: readonly string[];
+}
+
+interface GoogleGmailMessagePreview extends GoogleGmailMessageSummary {
+  readonly content: string;
+  readonly contentSource: 'text/plain' | 'snippet';
+}
+
 interface GoogleConnectionStatus {
   readonly connected: boolean;
   readonly email: string | null;
   readonly connectedAt: string | null;
   readonly scopes: readonly string[];
 }
+
+const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const GOOGLE_GMAIL_READONLY_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 
 interface GoogleWorkspacePanelProps {
   readonly client: SupabaseClient;
@@ -55,6 +73,11 @@ export function GoogleWorkspacePanel({
   const [files, setFiles] = useState<GoogleDriveFile[]>([]);
   const [nextPageToken, setNextPageToken] = useState<string | null>(null);
   const [preview, setPreview] = useState<GoogleDriveFilePreview | null>(null);
+  const [gmailMessages, setGmailMessages] = useState<GoogleGmailMessageSummary[]>([]);
+  const [gmailNextPageToken, setGmailNextPageToken] = useState<string | null>(null);
+  const [gmailMessagesLoading, setGmailMessagesLoading] = useState(false);
+  const [gmailPreview, setGmailPreview] = useState<GoogleGmailMessagePreview | null>(null);
+  const [gmailPreviewLoadingId, setGmailPreviewLoadingId] = useState<string | null>(null);
   const [previewLoadingId, setPreviewLoadingId] = useState<string | null>(null);
   const [importPanelOpen, setImportPanelOpen] = useState(false);
   const [planningTasks, setPlanningTasks] = useState<PlanningTaskOption[]>([]);
@@ -69,7 +92,8 @@ export function GoogleWorkspacePanel({
     const result = new URL(window.location.href).searchParams.get('google_connection');
     if (!result) return '';
     const messages: Record<string, string> = {
-      connected: 'Google Workspace is connected. You can list accessible Drive file metadata.',
+      connected: 'Google Workspace is connected. Return to the panel to use the services you authorized.',
+      gmail_connected: 'Gmail read-only access connected. You can now list and preview messages.',
       denied: 'Google authorization was cancelled.',
       expired: 'The Google authorization link expired or was already used. Start a new connection attempt.',
       error: 'Google authorization could not be completed. Check configuration and try again.',
@@ -133,6 +157,29 @@ export function GoogleWorkspacePanel({
     }
   }
 
+  async function connectGmail() {
+    if (!canAccessWorkspace || busy) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const { data, error: invokeError } = await client.functions.invoke<unknown>('google-workspace', {
+        body: { action: 'connect_gmail', workspaceId },
+      });
+      if (invokeError || !isRecord(data) || typeof data.authorizationUrl !== 'string') {
+        throw new Error('Gmail authorization is unavailable.');
+      }
+      const authorizationUrl = new URL(data.authorizationUrl);
+      if (authorizationUrl.protocol !== 'https:' || authorizationUrl.hostname !== 'accounts.google.com') {
+        throw new Error('Google authorization endpoint is invalid.');
+      }
+      window.location.assign(authorizationUrl.toString());
+    } catch {
+      setError('Unable to start Gmail read-only authorization. Confirm Google OAuth configuration and try again.');
+      setBusy(false);
+    }
+  }
+
   async function disconnect() {
     if (!canAccessWorkspace || busy) return;
     setBusy(true);
@@ -149,6 +196,9 @@ export function GoogleWorkspacePanel({
       setFiles([]);
       setNextPageToken(null);
       setPreview(null);
+      setGmailMessages([]);
+      setGmailNextPageToken(null);
+      setGmailPreview(null);
       setImportPanelOpen(false);
       setPlanningTasks([]);
       setSelectedTaskId('');
@@ -225,6 +275,81 @@ export function GoogleWorkspacePanel({
       setError('Unable to preview this Drive file. Open it in Google Drive if preview is unsupported.');
     } finally {
       setPreviewLoadingId(null);
+    }
+  }
+
+  async function loadGmailMessages(pageToken?: string | null) {
+    if (!canAccessWorkspace || !connection.connected ||
+      !connection.scopes.includes(GOOGLE_GMAIL_READONLY_SCOPE) || gmailMessagesLoading) return;
+    setGmailMessagesLoading(true);
+    setError('');
+    try {
+      const body: Record<string, unknown> = { action: 'list_gmail', workspaceId, pageSize: 10 };
+      if (pageToken) body.pageToken = pageToken;
+      const { data, error: invokeError } = await client.functions.invoke<unknown>('google-workspace', { body });
+      if (invokeError || !isRecord(data) || data.connected !== true || !Array.isArray(data.messages)) {
+        throw new Error('Gmail list is unavailable.');
+      }
+      const parsed = data.messages.flatMap((candidate): GoogleGmailMessageSummary[] => {
+        if (!isRecord(candidate) || typeof candidate.id !== 'string' || !candidate.id ||
+          typeof candidate.subject !== 'string' || typeof candidate.from !== 'string' ||
+          typeof candidate.snippet !== 'string') return [];
+        return [{
+          id: candidate.id,
+          threadId: typeof candidate.threadId === 'string' ? candidate.threadId : null,
+          subject: candidate.subject.slice(0, 500),
+          from: candidate.from.slice(0, 500),
+          date: typeof candidate.date === 'string' ? candidate.date : null,
+          snippet: candidate.snippet.slice(0, 1200),
+          labelIds: Array.isArray(candidate.labelIds)
+            ? candidate.labelIds.filter((label): label is string => typeof label === 'string').slice(0, 25)
+            : [],
+        }];
+      });
+      setGmailMessages((current) => pageToken ? [...current, ...parsed] : parsed);
+      setGmailNextPageToken(typeof data.nextPageToken === 'string' ? data.nextPageToken : null);
+    } catch {
+      setError('Unable to list Gmail messages. Connect Gmail read-only access or reconnect if authorization has expired.');
+    } finally {
+      setGmailMessagesLoading(false);
+    }
+  }
+
+  async function loadGmailPreview(message: GoogleGmailMessageSummary) {
+    if (!canAccessWorkspace || !connection.connected ||
+      !connection.scopes.includes(GOOGLE_GMAIL_READONLY_SCOPE) || gmailPreviewLoadingId) return;
+    setGmailPreviewLoadingId(message.id);
+    setError('');
+    setNotice('');
+    setGmailPreview(null);
+    try {
+      const { data, error: invokeError } = await client.functions.invoke<unknown>('google-workspace', {
+        body: { action: 'preview_gmail_message', workspaceId, messageId: message.id },
+      });
+      if (invokeError || !isRecord(data) || data.connected !== true || !isRecord(data.preview) ||
+        data.preview.id !== message.id || typeof data.preview.subject !== 'string' ||
+        typeof data.preview.from !== 'string' || typeof data.preview.content !== 'string' ||
+        data.preview.content.length > 64 * 1024 ||
+        (data.preview.contentSource !== 'text/plain' && data.preview.contentSource !== 'snippet')) {
+        throw new Error('Gmail preview is unavailable.');
+      }
+      setGmailPreview({
+        id: message.id,
+        threadId: typeof data.preview.threadId === 'string' ? data.preview.threadId : null,
+        subject: data.preview.subject.slice(0, 500),
+        from: data.preview.from.slice(0, 500),
+        date: typeof data.preview.date === 'string' ? data.preview.date : null,
+        snippet: typeof data.preview.snippet === 'string' ? data.preview.snippet.slice(0, 1200) : '',
+        labelIds: Array.isArray(data.preview.labelIds)
+          ? data.preview.labelIds.filter((label): label is string => typeof label === 'string').slice(0, 25)
+          : [],
+        content: data.preview.content,
+        contentSource: data.preview.contentSource,
+      });
+    } catch {
+      setError('Unable to preview this Gmail message. Reconnect Gmail read-only access and try again.');
+    } finally {
+      setGmailPreviewLoadingId(null);
     }
   }
 
@@ -343,15 +468,26 @@ Connect Google to list Drive metadata and preview supported text. When you expli
           </p>
           {canAccessWorkspace && (
             <div className="task-actions">
-              <button className="button button--secondary" disabled={busy || filesLoading} onClick={() => void loadFiles(null)} type="button">
-                {filesLoading ? 'Loading files…' : 'List Drive files'}
-              </button>
+              {connection.scopes.includes(GOOGLE_DRIVE_SCOPE) ? (
+                <button className="button button--secondary" disabled={busy || filesLoading} onClick={() => void loadFiles(null)} type="button">
+                  {filesLoading ? 'Loading files…' : 'List Drive files'}
+                </button>
+              ) : (
+                <button className="button button--secondary" disabled={busy} onClick={() => void connect()} type="button">
+                  Connect Drive access
+                </button>
+              )}
+              {!connection.scopes.includes(GOOGLE_GMAIL_READONLY_SCOPE) && (
+                <button className="button button--secondary" disabled={busy} onClick={() => void connectGmail()} type="button">
+                  Connect Gmail read-only
+                </button>
+              )}
               <button className="button button--quiet" disabled={busy} onClick={() => void disconnect()} type="button">
-                Disconnect
+                Disconnect all Google access
               </button>
             </div>
           )}
-          {files.length > 0 && (
+          {connection.scopes.includes(GOOGLE_DRIVE_SCOPE) && files.length > 0 && (
             <ul className="google-workspace__files">
               {files.map((file) => (
                 <li key={file.id} className="google-workspace__file">
@@ -378,7 +514,7 @@ Connect Google to list Drive metadata and preview supported text. When you expli
               ))}
             </ul>
           )}
-          {files.length === 0 && !filesLoading && (
+          {connection.scopes.includes(GOOGLE_DRIVE_SCOPE) && files.length === 0 && !filesLoading && (
             <p className="google-workspace__empty">No Drive files loaded yet. Listing returns metadata for files that Google makes available to this app.</p>
           )}
           {preview && (
@@ -445,6 +581,68 @@ Connect Google to list Drive metadata and preview supported text. When you expli
               )}
             </section>
           )}
+          {connection.scopes.includes(GOOGLE_GMAIL_READONLY_SCOPE) ? (
+            <section className="google-workspace__gmail" aria-label="Gmail read-only">
+              <div className="google-workspace__gmail-heading">
+                <div>
+                  <h4>Gmail</h4>
+                  <p className="google-workspace__scope-note">Read-only access. FlowWork will not send, edit, label, archive, or delete email.</p>
+                </div>
+                <button className="button button--secondary" disabled={gmailMessagesLoading || busy || Boolean(gmailPreviewLoadingId)} onClick={() => void loadGmailMessages(null)} type="button">
+                  {gmailMessagesLoading ? 'Loading messages…' : 'List recent Gmail messages'}
+                </button>
+              </div>
+              {gmailMessages.length > 0 && (
+                <ul className="google-workspace__files">
+                  {gmailMessages.map((message) => (
+                    <li key={message.id} className="google-workspace__file">
+                      <div className="google-workspace__file-main">
+                        <strong>{message.subject || '(No subject)'}</strong>
+                        <span>{message.from}</span>
+                        {message.date && <small>{new Date(message.date).toLocaleString()}</small>}
+                        {message.snippet && <p className="google-workspace__scope-note">{message.snippet}</p>}
+                        <button className="button button--quiet" disabled={Boolean(gmailPreviewLoadingId) || busy} onClick={() => void loadGmailPreview(message)} type="button">
+                          {gmailPreviewLoadingId === message.id ? 'Loading message…' : 'Preview message'}
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {gmailMessages.length === 0 && !gmailMessagesLoading && (
+                <p className="google-workspace__empty">No recent inbox messages loaded. Choose “List recent Gmail messages” to fetch metadata.</p>
+              )}
+              {gmailNextPageToken && (
+                <button className="button button--secondary" disabled={gmailMessagesLoading} onClick={() => void loadGmailMessages(gmailNextPageToken)} type="button">
+                  {gmailMessagesLoading ? 'Loading…' : 'Load more Gmail messages'}
+                </button>
+              )}
+              {gmailPreview && (
+                <section className="google-workspace__preview" aria-label="Gmail message preview">
+                  <header>
+                    <strong>{gmailPreview.subject}</strong>
+                    <span>{gmailPreview.from}</span>
+                    <button className="button button--quiet" onClick={() => setGmailPreview(null)} type="button">Close message</button>
+                  </header>
+                  {gmailPreview.date && <small>{new Date(gmailPreview.date).toLocaleString()}</small>}
+                  <pre>{gmailPreview.content || '(No plain-text body or snippet available.)'}</pre>
+                  <p className="google-workspace__scope-note">
+                    {gmailPreview.contentSource === 'snippet'
+                      ? 'Only Gmail’s message snippet is available; a plain-text body was not found. Attachments are not opened.'
+                      : 'Temporary plain-text preview. Message content is not saved to task history or sent to the planner.'}
+                  </p>
+                </section>
+              )}
+            </section>
+          ) : (
+            <section className="google-workspace__gmail" aria-label="Gmail read-only">
+              <h4>Gmail</h4>
+              <p className="google-workspace__scope-note">Gmail has not been authorized for this workspace connection. It uses a separate restricted read-only scope.</p>
+              <button className="button button--secondary" disabled={busy} onClick={() => void connectGmail()} type="button">
+                Connect Gmail read-only
+              </button>
+            </section>
+          )}
           {nextPageToken && (
             <button className="button button--secondary" disabled={filesLoading} onClick={() => void loadFiles(nextPageToken)} type="button">
               {filesLoading ? 'Loading…' : 'Load more files'}
@@ -459,9 +657,14 @@ Connect Google to list Drive metadata and preview supported text. When you expli
               : 'Workspace access is required to connect an account.'}
           </p>
           {canAccessWorkspace && (
-            <button className="button" disabled={busy} onClick={() => void connect()} type="button">
-              {busy ? 'Connecting…' : 'Connect Google account'}
-            </button>
+            <div className="task-actions">
+              <button className="button" disabled={busy} onClick={() => void connect()} type="button">
+                {busy ? 'Connecting…' : 'Connect Google Drive'}
+              </button>
+              <button className="button button--secondary" disabled={busy} onClick={() => void connectGmail()} type="button">
+                {busy ? 'Connecting…' : 'Connect Gmail read-only'}
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -469,7 +672,7 @@ Connect Google to list Drive metadata and preview supported text. When you expli
       {notice && <p className="notice" role="status">{notice}</p>}
       {error && <p className="error-message" role="alert">{error}</p>}
       <p className="google-workspace__scope-note">
-        Google OAuth credentials and refresh tokens are server-only. File listing uses the limited Drive `drive.file` scope; no credentials are placed in the browser.
+        Google OAuth credentials and refresh tokens remain server-only. Drive and Gmail scopes are granted separately; Gmail uses `gmail.readonly` and this UI exposes no email mutation actions.
       </p>
     </section>
   );

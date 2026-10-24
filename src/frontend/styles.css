@@ -1568,6 +1568,29 @@ select:focus {
   line-height: 1.6;
 }
 
+.google-workspace__gmail {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid #d8e2dc;
+}
+
+.google-workspace__gmail-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.google-workspace__gmail-heading h4,
+.google-workspace__gmail h4 {
+  margin: 0;
+  color: #20372c;
+  font-size: 15px;
+}
+
 .google-workspace__preview {
   display: grid;
   gap: 12px;

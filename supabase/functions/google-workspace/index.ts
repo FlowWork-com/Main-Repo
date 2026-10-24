@@ -82,6 +82,7 @@ const handler = createGoogleWorkspaceHandler<SupabaseClient>({
       redirect_uri: state.redirect_uri,
       created_at: state.created_at,
       expires_at: state.expires_at,
+      requested_scope_set: state.requested_scope_set,
     });
     if (error) throw new Error('OAuth state persistence failed.');
   },
@@ -91,7 +92,7 @@ const handler = createGoogleWorkspaceHandler<SupabaseClient>({
       .update({ consumed_at: new Date().toISOString() })
       .eq('state_hash', stateHash)
       .is('consumed_at', null)
-      .select('state_hash, workspace_id, user_id, pkce_verifier_secret_id, redirect_uri, created_at, expires_at, consumed_at')
+      .select('state_hash, workspace_id, user_id, pkce_verifier_secret_id, redirect_uri, created_at, expires_at, consumed_at, requested_scope_set')
       .maybeSingle();
     if (error) throw new Error('OAuth state validation failed.');
     return data as GoogleOAuthState | null;

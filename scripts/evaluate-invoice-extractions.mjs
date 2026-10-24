@@ -38,7 +38,7 @@ function assertText(value, label, maxLength) {
 }
 
 function normalizeString(value) {
-  return value.normalize('NFC').trim().replace(/\\s+/gu, ' ');
+  return value.normalize('NFC').trim().replace(/\s+/gu, ' ');
 }
 
 function valuesMatch(field, predicted, expected) {
@@ -298,9 +298,9 @@ async function main() {
   try {
     const inputPath = parseInputPath(process.argv.slice(2));
     const dataset = await loadDatasetFile(inputPath);
-    process.stdout.write(`${JSON.stringify(evaluateDataset(dataset), null, 2)}\\n`);
+    process.stdout.write(`${JSON.stringify(evaluateDataset(dataset), null, 2)}\n`);
   } catch (error) {
-    process.stderr.write(`Invoice extraction evaluation failed: ${error instanceof Error ? error.message : 'Unknown error.'}\\n`);
+    process.stderr.write(`Invoice extraction evaluation failed: ${error instanceof Error ? error.message : 'Unknown error.'}\n`);
     process.exitCode = 1;
   }
 }

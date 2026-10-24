@@ -150,9 +150,15 @@ describe('GoogleWorkspacePanel', () => {
       data: [{ id: 'planning-task-1', title: 'Review the budget', status: 'Planning' }],
       error: null,
     });
-    const upload = vi.fn().mockResolvedValue({ data: { path: 'stored' }, error: null });
-    const remove = vi.fn().mockResolvedValue({ data: [], error: null });
-    const rpc = vi.fn().mockResolvedValue({ data: 'registered-file-id', error: null });
+    const upload = vi.fn(async (storagePath: string, _file: File, _options: { contentType: string; upsert: boolean }) => ({
+      data: { path: storagePath },
+      error: null,
+    }));
+    const remove = vi.fn(async (_paths: string[]) => ({ data: [], error: null }));
+    const rpc = vi.fn(async (_name: string, _args: Record<string, unknown>) => ({
+      data: 'registered-file-id',
+      error: null,
+    }));
     const client = {
       functions: { invoke },
       from: vi.fn(() => taskChain),
@@ -341,9 +347,15 @@ describe('GoogleWorkspacePanel', () => {
       data: [{ id: 'planning-task-2', title: 'Review vendors', status: 'Planning' }],
       error: null,
     });
-    const upload = vi.fn().mockResolvedValue({ data: { path: 'stored' }, error: null });
-    const remove = vi.fn().mockResolvedValue({ data: [], error: null });
-    const rpc = vi.fn().mockResolvedValue({ data: null, error: { message: 'private detail' } });
+    const upload = vi.fn(async (storagePath: string, _file: File, _options: { contentType: string; upsert: boolean }) => ({
+      data: { path: storagePath },
+      error: null,
+    }));
+    const remove = vi.fn(async (_paths: string[]) => ({ data: [], error: null }));
+    const rpc = vi.fn(async (_name: string, _args: Record<string, unknown>) => ({
+      data: null,
+      error: { message: 'private detail' },
+    }));
     const client = {
       functions: { invoke },
       from: vi.fn(() => taskChain),
@@ -357,7 +369,7 @@ describe('GoogleWorkspacePanel', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Import to a Planning workflow' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Import file' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/temporary copy was removed/);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/cleanup was attempted/);
     expect(screen.getByRole('alert')).not.toHaveTextContent('private detail');
     expect(upload).toHaveBeenCalledTimes(1);
     expect(remove).toHaveBeenCalledWith([expect.stringContaining(`${workspaceId}/planning-task-2/`)]);

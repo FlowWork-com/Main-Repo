@@ -389,8 +389,11 @@ export function createGoogleWorkspaceHandler<Context>(
           'Google Workspace OAuth refresh token; accessed only server-side for the scopes explicitly granted by the user.',
         );
         createdNewSecret = true;
-      } else if (prior && prior.google_subject === profile.subject &&
-        hasScopesForSet(prior.granted_scopes, stateRow.requested_scope_set)) {
+      } else if (prior && prior.google_subject === profile.subject) {
+        // Google may omit a replacement refresh token on incremental consent. The newly
+        // exchanged access token already proved the requested scope was granted; reuse the
+        // same-account refresh token so a Drive connection can add Gmail without breaking
+        // existing access.
         refreshSecretId = prior.refresh_secret_id;
       } else {
         dependencies.logFailure?.('GOOGLE_REFRESH_TOKEN_MISSING');

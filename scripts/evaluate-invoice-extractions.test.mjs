@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import process from 'node:process';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, URL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const scriptPath = fileURLToPath(new URL('./evaluate-invoice-extractions.mjs', import.meta.url));

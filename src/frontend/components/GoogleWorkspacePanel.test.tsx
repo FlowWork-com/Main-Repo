@@ -108,7 +108,7 @@ describe('GoogleWorkspacePanel', () => {
 
   it('imports selected Drive text into a user-selected Planning workflow', async () => {
     const invoke = vi.fn()
-      .mockResolvedValueOnce({ data: { connected: true, email: 'person@example.test' }, error: null })
+      .mockResolvedValueOnce({ data: { connected: true, email: 'person@example.test', scopes: ['https://www.googleapis.com/auth/drive.file'] }, error: null })
       .mockResolvedValueOnce({
         data: {
           connected: true,
@@ -203,7 +203,7 @@ describe('GoogleWorkspacePanel', () => {
 
   it('removes an uploaded Drive copy if secure attachment registration fails', async () => {
     const invoke = vi.fn()
-      .mockResolvedValueOnce({ data: { connected: true }, error: null })
+      .mockResolvedValueOnce({ data: { connected: true, scopes: ['https://www.googleapis.com/auth/drive.file'] }, error: null })
       .mockResolvedValueOnce({
         data: {
           connected: true,

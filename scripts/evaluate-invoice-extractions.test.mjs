@@ -1,17 +1,16 @@
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import process from 'node:process';
 import { join } from 'node:path';
-import { fileURLToPath, URL } from 'node:url';
+import process from 'node:process';
 import { afterEach, describe, expect, it } from 'vitest';
 
-const scriptPath = fileURLToPath(new URL('./evaluate-invoice-extractions.mjs', import.meta.url));
-const fixturePath = fileURLToPath(new URL('../fixtures/invoice-extraction/synthetic-smoke-v1.json', import.meta.url));
-const temporaryDirectories: string[] = [];
+const scriptPath = join(process.cwd(), 'scripts/evaluate-invoice-extractions.mjs');
+const fixturePath = join(process.cwd(), 'fixtures/invoice-extraction/synthetic-smoke-v1.json');
+const temporaryDirectories = [];
 
-function runEvaluator(dataset?: unknown) {
-  let inputPath: string | undefined;
+function runEvaluator(dataset) {
+  let inputPath;
   if (dataset !== undefined) {
     const directory = mkdtempSync(join(tmpdir(), 'flowwork-invoice-eval-'));
     temporaryDirectories.push(directory);
@@ -34,20 +33,7 @@ describe('invoice extraction evaluation runner', () => {
   it('scores the synthetic smoke fixture but clearly disclaims performance claims', () => {
     const result = runEvaluator();
     expect(result.status).toBe(0);
-    const report = JSON.parse(result.stdout) as {
-      dataset: { datasetType: string; recordCount: number };
-      summary: {
-        labeledFieldCount: number;
-        correct: number;
-        incorrect: number;
-        abstentions: number;
-        unexpectedValues: number;
-        accuracy: number;
-        coverage: number;
-      };
-      confidenceCalibration: unknown;
-      interpretation: string[];
-    };
+    const report = JSON.parse(result.stdout);
 
     expect(report.dataset).toMatchObject({ datasetType: 'synthetic-smoke', recordCount: 3 });
     expect(report.summary).toMatchObject({
@@ -66,13 +52,7 @@ describe('invoice extraction evaluation runner', () => {
   });
 
   it('computes confidence-band calibration summaries only for held-out human-reviewed labels', () => {
-    const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as {
-      datasetType: string;
-      split: string;
-      datasetId: string;
-      reviewProtocol: string;
-      records: Array<{ truthStatus: string }>;
-    };
+    const fixture = JSON.parse(readFileSync(fixturePath, 'utf8'));
     fixture.datasetId = 'held-out-test-only';
     fixture.datasetType = 'human-verified-holdout';
     fixture.split = 'held_out';
@@ -81,12 +61,7 @@ describe('invoice extraction evaluation runner', () => {
 
     const result = runEvaluator(fixture);
     expect(result.status).toBe(0);
-    const report = JSON.parse(result.stdout) as {
-      confidenceCalibration: {
-        expectedCalibrationError: number;
-        bins: Array<{ samples: number; smallSample: boolean; calibrationGap: number | null }>;
-      };
-    };
+    const report = JSON.parse(result.stdout);
     expect(report.confidenceCalibration.expectedCalibrationError).toBeGreaterThanOrEqual(0);
     expect(report.confidenceCalibration.expectedCalibrationError).toBeLessThanOrEqual(1);
     expect(report.confidenceCalibration.bins.reduce((total, bin) => total + bin.samples, 0)).toBe(24);
@@ -94,19 +69,15 @@ describe('invoice extraction evaluation runner', () => {
   });
 
   it('rejects duplicate case IDs and malformed confidence without emitting a report', () => {
-    const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as {
-      records: Array<{ caseId: string; prediction: Record<string, { value: string | number | null; confidenceEstimate: number }> }>;
-    };
-    fixture.records[1]!.caseId = fixture.records[0]!.caseId;
+    const fixture = JSON.parse(readFileSync(fixturePath, 'utf8'));
+    fixture.records[1].caseId = fixture.records[0].caseId;
     let result = runEvaluator(fixture);
     expect(result.status).not.toBe(0);
     expect(result.stderr).toMatch(/Duplicate caseId/);
     expect(result.stdout).toBe('');
 
-    const clean = JSON.parse(readFileSync(fixturePath, 'utf8')) as {
-      records: Array<{ prediction: Record<string, { value: string | number | null; confidenceEstimate: number }> }>;
-    };
-    clean.records[0]!.prediction.vendor!.confidenceEstimate = 1.5;
+    const clean = JSON.parse(readFileSync(fixturePath, 'utf8'));
+    clean.records[0].prediction.vendor.confidenceEstimate = 1.5;
     result = runEvaluator(clean);
     expect(result.status).not.toBe(0);
     expect(result.stderr).toMatch(/confidenceEstimate must be between 0 and 1/);

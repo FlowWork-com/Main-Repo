@@ -1560,6 +1560,43 @@ select:focus {
 
 .google-workspace__description,
 .google-workspace__empty,
+
+.google-workspace__preview {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid #d8e2dc;
+  border-radius: 12px;
+  background: #fbfdfb;
+}
+
+.google-workspace__preview header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.google-workspace__preview header span {
+  color: #65766e;
+  font-size: 12px;
+}
+
+.google-workspace__preview pre {
+  max-height: 320px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f1f5f2;
+  color: #20372c;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .google-workspace__scope-note {
   margin: 0;
   color: #65746b;

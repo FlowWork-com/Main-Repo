@@ -355,7 +355,7 @@ describe('GoogleWorkspacePanel', () => {
     const { client, invoke } = createClient([{ data: { connected: false }, error: null }]);
     render(<GoogleWorkspacePanel client={client} workspaceId={workspaceId} canAccessWorkspace />);
 
-    expect(await screen.findByRole('button', { name: 'Connect Google account' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Connect Google Drive' })).toBeInTheDocument();
     expect(invoke).toHaveBeenCalledWith('google-workspace', { body: { action: 'status', workspaceId } });
   });
 
@@ -364,7 +364,7 @@ describe('GoogleWorkspacePanel', () => {
     render(<GoogleWorkspacePanel client={client} workspaceId={workspaceId} canAccessWorkspace={false} />);
 
     expect(await screen.findByText(/Workspace access is required to connect/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Connect Google account' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Connect Google Drive' })).not.toBeInTheDocument();
     expect(invoke).not.toHaveBeenCalled();
   });
 

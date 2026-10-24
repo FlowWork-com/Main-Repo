@@ -300,8 +300,12 @@ export function GoogleWorkspacePanel({
         p_content_type: fileKind.contentType,
       });
       if (registered.error) {
-        await client.storage.from(TASK_ATTACHMENT_BUCKET).remove([storagePath]);
-        throw new Error('The import could not be registered securely. The temporary copy was removed.');
+        try {
+          await client.storage.from(TASK_ATTACHMENT_BUCKET).remove([storagePath]);
+        } catch {
+          // Best-effort compensation; never expose storage/provider details to the UI.
+        }
+        throw new Error('The import could not be registered securely. Temporary-copy cleanup was attempted.');
       }
       setImportPanelOpen(false);
       setNotice(`Imported ${fileName} into "${target.title}". Open that Planning workflow to review its attachment.`);

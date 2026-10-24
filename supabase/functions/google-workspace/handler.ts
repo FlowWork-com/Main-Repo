@@ -4,9 +4,13 @@ import {
   fetchGoogleUserProfile,
   GoogleProviderError,
   hasRequiredGoogleScopes,
+  hasScopesForSet,
   listGoogleDriveFiles,
+  listGmailMessages,
   previewGoogleDriveFile,
+  previewGmailMessage,
   refreshGoogleAccessToken,
+  type GoogleScopeSet,
   type GoogleOAuthConfiguration,
 } from './provider.ts';
 
@@ -33,6 +37,7 @@ export interface GoogleOAuthState {
   readonly created_at: string;
   readonly expires_at: string;
   readonly consumed_at: string | null;
+  readonly requested_scope_set: GoogleScopeSet;
 }
 
 export interface GoogleWorkspaceConnection {
@@ -115,29 +120,35 @@ export function createGoogleWorkspaceHandler<Context>(
 
     const action = payload.action;
     const workspaceId = payload.workspaceId;
-    if (typeof action !== 'string' || !['connect', 'status', 'list_files', 'preview_file', 'disconnect'].includes(action) ||
+    if (typeof action !== 'string' || !['connect', 'connect_gmail', 'status', 'list_files', 'preview_file', 'list_gmail', 'preview_gmail_message', 'disconnect'].includes(action) ||
       !isUuid(workspaceId)) {
       return errorResponse(400, 'INVALID_REQUEST', 'Request fields are invalid.', corsHeaders);
     }
-    const permittedKeys = action === 'list_files'
+    const permittedKeys = action === 'list_files' || action === 'list_gmail'
       ? new Set(['action', 'workspaceId', 'pageSize', 'pageToken'])
       : action === 'preview_file'
       ? new Set(['action', 'workspaceId', 'fileId'])
+      : action === 'preview_gmail_message'
+      ? new Set(['action', 'workspaceId', 'messageId'])
       : new Set(['action', 'workspaceId']);
     if (Object.keys(payload).some((key) => !permittedKeys.has(key))) {
       return errorResponse(400, 'INVALID_REQUEST', 'Request fields are invalid.', corsHeaders);
     }
-    if (action === 'list_files' &&
+    if ((action === 'list_files' || action === 'list_gmail') &&
       ((payload.pageSize !== undefined &&
         (typeof payload.pageSize !== 'number' || !Number.isInteger(payload.pageSize) ||
-          payload.pageSize < 1 || payload.pageSize > 100)) ||
+          payload.pageSize < 1 || payload.pageSize > (action === 'list_gmail' ? 20 : 100))) ||
         (payload.pageToken !== undefined &&
           (typeof payload.pageToken !== 'string' || payload.pageToken.length > 2048)))) {
-      return errorResponse(400, 'INVALID_REQUEST', 'Drive list options are invalid.', corsHeaders);
+      return errorResponse(400, 'INVALID_REQUEST', 'Message list options are invalid.', corsHeaders);
     }
     if (action === 'preview_file' &&
       (typeof payload.fileId !== 'string' || !/^[A-Za-z0-9_-]{1,512}$/.test(payload.fileId))) {
       return errorResponse(400, 'INVALID_REQUEST', 'A valid Drive file ID is required.', corsHeaders);
+    }
+    if (action === 'preview_gmail_message' &&
+      (typeof payload.messageId !== 'string' || !/^[A-Za-z0-9_-]{1,512}$/.test(payload.messageId))) {
+      return errorResponse(400, 'INVALID_REQUEST', 'A valid Gmail message ID is required.', corsHeaders);
     }
 
     try {
@@ -149,7 +160,7 @@ export function createGoogleWorkspaceHandler<Context>(
       return errorResponse(503, 'WORKSPACE_ACCESS_UNAVAILABLE', 'Workspace access could not be verified.', corsHeaders);
     }
 
-    if (action === 'connect') {
+    if (action === 'connect' || action === 'connect_gmail') {
       const config = getConfiguration(dependencies.environment);
       if (!config) {
         return errorResponse(503, 'GOOGLE_NOT_CONFIGURED', 'Google Workspace is not configured on the server.', corsHeaders);
@@ -165,6 +176,7 @@ export function createGoogleWorkspaceHandler<Context>(
           `google-oauth-pkce-${workspaceId}-${caller.userId}-${randomHex(8)}`,
           'Short-lived PKCE verifier for a Google Workspace connection attempt.',
         );
+        const scopeSet: GoogleScopeSet = action === 'connect_gmail' ? 'gmail' : 'drive';
         await dependencies.createOAuthState({
           state_hash: stateHash,
           workspace_id: workspaceId,
@@ -173,8 +185,9 @@ export function createGoogleWorkspaceHandler<Context>(
           redirect_uri: config.oauth.redirectUri,
           created_at: new Date(now()).toISOString(),
           expires_at: new Date(now() + 10 * 60 * 1000).toISOString(),
-        } as Omit<GoogleOAuthState, 'consumed_at'>);
-        const authorizationUrl = buildGoogleAuthorizationUrl(config.oauth, state, challenge);
+          requested_scope_set: scopeSet,
+        });
+        const authorizationUrl = buildGoogleAuthorizationUrl(config.oauth, state, challenge, scopeSet);
         return jsonResponse(200, { authorizationUrl, expiresInSeconds: 600 }, corsHeaders);
       } catch {
         if (verifierSecretId) {
@@ -235,8 +248,13 @@ export function createGoogleWorkspaceHandler<Context>(
     if (!connection) {
       return errorResponse(409, 'GOOGLE_NOT_CONNECTED', 'Connect a Google account before listing Drive files.', corsHeaders);
     }
-    if (!hasRequiredGoogleScopes(connection.granted_scopes)) {
-      return errorResponse(409, 'GOOGLE_RECONNECT_REQUIRED', 'Reconnect Google to grant the required limited Drive access.', corsHeaders);
+    if ((action === 'list_files' || action === 'preview_file') &&
+      !hasRequiredGoogleScopes(connection.granted_scopes)) {
+      return errorResponse(409, 'GOOGLE_DRIVE_RECONNECT_REQUIRED', 'Connect Google Drive access before using Drive features.', corsHeaders);
+    }
+    if ((action === 'list_gmail' || action === 'preview_gmail_message') &&
+      !hasScopesForSet(connection.granted_scopes, 'gmail')) {
+      return errorResponse(409, 'GOOGLE_GMAIL_RECONNECT_REQUIRED', 'Explicitly connect Gmail read-only access before reading messages.', corsHeaders);
     }
 
     try {
@@ -247,6 +265,19 @@ export function createGoogleWorkspaceHandler<Context>(
       const accessToken = await refreshGoogleAccessToken(config.oauth, refreshToken, fetcher);
       if (action === 'preview_file') {
         const preview = await previewGoogleDriveFile(accessToken, payload.fileId as string, fetcher);
+        return jsonResponse(200, { connected: true, preview }, corsHeaders);
+      }
+      if (action === 'list_gmail') {
+        const result = await listGmailMessages(
+          accessToken,
+          typeof payload.pageSize === 'number' ? payload.pageSize : 10,
+          typeof payload.pageToken === 'string' ? payload.pageToken : null,
+          fetcher,
+        );
+        return jsonResponse(200, { connected: true, messages: result.messages, nextPageToken: result.nextPageToken }, corsHeaders);
+      }
+      if (action === 'preview_gmail_message') {
+        const preview = await previewGmailMessage(accessToken, payload.messageId as string, fetcher);
         return jsonResponse(200, { connected: true, preview }, corsHeaders);
       }
       const result = await listGoogleDriveFiles(
@@ -279,11 +310,25 @@ export function createGoogleWorkspaceHandler<Context>(
         if (error.code === 'GOOGLE_DRIVE_PREVIEW_TYPE_MISMATCH') {
           return errorResponse(415, error.code, 'This file could not be safely previewed as text.', corsHeaders);
         }
+        if (error.code === 'GOOGLE_GMAIL_MESSAGE_NOT_FOUND') {
+          return errorResponse(404, error.code, 'This Gmail message is no longer available.', corsHeaders);
+        }
+        if (error.code === 'GOOGLE_GMAIL_MESSAGE_PREVIEW_TOO_LARGE') {
+          return errorResponse(413, error.code, 'This Gmail message is too large to preview safely.', corsHeaders);
+        }
+        if (error.code === 'GOOGLE_GMAIL_REQUEST_INVALID') {
+          return errorResponse(400, error.code, 'The Gmail request is invalid.', corsHeaders);
+        }
       }
-      dependencies.logFailure?.(error instanceof GoogleProviderError ? error.code : 'GOOGLE_DRIVE_LIST_FAILED');
-      return errorResponse(502, action === 'preview_file' ? 'GOOGLE_DRIVE_PREVIEW_FAILED' : 'GOOGLE_DRIVE_LIST_FAILED',
-        action === 'preview_file' ? 'Drive file preview is temporarily unavailable.' : 'Google Drive file metadata is temporarily unavailable.',
-        corsHeaders);
+      const gmailAction = action === 'list_gmail' || action === 'preview_gmail_message';
+      dependencies.logFailure?.(error instanceof GoogleProviderError ? error.code : gmailAction ? 'GOOGLE_GMAIL_REQUEST_FAILED' : 'GOOGLE_DRIVE_LIST_FAILED');
+      const failureCode = gmailAction
+        ? action === 'preview_gmail_message' ? 'GOOGLE_GMAIL_PREVIEW_FAILED' : 'GOOGLE_GMAIL_LIST_FAILED'
+        : action === 'preview_file' ? 'GOOGLE_DRIVE_PREVIEW_FAILED' : 'GOOGLE_DRIVE_LIST_FAILED';
+      const failureMessage = gmailAction
+        ? action === 'preview_gmail_message' ? 'Gmail message preview is temporarily unavailable.' : 'Gmail messages are temporarily unavailable.'
+        : action === 'preview_file' ? 'Drive file preview is temporarily unavailable.' : 'Google Drive file metadata is temporarily unavailable.';
+      return errorResponse(502, failureCode, failureMessage, corsHeaders);
     }
   };
 
@@ -324,7 +369,11 @@ export function createGoogleWorkspaceHandler<Context>(
       }
       if (!verifier) return redirectCallback(config.appRedirectUrl, 'error');
 
-      const token = await exchangeGoogleAuthorizationCode(config.oauth, code, verifier, fetcher);
+      if (stateRow.requested_scope_set !== 'drive' && stateRow.requested_scope_set !== 'gmail') {
+        dependencies.logFailure?.('OAUTH_SCOPE_SET_INVALID');
+        return redirectCallback(config.appRedirectUrl, 'error');
+      }
+      const token = await exchangeGoogleAuthorizationCode(config.oauth, code, verifier, fetcher, stateRow.requested_scope_set);
       const profile = await fetchGoogleUserProfile(token.accessToken, fetcher);
       if (!await dependencies.isCurrentMember(stateRow.workspace_id, stateRow.user_id)) {
         dependencies.logFailure?.('OAUTH_MEMBER_REVOKED');
@@ -337,10 +386,11 @@ export function createGoogleWorkspaceHandler<Context>(
         refreshSecretId = await dependencies.storeSecret(
           token.refreshToken,
           `google-refresh-${stateRow.workspace_id}-${stateRow.user_id}-${randomHex(8)}`,
-          'Google Workspace OAuth refresh token; used only by the server-side read-only Drive integration.',
+          'Google Workspace OAuth refresh token; accessed only server-side for the scopes explicitly granted by the user.',
         );
         createdNewSecret = true;
-      } else if (prior && prior.google_subject === profile.subject) {
+      } else if (prior && prior.google_subject === profile.subject &&
+        hasScopesForSet(prior.granted_scopes, stateRow.requested_scope_set)) {
         refreshSecretId = prior.refresh_secret_id;
       } else {
         dependencies.logFailure?.('GOOGLE_REFRESH_TOKEN_MISSING');
@@ -368,7 +418,7 @@ export function createGoogleWorkspaceHandler<Context>(
       if (prior && prior.refresh_secret_id !== refreshSecretId) {
         try { await dependencies.deleteSecret(prior.refresh_secret_id); } catch { dependencies.logFailure?.('GOOGLE_OLD_SECRET_CLEANUP_FAILED'); }
       }
-      return redirectCallback(config.appRedirectUrl, 'connected');
+      return redirectCallback(config.appRedirectUrl, stateRow.requested_scope_set === 'gmail' ? 'gmail_connected' : 'connected');
     } catch (error) {
       dependencies.logFailure?.(error instanceof GoogleProviderError ? error.code : 'OAUTH_CALLBACK_FAILED');
       return redirectCallback(config.appRedirectUrl, 'error');
@@ -476,7 +526,7 @@ function jsonResponse(status: number, value: unknown, headers: HeadersInit = {})
   });
 }
 
-function redirectCallback(appRedirectUrl: string, result: 'connected' | 'denied' | 'expired' | 'error'): Response {
+function redirectCallback(appRedirectUrl: string, result: 'connected' | 'gmail_connected' | 'denied' | 'expired' | 'error'): Response {
   const url = new URL(appRedirectUrl);
   url.searchParams.set('google_connection', result);
   return new Response(null, {

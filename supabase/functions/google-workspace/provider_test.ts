@@ -2,8 +2,12 @@ import {
   buildGoogleAuthorizationUrl,
   exchangeGoogleAuthorizationCode,
   GOOGLE_REQUIRED_SCOPES,
+  GOOGLE_GMAIL_SCOPES,
+  GOOGLE_GMAIL_READONLY_SCOPE,
   listGoogleDriveFiles,
+  listGmailMessages,
   previewGoogleDriveFile,
+  previewGmailMessage,
   GoogleProviderError,
   refreshGoogleAccessToken,
 } from './provider.ts';
@@ -185,6 +189,107 @@ Deno.test('preview rejects content that exceeds the inline limit', async () => {
     errorCode = error instanceof GoogleProviderError ? error.code : '';
   }
   assertEquals(errorCode, 'GOOGLE_FILE_PREVIEW_TOO_LARGE');
+});
+
+Deno.test('Gmail consent requests the restricted read-only scope in a separate explicit scope set', () => {
+  const url = new URL(buildGoogleAuthorizationUrl(config, 'c'.repeat(64), 'd'.repeat(43), 'gmail'));
+  assertEquals(url.searchParams.get('scope'), GOOGLE_GMAIL_SCOPES.join(' '));
+  assert(url.searchParams.get('scope')?.includes(GOOGLE_GMAIL_READONLY_SCOPE) ?? false, 'Gmail consent must include gmail.readonly.');
+  assert(!(url.searchParams.get('scope') ?? '').includes(GOOGLE_REQUIRED_SCOPES[3]), 'Gmail-only consent must not ask for Drive scope.');
+});
+
+Deno.test('Gmail list returns only bounded metadata using authenticated GET requests', async () => {
+  const requests: Array<{ url: string; method: string; auth: string | null }> = [];
+  const result = await listGmailMessages('short-lived-token', 5, null, async (input, init) => {
+    const url = String(input);
+    requests.push({ url, method: init?.method ?? 'GET', auth: new Headers(init?.headers).get('authorization') });
+    if (url.startsWith('https://gmail.googleapis.com/gmail/v1/users/me/messages?')) {
+      const listUrl = new URL(url);
+      assertEquals(listUrl.searchParams.get('labelIds'), 'INBOX');
+      assertEquals(listUrl.searchParams.get('maxResults'), '5');
+      return Response.json({ messages: [{ id: 'msg-1', threadId: 'thread-1' }], nextPageToken: 'next-page' });
+    }
+    if (url.includes('/messages/msg-1?') && url.includes('format=metadata')) {
+      return Response.json({
+        id: 'msg-1',
+        threadId: 'thread-1',
+        snippet: 'Invoice is attached.',
+        internalDate: '1792742400000',
+        labelIds: ['INBOX', 'UNREAD'],
+        payload: { headers: [
+          { name: 'From', value: 'vendor@example.test' },
+          { name: 'Subject', value: 'October invoice' },
+          { name: 'Date', value: 'Thu, 23 Oct 2026 10:00:00 +0000' },
+        ] },
+      });
+    }
+    throw new Error('Unexpected Gmail API request.');
+  });
+  assertEquals(result.messages.length, 1);
+  assertEquals(result.messages[0].id, 'msg-1');
+  assertEquals(result.messages[0].subject, 'October invoice');
+  assertEquals(result.messages[0].from, 'vendor@example.test');
+  assertEquals(result.messages[0].snippet, 'Invoice is attached.');
+  assertEquals(result.nextPageToken, 'next-page');
+  assert(requests.every((entry) => entry.method === 'GET' && entry.auth === 'Bearer short-lived-token'),
+    'Gmail API operations must be authenticated GET requests.');
+});
+
+Deno.test('Gmail preview returns inline plain text only and ignores attachments', async () => {
+  let method = '';
+  let requestedUrl = '';
+  const preview = await previewGmailMessage('short-lived-token', 'msg-2', async (input, init) => {
+    method = init?.method ?? 'GET';
+    requestedUrl = String(input);
+    return Response.json({
+      id: 'msg-2',
+      threadId: 'thread-2',
+      snippet: 'Plain text snippet.',
+      internalDate: '1792742400000',
+      labelIds: ['INBOX'],
+      payload: {
+        mimeType: 'multipart/mixed',
+        headers: [
+          { name: 'From', value: 'accounts@example.test' },
+          { name: 'Subject', value: 'Your invoice' },
+          { name: 'Date', value: 'Thu, 23 Oct 2026 10:00:00 +0000' },
+        ],
+        parts: [
+          { mimeType: 'text/html', body: { data: 'PGgxPk5vdCBleHRyYWN0ZWQ8L2gxPg' } },
+          { mimeType: 'text/plain', body: { data: 'SW52b2ljZSB0b3RhbDogMTI1LjAw' } },
+          { mimeType: 'text/plain', filename: 'secret.txt', body: { data: 'QVRUQUNITUVOVCBTRUNSRVQ=' } },
+        ],
+      },
+    });
+  });
+  assertEquals(method, 'GET');
+  assert(requestedUrl.includes('format=full'), 'Preview uses the read-only full-message endpoint.');
+  assertEquals(preview.subject, 'Your invoice');
+  assertEquals(preview.from, 'accounts@example.test');
+  assertEquals(preview.content, 'Invoice total: 125.00');
+  assertEquals(preview.contentSource, 'text/plain');
+  assert(!preview.content.includes('ATTACHMENT SECRET'), 'Attachment content must not be previewed.');
+});
+
+Deno.test('Gmail preview falls back to snippet and rejects oversized message bodies', async () => {
+  const snippetPreview = await previewGmailMessage('short-lived-token', 'msg-3', async () => Response.json({
+    id: 'msg-3', snippet: 'HTML-only snippet', payload: {
+      mimeType: 'text/html', body: { data: 'PGgxPkhlbGxvPC9oMT4=' }, headers: [],
+    },
+  }));
+  assertEquals(snippetPreview.content, 'HTML-only snippet');
+  assertEquals(snippetPreview.contentSource, 'snippet');
+
+  let errorCode = '';
+  try {
+    await previewGmailMessage('short-lived-token', 'msg-4', async () => Response.json({
+      id: 'msg-4',
+      payload: { mimeType: 'text/plain', body: { data: 'eA'.repeat(45_000) }, headers: [] },
+    }));
+  } catch (error) {
+    errorCode = error instanceof GoogleProviderError ? error.code : '';
+  }
+  assertEquals(errorCode, 'GOOGLE_GMAIL_MESSAGE_PREVIEW_TOO_LARGE');
 });
 
 Deno.test('refresh token errors are sanitized', async () => {

@@ -97,7 +97,8 @@ When these secrets are absent or incomplete, extraction fails closed as unavaila
 - Workspace members can explicitly connect an account and list allowed Drive file metadata using the limited `drive.file` scope.
 - A selected-file preview supports Google Docs and Slides as plain text, Google Sheets as first-sheet CSV, and common text files. It requires `capabilities.canDownload` and is bounded to 256 KiB.
 - A separate explicit user action can import that text into a selected Planning workflow as a private `.txt`, `.csv`, or `.tsv` attachment using existing task-file storage/RPC controls. This does not modify Google Drive or launch the workflow.
-- Binary previews and all Drive writes remain out of scope. Gmail access and email sending are not included.
+- **In progress:** a separate explicit `gmail.readonly` consent path enables bounded Inbox metadata listing and user-clicked plain-text preview. Existing Drive consent alone never grants mail access.
+- No Gmail mutations, attachment downloads, email sending or automatic workflow execution are included. The Gmail scope is restricted and deployment may require OAuth app verification.
 - No provider calls occur until an authenticated member initiates connection and grants consent.
 
 ## Phase 9 — stale tool-execution recovery

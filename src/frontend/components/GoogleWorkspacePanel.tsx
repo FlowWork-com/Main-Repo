@@ -7,6 +7,14 @@ interface GoogleDriveFile {
   readonly mimeType: string;
   readonly modifiedTime: string | null;
   readonly webViewLink: string | null;
+  readonly canPreview: boolean;
+}
+
+interface GoogleDriveFilePreview {
+  readonly id: string;
+  readonly name: string;
+  readonly mimeType: string;
+  readonly content: string;
 }
 
 interface GoogleConnectionStatus {
@@ -35,6 +43,8 @@ export function GoogleWorkspacePanel({
   });
   const [files, setFiles] = useState<GoogleDriveFile[]>([]);
   const [nextPageToken, setNextPageToken] = useState<string | null>(null);
+  const [preview, setPreview] = useState<GoogleDriveFilePreview | null>(null);
+  const [previewLoadingId, setPreviewLoadingId] = useState<string | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
   const [filesLoading, setFilesLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -122,6 +132,7 @@ export function GoogleWorkspacePanel({
       setConnection({ connected: false, email: null, connectedAt: null, scopes: [] });
       setFiles([]);
       setNextPageToken(null);
+      setPreview(null);
       setNotice(data.credentialCleanupPending === true
         ? 'Google disconnected. Credential cleanup is pending on the server.'
         : 'Google Workspace disconnected.');
@@ -156,7 +167,9 @@ export function GoogleWorkspacePanel({
           webViewLink: typeof candidate.webViewLink === 'string' && isSafeGoogleFileUrl(candidate.webViewLink)
             ? candidate.webViewLink
             : null,
+          canPreview: candidate.canPreview === true,
         }];
+
       });
       setFiles((current) => pageToken ? [...current, ...parsed] : parsed);
       setNextPageToken(typeof data.nextPageToken === 'string' ? data.nextPageToken : null);
@@ -164,6 +177,35 @@ export function GoogleWorkspacePanel({
       setError('Unable to list Google Drive file metadata. Reconnect if authorization has expired.');
     } finally {
       setFilesLoading(false);
+    }
+  }
+
+  async function loadPreview(file: GoogleDriveFile) {
+    if (!canAccessWorkspace || !connection.connected || !file.canPreview || previewLoadingId) return;
+    setPreviewLoadingId(file.id);
+    setError('');
+    setNotice('');
+    setPreview(null);
+    try {
+      const { data, error: invokeError } = await client.functions.invoke<unknown>('google-workspace', {
+        body: { action: 'preview_file', workspaceId, fileId: file.id },
+      });
+      if (invokeError || !isRecord(data) || data.connected !== true || !isRecord(data.preview) ||
+        data.preview.id !== file.id || typeof data.preview.name !== 'string' ||
+        typeof data.preview.mimeType !== 'string' || typeof data.preview.content !== 'string' ||
+        data.preview.content.length > 256 * 1024) {
+        throw new Error('Drive preview is unavailable.');
+      }
+      setPreview({
+        id: file.id,
+        name: data.preview.name.slice(0, 1000),
+        mimeType: data.preview.mimeType,
+        content: data.preview.content,
+      });
+    } catch {
+      setError('Unable to preview this Drive file. Open it in Google Drive if preview is unsupported.');
+    } finally {
+      setPreviewLoadingId(null);
     }
   }
 
@@ -177,7 +219,7 @@ export function GoogleWorkspacePanel({
         {connection.connected && <span className="status-pill">Connected</span>}
       </header>
       <p className="google-workspace__description">
-        Connect Google to list file metadata from Drive. This integration is read-only: it does not edit, create, download, or share files and does not access Gmail.
+        Connect Google to list Drive metadata and explicitly preview supported text from a selected file. Previews are read-only and stay in this page; nothing is saved to workflow history or sent to the planner. This integration does not edit, create, or share Drive files and does not access Gmail.
       </p>
 
       {canAccessWorkspace && statusLoading ? (
@@ -214,6 +256,16 @@ export function GoogleWorkspacePanel({
                     )}
                     <span>{file.mimeType}</span>
                     {file.modifiedTime && <small>Modified {new Date(file.modifiedTime).toLocaleString()}</small>}
+                    {file.canPreview && (
+                      <button
+                        className="button button--quiet"
+                        disabled={Boolean(previewLoadingId) || busy}
+                        onClick={() => void loadPreview(file)}
+                        type="button"
+                      >
+                        {previewLoadingId === file.id ? 'Loading preview…' : 'Preview text'}
+                      </button>
+                    )}
                   </div>
                 </li>
               ))}
@@ -221,6 +273,17 @@ export function GoogleWorkspacePanel({
           )}
           {files.length === 0 && !filesLoading && (
             <p className="google-workspace__empty">No Drive files loaded yet. Listing returns metadata for files that Google makes available to this app.</p>
+          )}
+          {preview && (
+            <section className="google-workspace__preview" aria-label="Drive text preview">
+              <header>
+                <strong>{preview.name}</strong>
+                <span>{preview.mimeType}</span>
+                <button className="button button--quiet" onClick={() => setPreview(null)} type="button">Close preview</button>
+              </header>
+              <pre>{preview.content || '(This file is empty.)'}</pre>
+              <p className="google-workspace__scope-note">Temporary read-only preview. Google Sheets exports show the first worksheet only.</p>
+            </section>
           )}
           {nextPageToken && (
             <button className="button button--secondary" disabled={filesLoading} onClick={() => void loadFiles(nextPageToken)} type="button">

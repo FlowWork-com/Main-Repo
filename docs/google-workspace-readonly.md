@@ -2,7 +2,7 @@
 
 ## Scope of this phase
 
-FlowWork can connect a Google account for an authenticated workspace member, list file metadata available to the Google app, and explicitly preview text from a selected supported file. Previews are read-only, in-memory, limited to 256 KiB, and are not saved to task history or sent to the workflow planner. Binary files such as PDFs/images remain metadata-only in this phase. FlowWork does not create/update/delete/share Drive files, access Gmail, send email, or execute a workflow by itself.
+FlowWork can connect a Google account for an authenticated workspace member, list file metadata available to the Google app, and explicitly preview text from a selected supported file. Previews are in-memory and limited to 256 KiB. A separate explicit import action can copy that exported text into a selected Planning workflow as a private task attachment. Binary files such as PDFs/images remain metadata-only in this phase. FlowWork does not modify the source, create/update/delete/share Drive files, access Gmail, send email, or execute a workflow by itself.
 
 The provider adapter uses:
 - Google OAuth authorization-code flow with state and PKCE S256.
@@ -10,6 +10,7 @@ The provider adapter uses:
 - The limited `drive.file` Drive scope, plus OpenID/email/profile for identifying the connected account.
 - A read-only Drive `files.list` request with a fixed query and explicit metadata fields.
 - A user-triggered preview action that re-fetches metadata, checks `capabilities.canDownload`, exports Google Docs/Slides as plain text, Google Sheets as first-sheet CSV, and accepts only supported text files. Preview responses are limited to 256 KiB and never written to database/logs.
+- A separate user-triggered import action can copy the selected preview text to `workflow-files` and register it using `register_task_file`. The target must be a Planning task in the current workspace; the browser uses its authenticated Supabase client, and failed metadata registration triggers best-effort removal of the temporary upload.
 
 Google's `drive.file` scope is intentionally used instead of broad Drive-wide read access. The list only includes files that Google makes available to this application/account; it is not a mirror of the user's entire Drive.
 
@@ -39,9 +40,10 @@ The `google-workspace` Edge Function exposes these POST actions after verifying 
 - `status` — reports whether the current user has a connection and, when connected, their Google account email.
 - `list_files` — refreshes the access token server-side and returns file IDs, names, MIME types, modification times, safe Drive links, and a server-derived preview-availability flag.
 - `preview_file` — previews a file ID explicitly selected by the user. The server validates the Google metadata, MIME type, and download capability before exporting/downloading text to the browser. It rejects binary/unsupported files and content over 256 KiB.
+- `register_task_file` (existing Supabase RPC, invoked by the browser) — when the user explicitly imports a preview, registers a sanitized `.txt`, `.csv`, or `.tsv` copy to one of the workspace's Planning tasks using the normal private upload policies. Google Drive remains unchanged.
 - `disconnect` — removes the current user's connection.
 
-The GET endpoint is reserved for Google's OAuth redirect callback and accepts only a valid, single-use state. The frontend validates the authorization origin and permitted link hosts. Metadata listing does not fetch content. Preview is an explicit separate action; returned text is rendered as escaped text in a bounded panel and remains only in current page state. Google Sheets previews export the first worksheet only.
+The GET endpoint is reserved for Google's OAuth redirect callback and accepts only a valid, single-use state. The frontend validates the authorization origin and permitted link hosts. Metadata listing does not fetch content. Preview is an explicit separate action; returned text is rendered as escaped text in a bounded panel and remains only in current page state until the user separately chooses Import to a Planning workflow. Import copies only the exported text into private FlowWork storage, associates it to the selected workspace task, and does not run a workflow. Google Sheets previews export the first worksheet only.
 
 ## Deployment checklist
 

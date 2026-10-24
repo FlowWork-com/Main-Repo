@@ -1590,6 +1590,32 @@ select:focus {
   font-size: 12px;
 }
 
+.google-workspace__import {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #d8e2dc;
+  border-radius: 10px;
+  background: #f8fbf8;
+}
+
+.google-workspace__import label {
+  color: #35473b;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.google-workspace__import select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #cbd7cf;
+  border-radius: 8px;
+  background: #fff;
+  color: #20372c;
+  font: inherit;
+}
+
 .google-workspace__preview pre {
   max-height: 320px;
   overflow: auto;

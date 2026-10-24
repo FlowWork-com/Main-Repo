@@ -106,6 +106,177 @@ describe('GoogleWorkspacePanel', () => {
     });
   });
 
+  it('imports selected Drive text into a user-selected Planning workflow', async () => {
+    const invoke = vi.fn()
+      .mockResolvedValueOnce({ data: { connected: true, email: 'person@example.test' }, error: null })
+      .mockResolvedValueOnce({
+        data: {
+          connected: true,
+          files: [{
+            id: 'drive-doc-2',
+            name: 'Budget notes',
+            mimeType: 'application/vnd.google-apps.document',
+            modifiedTime: null,
+            webViewLink: null,
+            canPreview: true,
+          }],
+          nextPageToken: null,
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          connected: true,
+          preview: {
+            id: 'drive-doc-2',
+            name: 'Budget notes',
+            mimeType: 'application/vnd.google-apps.document',
+            content: 'Total budget: 2400.00',
+          },
+        },
+        error: null,
+      });
+
+    const taskChain = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      order: vi.fn(),
+      limit: vi.fn(),
+    };
+    taskChain.select.mockReturnValue(taskChain);
+    taskChain.eq.mockReturnValue(taskChain);
+    taskChain.order.mockReturnValue(taskChain);
+    taskChain.limit.mockResolvedValue({
+      data: [{ id: 'planning-task-1', title: 'Review the budget', status: 'Planning' }],
+      error: null,
+    });
+    const upload = vi.fn(async (storagePath: string, file: File, options: { contentType: string; upsert: boolean }) => {
+      void file;
+      void options;
+      return { data: { path: storagePath }, error: null };
+    });
+    const remove = vi.fn(async (paths: string[]) => {
+      void paths;
+      return { data: [], error: null };
+    });
+    const rpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      void name;
+      void args;
+      return { data: 'registered-file-id', error: null };
+    });
+    const client = {
+      functions: { invoke },
+      from: vi.fn(() => taskChain),
+      storage: { from: vi.fn(() => ({ upload, remove })) },
+      rpc,
+    } as unknown as SupabaseClient;
+
+    render(<GoogleWorkspacePanel client={client} workspaceId={workspaceId} canAccessWorkspace />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'List Drive files' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview text' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Import to a Planning workflow' }));
+
+    expect(await screen.findByRole('combobox', { name: 'Choose a Planning workflow' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Import file' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/Imported Budget notes\.txt into "Review the budget"/);
+    expect(client.from).toHaveBeenCalledWith('tasks');
+    expect(taskChain.eq).toHaveBeenCalledWith('workspace_id', workspaceId);
+    expect(taskChain.eq).toHaveBeenCalledWith('status', 'Planning');
+    expect(upload).toHaveBeenCalledWith(
+      expect.stringMatching(new RegExp('^' + workspaceId + '/planning-task-1/[0-9a-f-]+/Budget notes\\.txt$')),
+      expect.any(File),
+      { contentType: 'text/plain', upsert: false },
+    );
+    const uploadedFile = upload.mock.calls[0][1] as File;
+    expect(uploadedFile.name).toBe('Budget notes.txt');
+    expect(await uploadedFile.text()).toBe('Total budget: 2400.00');
+    expect(rpc).toHaveBeenCalledWith('register_task_file', expect.objectContaining({
+      p_workspace_id: workspaceId,
+      p_task_id: 'planning-task-1',
+      p_file_name: 'Budget notes.txt',
+      p_content_type: 'text/plain',
+    }));
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('removes an uploaded Drive copy if secure attachment registration fails', async () => {
+    const invoke = vi.fn()
+      .mockResolvedValueOnce({ data: { connected: true }, error: null })
+      .mockResolvedValueOnce({
+        data: {
+          connected: true,
+          files: [{
+            id: 'drive-sheet-1',
+            name: 'Vendors',
+            mimeType: 'application/vnd.google-apps.spreadsheet',
+            modifiedTime: null,
+            webViewLink: null,
+            canPreview: true,
+          }],
+          nextPageToken: null,
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          connected: true,
+          preview: {
+            id: 'drive-sheet-1',
+            name: 'Vendors',
+            mimeType: 'application/vnd.google-apps.spreadsheet',
+            content: 'Vendor,Total\\nAcme,100.00',
+          },
+        },
+        error: null,
+      });
+    const taskChain = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      order: vi.fn(),
+      limit: vi.fn(),
+    };
+    taskChain.select.mockReturnValue(taskChain);
+    taskChain.eq.mockReturnValue(taskChain);
+    taskChain.order.mockReturnValue(taskChain);
+    taskChain.limit.mockResolvedValue({
+      data: [{ id: 'planning-task-2', title: 'Review vendors', status: 'Planning' }],
+      error: null,
+    });
+    const upload = vi.fn(async (storagePath: string, file: File, options: { contentType: string; upsert: boolean }) => {
+      void file;
+      void options;
+      return { data: { path: storagePath }, error: null };
+    });
+    const remove = vi.fn(async (paths: string[]) => {
+      void paths;
+      return { data: [], error: null };
+    });
+    const rpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      void name;
+      void args;
+      return { data: null, error: { message: 'private detail' } };
+    });
+    const client = {
+      functions: { invoke },
+      from: vi.fn(() => taskChain),
+      storage: { from: vi.fn(() => ({ upload, remove })) },
+      rpc,
+    } as unknown as SupabaseClient;
+
+    render(<GoogleWorkspacePanel client={client} workspaceId={workspaceId} canAccessWorkspace />);
+    fireEvent.click(await screen.findByRole('button', { name: 'List Drive files' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview text' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Import to a Planning workflow' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Import file' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/cleanup was attempted/);
+    expect(screen.getByRole('alert')).not.toHaveTextContent('private detail');
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalledWith([expect.stringContaining(workspaceId + '/planning-task-2/')]);
+  });
+
   it('shows a connect action when no account is linked and access is available', async () => {
     const { client, invoke } = createClient([{ data: { connected: false }, error: null }]);
     render(<GoogleWorkspacePanel client={client} workspaceId={workspaceId} canAccessWorkspace />);

@@ -481,7 +481,7 @@ function findInlinePlainTextBody(payload: unknown): string | null {
       header.name.toLowerCase() === 'content-disposition'
     );
     const isAttachment = isRecord(disposition) && typeof disposition.value === 'string' &&
-      /^\\s*attachment\\b/i.test(disposition.value);
+      /^\s*attachment\b/i.test(disposition.value);
     if (filename.trim() || isAttachment) return null;
     const body = isRecord(value.body) ? value.body : null;
     if (mimeType === 'text/plain' && body &&

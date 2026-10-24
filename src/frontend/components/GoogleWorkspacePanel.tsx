@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  MAX_TASK_ATTACHMENT_BYTES,
+  TASK_ATTACHMENT_BUCKET,
+  sanitizeTaskAttachmentFileName,
+  taskAttachmentValidationError,
+} from '../taskAttachments';
 
 interface GoogleDriveFile {
   readonly id: string;
@@ -15,6 +21,11 @@ interface GoogleDriveFilePreview {
   readonly name: string;
   readonly mimeType: string;
   readonly content: string;
+}
+
+interface PlanningTaskOption {
+  readonly id: string;
+  readonly title: string;
 }
 
 interface GoogleConnectionStatus {
@@ -45,6 +56,11 @@ export function GoogleWorkspacePanel({
   const [nextPageToken, setNextPageToken] = useState<string | null>(null);
   const [preview, setPreview] = useState<GoogleDriveFilePreview | null>(null);
   const [previewLoadingId, setPreviewLoadingId] = useState<string | null>(null);
+  const [importPanelOpen, setImportPanelOpen] = useState(false);
+  const [planningTasks, setPlanningTasks] = useState<PlanningTaskOption[]>([]);
+  const [planningTasksLoading, setPlanningTasksLoading] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState('');
+  const [importing, setImporting] = useState(false);
   const [statusLoading, setStatusLoading] = useState(true);
   const [filesLoading, setFilesLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -133,6 +149,9 @@ export function GoogleWorkspacePanel({
       setFiles([]);
       setNextPageToken(null);
       setPreview(null);
+      setImportPanelOpen(false);
+      setPlanningTasks([]);
+      setSelectedTaskId('');
       setNotice(data.credentialCleanupPending === true
         ? 'Google disconnected. Credential cleanup is pending on the server.'
         : 'Google Workspace disconnected.');
@@ -209,6 +228,90 @@ export function GoogleWorkspacePanel({
     }
   }
 
+  async function openImportPicker() {
+    if (!canAccessWorkspace || !connection.connected || !preview || importing || planningTasksLoading) return;
+    setImportPanelOpen(true);
+    setError('');
+    setNotice('');
+    setPlanningTasksLoading(true);
+    try {
+      const { data, error: queryError } = await client
+        .from('tasks')
+        .select('id, title, status')
+        .eq('workspace_id', workspaceId)
+        .eq('status', 'Planning')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (queryError || !Array.isArray(data)) {
+        throw new Error('Could not load Planning workflows.');
+      }
+      const options = data.flatMap((value): PlanningTaskOption[] => {
+        if (!isRecord(value) || typeof value.id !== 'string' ||
+          typeof value.title !== 'string' || value.status !== 'Planning') return [];
+        return [{ id: value.id, title: value.title.slice(0, 200) }];
+      });
+      setPlanningTasks(options);
+      setSelectedTaskId((current) => options.some((task) => task.id === current) ? current : (options[0]?.id ?? ''));
+      if (options.length === 0) setNotice('There are no Planning workflows in this workspace yet. Create a workflow first, then import the Drive content.');
+    } catch {
+      setError('Unable to load Planning workflows. Check workspace access and retry.');
+      setImportPanelOpen(false);
+    } finally {
+      setPlanningTasksLoading(false);
+    }
+  }
+
+  async function importPreviewToTask() {
+    if (!canAccessWorkspace || !connection.connected || !preview || importing || !selectedTaskId) return;
+    const target = planningTasks.find((task) => task.id === selectedTaskId);
+    if (!target) {
+      setError('Choose a Planning workflow before importing.');
+      return;
+    }
+    const fileKind = getImportFileKind(preview.mimeType);
+    if (!fileKind) {
+      setError('This Drive file type cannot be imported as a workflow attachment.');
+      return;
+    }
+
+    const stem = preview.name.replace(/[.][^.]*$/, '').trim() || 'google-drive-file';
+    const fileName = sanitizeTaskAttachmentFileName(`${stem}${fileKind.extension}`);
+    const file = new File([preview.content], fileName, { type: fileKind.contentType });
+    const validationError = taskAttachmentValidationError(fileName, file.size);
+    if (validationError || file.size > MAX_TASK_ATTACHMENT_BYTES) {
+      setError(validationError ?? 'The imported text is too large.');
+      return;
+    }
+
+    setImporting(true);
+    setError('');
+    setNotice('');
+    const storagePath = `${workspaceId}/${target.id}/${crypto.randomUUID()}/${fileName}`;
+    try {
+      const uploaded = await client.storage.from(TASK_ATTACHMENT_BUCKET)
+        .upload(storagePath, file, { contentType: fileKind.contentType, upsert: false });
+      if (uploaded.error) throw new Error('The Drive content could not be copied into private task storage.');
+
+      const registered = await client.rpc('register_task_file', {
+        p_workspace_id: workspaceId,
+        p_task_id: target.id,
+        p_file_name: fileName,
+        p_storage_path: storagePath,
+        p_content_type: fileKind.contentType,
+      });
+      if (registered.error) {
+        await client.storage.from(TASK_ATTACHMENT_BUCKET).remove([storagePath]);
+        throw new Error('The import could not be registered securely. The temporary copy was removed.');
+      }
+      setImportPanelOpen(false);
+      setNotice(`Imported ${fileName} into "${target.title}". Open that Planning workflow to review its attachment.`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not import the selected Drive file.');
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
     <section className="google-workspace panel" aria-labelledby="google-workspace-title">
       <header className="google-workspace__heading">
@@ -219,7 +322,7 @@ export function GoogleWorkspacePanel({
         {connection.connected && <span className="status-pill">Connected</span>}
       </header>
       <p className="google-workspace__description">
-        Connect Google to list Drive metadata and explicitly preview supported text from a selected file. Previews are read-only and stay in this page; nothing is saved to workflow history or sent to the planner. This integration does not edit, create, or share Drive files and does not access Gmail.
+Connect Google to list Drive metadata and preview supported text. When you explicitly import a preview, its text is copied into a selected Planning workflow as a private attachment; the Google Drive source remains unchanged. Nothing is imported or sent to the planner without your click. This integration does not edit, create, or share files in Google Drive and does not access Gmail.
       </p>
 
       {canAccessWorkspace && statusLoading ? (
@@ -259,7 +362,7 @@ export function GoogleWorkspacePanel({
                     {file.canPreview && (
                       <button
                         className="button button--quiet"
-                        disabled={Boolean(previewLoadingId) || busy}
+                        disabled={Boolean(previewLoadingId) || busy || importing}
                         onClick={() => void loadPreview(file)}
                         type="button"
                       >
@@ -282,7 +385,60 @@ export function GoogleWorkspacePanel({
                 <button className="button button--quiet" onClick={() => setPreview(null)} type="button">Close preview</button>
               </header>
               <pre>{preview.content || '(This file is empty.)'}</pre>
-              <p className="google-workspace__scope-note">Temporary read-only preview. Google Sheets exports show the first worksheet only.</p>
+              <p className="google-workspace__scope-note">Temporary preview. Google Sheets exports show the first worksheet only.</p>
+              {!importPanelOpen ? (
+                <button
+                  className="button button--secondary"
+                  disabled={!canAccessWorkspace || importing || busy}
+                  onClick={() => void openImportPicker()}
+                  type="button"
+                >
+                  Import to a Planning workflow
+                </button>
+              ) : (
+                <div className="google-workspace__import">
+                  {planningTasksLoading ? (
+                    <p role="status">Loading Planning workflows…</p>
+                  ) : planningTasks.length > 0 ? (
+                    <>
+                      <label htmlFor="google-drive-import-task">Choose a Planning workflow</label>
+                      <select
+                        id="google-drive-import-task"
+                        value={selectedTaskId}
+                        onChange={(event) => setSelectedTaskId(event.target.value)}
+                        disabled={importing}
+                      >
+                        {planningTasks.map((task) => (
+                          <option key={task.id} value={task.id}>{task.title}</option>
+                        ))}
+                      </select>
+                      <p className="google-workspace__scope-note">This copies the exported text into private FlowWork storage as a task attachment. The source in Google Drive is unchanged, and no workflow action is executed.</p>
+                      <div className="task-actions">
+                        <button
+                          className="button"
+                          disabled={!selectedTaskId || importing}
+                          onClick={() => void importPreviewToTask()}
+                          type="button"
+                        >
+                          {importing ? 'Importing…' : 'Import file'}
+                        </button>
+                        <button
+                          className="button button--quiet"
+                          disabled={importing}
+                          onClick={() => setImportPanelOpen(false)}
+                          type="button"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <button className="button button--quiet" onClick={() => setImportPanelOpen(false)} type="button">
+                      Close
+                    </button>
+                  )}
+                </div>
+              )}
             </section>
           )}
           {nextPageToken && (
@@ -313,6 +469,23 @@ export function GoogleWorkspacePanel({
       </p>
     </section>
   );
+}
+
+function getImportFileKind(mimeType: string): { readonly extension: string; readonly contentType: string } | null {
+  switch (mimeType) {
+    case 'application/vnd.google-apps.document':
+    case 'application/vnd.google-apps.presentation':
+    case 'text/plain':
+    case 'text/markdown':
+      return { extension: '.txt', contentType: 'text/plain' };
+    case 'application/vnd.google-apps.spreadsheet':
+    case 'text/csv':
+      return { extension: '.csv', contentType: 'text/csv' };
+    case 'text/tab-separated-values':
+      return { extension: '.tsv', contentType: 'text/tab-separated-values' };
+    default:
+      return null;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

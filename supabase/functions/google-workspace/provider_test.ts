@@ -289,7 +289,7 @@ Deno.test('Gmail preview skips text parts explicitly marked as attachments even 
   }));
   assertEquals(preview.content, 'Inline body');
   assertEquals(preview.contentSource, 'text/plain');
-  assert(!preview.content.includes('ATTACHMENT SECRET'));
+  assert(!preview.content.includes('ATTACHMENT SECRET'), 'Attachment content must not be previewed.');
 });
 
 Deno.test('Gmail preview falls back to snippet and rejects oversized message bodies', async () => {

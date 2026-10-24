@@ -195,11 +195,14 @@ export function evaluateDataset(rawDataset) {
         unexpectedValues += 1;
       }
 
-      const band = confidenceBand(prediction.confidenceEstimate);
-      if (band) {
-        band.samples += 1;
-        band.correct += Number(isCorrect);
-        band.confidenceTotal += prediction.confidenceEstimate;
+      const bandDefinition = confidenceBand(prediction.confidenceEstimate);
+      if (bandDefinition) {
+        const band = confidenceBands.find((candidate) => candidate.band === bandDefinition.label);
+        if (band) {
+          band.samples += 1;
+          band.correct += Number(isCorrect);
+          band.confidenceTotal += prediction.confidenceEstimate;
+        }
       }
     }
   }

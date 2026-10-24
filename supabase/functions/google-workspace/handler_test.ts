@@ -275,6 +275,42 @@ Deno.test('Gmail authorization is explicit, separate from Drive, and recorded in
   assertEquals(connection?.granted_scopes, [...GOOGLE_GMAIL_SCOPES]);
 });
 
+Deno.test('incremental Gmail consent preserves the existing Drive refresh token when Google omits a new one', async () => {
+  const harness = createHarness({
+    fetcher: async (input) => {
+      if (String(input) === 'https://oauth2.googleapis.com/token') {
+        return Response.json({
+          access_token: 'short-lived-combined-token',
+          scope: [...GOOGLE_REQUIRED_SCOPES, 'https://www.googleapis.com/auth/gmail.readonly'].join(' '),
+        });
+      }
+      if (String(input) === 'https://openidconnect.googleapis.com/v1/userinfo') {
+        return Response.json({ sub: 'google-subject', email: 'person@example.test', email_verified: true });
+      }
+      throw new Error('Unexpected external request.');
+    },
+  });
+  await harness.addConnection();
+  const prior = harness.connections.get(harness.key());
+  if (!prior) throw new Error('Fixture Drive connection missing.');
+  const priorSecretId = prior.refresh_secret_id;
+  const priorSecret = harness.secrets.get(priorSecretId);
+
+  const started = await harness.handler(harness.post({ action: 'connect_gmail', workspaceId }));
+  const startedBody = asRecord(await started.json());
+  const authorizationUrl = new URL(String(startedBody.authorizationUrl));
+  const callback = await harness.handler(new Request(
+    `https://project.example/functions/v1/google-workspace?state=${authorizationUrl.searchParams.get('state')}&code=gmail-code`,
+  ));
+  assertEquals(new URL(callback.headers.get('location') ?? '').searchParams.get('google_connection'), 'gmail_connected');
+
+  const updated = harness.connections.get(harness.key());
+  assertEquals(updated?.refresh_secret_id, priorSecretId);
+  assertEquals(harness.secrets.get(priorSecretId), priorSecret);
+  assert(updated?.granted_scopes.includes('https://www.googleapis.com/auth/drive.file') ?? false);
+  assert(updated?.granted_scopes.includes('https://www.googleapis.com/auth/gmail.readonly') ?? false);
+});
+
 Deno.test('Drive-only connection cannot read Gmail without explicit Gmail consent', async () => {
   let externalCalls = 0;
   const harness = createHarness({

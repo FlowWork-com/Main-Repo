@@ -109,13 +109,35 @@ When these secrets are absent or incomplete, extraction fails closed as unavaila
 
 ## Phase 10 — extraction quality monitoring
 
-**In progress:** the `feat/invoice-extraction-quality` branch adds a workspace Quality view using the correction feedback already collected by Phase 6.
+**Merged:** [PR #32 — workspace extraction quality monitoring](https://github.com/FlowWork-com/Main-Repo/pull/32).
 
 - Shows field-level reviewed counts, corrections, observed correction rates, and mean reported confidence when fields were corrected or unchanged.
-- Groups correction rates into reported-confidence bands, by field and parser/tool version, so teams can see where reviewers frequently intervene.
+- Groups correction rates into reported-confidence bands by field and tool version so teams can identify where reviewers frequently intervene.
 - Low sample sizes are called out instead of hidden.
-- Queries use workspace-scoped aggregate views. The UI does not retrieve or display raw extracted/reviewed invoice values in its metrics tables.
-- These are descriptive human-review signals, not independent ground truth, a parser accuracy benchmark, or proof that confidence is calibrated. A separate held-out, human-verified dataset is still needed for a defensible accuracy evaluation.
+- Queries use workspace-scoped aggregate views. The UI does not retrieve or display raw extracted/reviewed invoice values in metric tables.
+- These are descriptive human-review signals, not independent ground truth, a parser accuracy benchmark, or proof that confidence is calibrated.
+
+## Phase 11 — deterministic held-out extraction evaluation
+
+**In progress:** the `feat/invoice-extraction-benchmark` branch adds a deterministic evaluator for field-level invoice extraction results.
+
+- Scores invoice number, date, vendor, description, currency, subtotal, tax, and grand total against separately labeled reference values.
+- Reports per-field and aggregate exact-match accuracy, value coverage, abstentions, and unexpected values. Monetary values use a documented one-cent tolerance; text normalization is intentionally conservative.
+- Computes confidence-band observed accuracy and expected calibration error only for manifests explicitly marked as held-out, human-verified data. Small bins remain flagged.
+- Includes a small synthetic smoke fixture to verify evaluator behavior. Its scores are explicitly **not** model accuracy and must never be used as a product-performance claim.
+- The evaluator prints only aggregate metrics; it never prints field values, source text, or invoice documents. It makes no provider requests.
+
+### Running the evaluator
+
+Run `npm run evaluate:invoices` to score the built-in synthetic smoke fixture and verify the runner. This validates the harness only.
+
+To evaluate a real held-out benchmark, prepare a separate JSON manifest using the schema shown in `fixtures/invoice-extraction/synthetic-smoke-v1.json`, with:
+- `datasetType: "human-verified-holdout"` and `split: "held_out"`;
+- `truthStatus: "human_verified"` on every record;
+- a unique `caseId`, all eight independently reviewed ground-truth field values, and the corresponding saved extraction field values/confidence estimates;
+- a fixed `toolVersion`, non-secret `modelId`, and a description of the review protocol.
+
+Run it with `npm run evaluate:invoices -- --input /path/to/held-out-manifest.json`. Keep real invoices and customer-derived labels in approved private storage; do not commit raw customer documents or sensitive values to this repository. The runner checks the manifest's declarations and output contract but cannot independently prove that a label was genuinely human-reviewed. Report held-out metrics only after the reference set has been independently verified.
 
 ## Security and migration rules
 

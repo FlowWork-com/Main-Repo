@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "datasetId": "invoice-extraction-synthetic-smoke-v1",
+  "datasetType": "synthetic-smoke",
+  "split": "smoke",
+  "toolVersion": "1.0.0",
+  "modelId": "synthetic-fixture",
+  "reviewProtocol": "Synthetic, non-customer examples used only to smoke-test evaluator arithmetic and abstention handling. Not an extraction benchmark.",
+  "records": [
+    {
+      "caseId": "synthetic-correct",
+      "truthStatus": "synthetic",
+      "groundTruth": {
+        "invoiceNumber": "INV-220",
+        "invoiceDate": "2026-10-22",
+        "vendor": "Acme Ltd",
+        "description": "Office supplies",
+        "currency": "INR",
+        "subtotal": 1000,
+        "taxAmount": 180,
+        "totalAmount": 1180
+      },
+      "prediction": {
+        "invoiceNumber": {
+          "value": "INV-220",
+          "confidenceEstimate": 0.96
+        },
+        "invoiceDate": {
+          "value": "2026-10-22",
+          "confidenceEstimate": 0.92
+        },
+        "vendor": {
+          "value": "Acme Ltd",
+          "confidenceEstimate": 0.95
+        },
+        "description": {
+          "value": "Office supplies",
+          "confidenceEstimate": 0.89
+        },
+        "currency": {
+          "value": "INR",
+          "confidenceEstimate": 0.97
+        },
+        "subtotal": {
+          "value": 1000,
+          "confidenceEstimate": 0.95
+        },
+        "taxAmount": {
+          "value": 180,
+          "confidenceEstimate": 0.92
+        },
+        "totalAmount": {
+          "value": 1180,
+          "confidenceEstimate": 0.98
+        }
+      }
+    },
+    {
+      "caseId": "synthetic-mixed",
+      "truthStatus": "synthetic",
+      "groundTruth": {
+        "invoiceNumber": "INV-221",
+        "invoiceDate": "2026-10-20",
+        "vendor": "Northstar Industrial Ltd",
+        "description": "Replacement parts",
+        "currency": "USD",
+        "subtotal": 500,
+        "taxAmount": 40,
+        "totalAmount": 540
+      },
+      "prediction": {
+        "invoiceNumber": {
+          "value": "INV-222",
+          "confidenceEstimate": 0.94
+        },
+        "invoiceDate": {
+          "value": "2026-10-20",
+          "confidenceEstimate": 0.9
+        },
+        "vendor": {
+          "value": "NORTHSTAR INDUSTRIAL LTD",
+          "confidenceEstimate": 0.85
+        },
+        "description": {
+          "value": "Replacement parts",
+          "confidenceEstimate": 0.88
+        },
+        "currency": {
+          "value": "usd",
+          "confidenceEstimate": 0.92
+        },
+        "subtotal": {
+          "value": 500.005,
+          "confidenceEstimate": 0.91
+        },
+        "taxAmount": {
+          "value": 45,
+          "confidenceEstimate": 0.94
+        },
+        "totalAmount": {
+          "value": null,
+          "confidenceEstimate": 0.15
+        }
+      }
+    },
+    {
+      "caseId": "synthetic-missing-and-unexpected",
+      "truthStatus": "synthetic",
+      "groundTruth": {
+        "invoiceNumber": null,
+        "invoiceDate": null,
+        "vendor": "Unclear supplier",
+        "description": null,
+        "currency": "INR",
+        "subtotal": null,
+        "taxAmount": null,
+        "totalAmount": 1180
+      },
+      "prediction": {
+        "invoiceNumber": {
+          "value": null,
+          "confidenceEstimate": 0.25
+        },
+        "invoiceDate": {
+          "value": "2026-10-22",
+          "confidenceEstimate": 0.87
+        },
+        "vendor": {
+          "value": null,
+          "confidenceEstimate": 0.2
+        },
+        "description": {
+          "value": null,
+          "confidenceEstimate": 0.1
+        },
+        "currency": {
+          "value": "INR",
+          "confidenceEstimate": 0.96
+        },
+        "subtotal": {
+          "value": 0,
+          "confidenceEstimate": 0.8
+        },
+        "taxAmount": {
+          "value": null,
+          "confidenceEstimate": 0.12
+        },
+        "totalAmount": {
+          "value": 1180,
+          "confidenceEstimate": 0.98
+        }
+      }
+    }
+  ]
+}

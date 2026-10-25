@@ -568,6 +568,7 @@ function WorkspaceView({
                 taskId={selectedTask.id}
                 taskStatus={selectedTask.workflow.task.status}
                 taskTitle={selectedTask.details || selectedTask.title}
+                onTaskRefresh={() => refreshTask(selectedTask.id)}
               />
 
               <TaskToolExecutionPanel

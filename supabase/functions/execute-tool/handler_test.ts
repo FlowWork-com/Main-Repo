@@ -79,6 +79,13 @@ class MemoryExecutionRepository implements ToolExecutionRepository {
     });
     return true;
   };
+  claimPlanStep = async (
+    context: ToolExecutionContext,
+    _planRunId: string,
+    _stepId: string,
+    requestedInput: unknown,
+  ) => ({ toolId: context.toolId, toolVersion: context.toolVersion, input: requestedInput });
+  completePlanStep = async () => 'succeeded' as const;
   completeExecution = async (
     context: ToolExecutionContext,
     result: ToolExecutionResult,
@@ -331,6 +338,8 @@ function customTool(
 function requestBody(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
     taskId,
+    planRunId: '45000000-0000-4000-8000-000000000001',
+    stepId: 'step_1',
     executionId,
     requestId: 'request-1',
     toolId: 'echo',

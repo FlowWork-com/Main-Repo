@@ -14,7 +14,7 @@ This phase adds the database persistence boundary for accepted-plan runs and ind
 
 ## Security boundary
 
-Authenticated workspace members can read run history through RLS and request a run through `start_workflow_plan_run`. Direct table writes are revoked. Step claim/result RPCs are restricted to `service_role` and require the trusted caller to provide a workspace-member identity. The server execution layer must call these RPCs around tool execution; clients must never be allowed to report tool results directly.
+Authenticated workspace members can read run history through RLS and request a run through `start_workflow_plan_run`. Direct table writes are revoked. Step claim/result RPCs are restricted to `service_role` and require the trusted caller to provide a workspace-member identity. The `execute-tool` server path now accepts `planRunId` and `stepId` together, claims the persisted step before execution, validates tool/version/input against the stored snapshot, and records the result after execution. The claim/result RPCs are service-role-only; clients cannot report results directly. The fields remain optional for the existing manual registered-tool flow, which is not plan-bound and should be retired or separately permissioned before claiming that all tool execution is plan-supervised.
 
 ## RPC contracts
 
@@ -22,4 +22,4 @@ Authenticated workspace members can read run history through RLS and request a r
 - `claim_workflow_plan_step(run_id, step_id, execution_id, actor_id)`: validates prerequisites and reserves a step attempt.
 - `finish_workflow_plan_step(run_id, step_id, execution_id, output, error, actor_id)`: persists success/failure idempotently and marks the run successful only when all steps succeeded.
 
-The migration deliberately does not auto-execute tools. The server-side execution handler still needs to be wired to require a run/step identity and invoke claim/result RPCs around each tool call before this persistence layer is end-to-end usable.
+The migration deliberately does not auto-execute tools. Plan-bound callers must first start a run, then submit each explicit step action with the returned run ID and persisted step ID. A successful intermediate step leaves the workflow in `Running`; only the final successful step moves it to `Verifying`. Manual tool requests without plan linkage remain supported for compatibility.

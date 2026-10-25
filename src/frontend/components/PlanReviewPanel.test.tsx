@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { SupabaseClient } from '@supabase/supabase-js';
+vi.mock('../../backend/toolExecutionClient', () => ({ executeTool: vi.fn() }));
+import { executeTool } from '../../backend/toolExecutionClient';
 import { PlanReviewPanel } from './PlanReviewPanel';
 
 afterEach(cleanup);
@@ -37,27 +39,47 @@ function savedPlan(decision: 'proposed' | 'accepted' | 'rejected' = 'proposed') 
   };
 }
 
-function createClient() {
-  let record: ReturnType<typeof savedPlan> | null = savedPlan();
-  const from = vi.fn(() => {
+function createClient(initialDecision: 'proposed' | 'accepted' | 'rejected' = 'proposed') {
+  let record: ReturnType<typeof savedPlan> | null = savedPlan(initialDecision);
+  const runId = '54000000-0000-4000-8000-000000000001';
+  let hasRun = false;
+  const from = vi.fn((table: string) => {
     const query = {
       select: vi.fn(() => query),
       eq: vi.fn(() => query),
-      order: vi.fn(() => query),
+      order: vi.fn(() => table === 'workflow_plan_step_runs'
+        ? Promise.resolve({
+          data: hasRun ? [{ step_id: 'step_1', status: 'pending' }] : [],
+          error: null,
+        })
+        : query),
       limit: vi.fn(() => query),
-      maybeSingle: vi.fn(async () => ({ data: record, error: null })),
+      maybeSingle: vi.fn(async () => {
+        if (table === 'workflow_plans') return { data: record, error: null };
+        if (table === 'workflow_plan_runs' && hasRun) {
+          return { data: { id: runId, status: 'running' }, error: null };
+        }
+        return { data: null, error: null };
+      }),
     };
     return query;
   });
   const invoke = vi.fn(async () => ({ data: null, error: null }));
-  const rpc = vi.fn(async (_name: string, args: { p_decision: 'accepted' | 'rejected' }) => {
-    if (record) record = { ...record, decision: args.p_decision };
+  const rpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
+    if (name === 'decide_workflow_plan' && record) {
+      record = { ...record, decision: args.p_decision as 'accepted' | 'rejected' };
+    }
+    if (name === 'start_workflow_plan_run') {
+      hasRun = true;
+      return { data: { id: runId, status: 'running' }, error: null };
+    }
     return { data: null, error: null };
   });
   return {
     client: { from, functions: { invoke }, rpc } as unknown as SupabaseClient,
     invoke,
     rpc,
+    runId,
   };
 }
 
@@ -81,6 +103,33 @@ describe('PlanReviewPanel', () => {
     render(<PlanReviewPanel client={client} canAccessWorkspace taskId={taskId} taskStatus="Planning" taskTitle="Task" />);
     expect(await screen.findByText('Plan v1: accepted')).toBeInTheDocument();
     expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it('starts a durable run and executes one ready step only after an explicit click', async () => {
+    const { client, rpc, runId } = createClient('accepted');
+    vi.mocked(executeTool).mockResolvedValue({
+      result: { success: true, output: { value: 'HELLO' } },
+      workflowStatus: 'Running',
+    });
+    render(
+      <PlanReviewPanel client={client} canAccessWorkspace taskId={taskId} taskStatus="Running" taskTitle="Task" />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Start supervised execution' }));
+    expect(await screen.findByText('Run status: running')).toBeInTheDocument();
+    expect(rpc).toHaveBeenCalledWith('start_workflow_plan_run', {
+      p_plan_id: '53000000-0000-4000-8000-000000000001',
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Execute step' }));
+    expect(await vi.waitFor(() => expect(executeTool).toHaveBeenCalledWith(client, expect.objectContaining({
+      taskId,
+      planRunId: runId,
+      stepId: 'step_1',
+      toolId: 'text-transform',
+      toolVersion: '1.0.0',
+      input: { operation: 'uppercase', text: 'hello' },
+    })))).toBeUndefined();
   });
 
   it('persists and reloads a rejected decision', async () => {

@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "evaluate:invoices": "node scripts/evaluate-invoice-extractions.mjs",
+    "evaluate:planner": "vitest run src/planning/evaluation.test.ts",
     "check": "npm run typecheck && npm run lint && npm test && npm run build"
   },
   "dependencies": {

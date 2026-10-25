@@ -177,6 +177,46 @@ describe('planning contracts', () => {
     expect(() => validatePlan(plan, registry)).toThrow(/credential|unsupported|tool/i);
   });
 
+  it('preserves explicit clarification and missing-input blockers without executable steps', () => {
+    const blocked = {
+      id: 'plan_blocked',
+      taskId: 'task_123',
+      goal: 'Make this better.',
+      summary: 'Needs clarification.',
+      steps: [],
+      dependencies: [],
+      createdAt: new Date().toISOString(),
+      version: 1,
+      validationStatus: 'invalid',
+      limitations: ['Clarification is required before proposing an executable plan.'],
+    };
+    expect(validatePlan(blocked, registry).validationStatus).toBe('invalid');
+    expect(validatePlan(blocked, registry).steps).toEqual([]);
+  });
+
+  it('does not block harmless mentions of email or automation words', () => {
+    const harmless = {
+      id: 'plan_text',
+      taskId: 'task_123',
+      goal: 'Lowercase the word email.',
+      summary: 'Transform a string.',
+      steps: [{
+        id: 'step_1', title: 'Lowercase text', description: 'Use text transform.',
+        toolId: 'text-transform', toolVersion: '1.0.0',
+        input: { operation: 'lowercase', text: 'EMAIL' }, dependencies: [],
+        expectedOutcome: 'email', verificationCriteria: 'Output is lowercase.',
+        validation: { valid: false, blockingReasons: ['Model supplied flags are untrusted.'] },
+      }],
+      dependencies: [],
+      createdAt: new Date().toISOString(),
+      version: 1,
+      validationStatus: 'invalid',
+      limitations: [],
+    };
+    expect(validatePlan(harmless, registry).validationStatus).toBe('valid');
+    expect(validatePlan(harmless, registry).steps[0]?.validation.valid).toBe(true);
+  });
+
   it('returns a sanitized planner error when no provider is configured', () => {
     const error = createPlannerError('PLANNER_NOT_CONFIGURED', 'No provider configured');
     expect(error.code).toBe('PLANNER_NOT_CONFIGURED');

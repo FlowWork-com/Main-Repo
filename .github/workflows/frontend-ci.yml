@@ -39,6 +39,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Offline planner evaluation
+        run: npm run evaluate:planner
+
       - name: Build
         run: npm run build
 

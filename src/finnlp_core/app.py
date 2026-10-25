@@ -91,9 +91,10 @@ def _normalize_article(record: dict[str, Any]) -> dict[str, Any]:
 def _fetch_articles(
     request: NewsRequest,
     api_key: str,
-    downloader_factory: Any = _new_downloader,
+    downloader_factory: Any | None = None,
 ) -> list[dict[str, Any]]:
-    downloader = downloader_factory(api_key)
+    factory = downloader_factory or _new_downloader
+    downloader = factory(api_key)
     articles: list[dict[str, Any]] = []
     cursor = request.start_date
     # FinNLP's Finnhub downloader uses four-day windows. Calling the same

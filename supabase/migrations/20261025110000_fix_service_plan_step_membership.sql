@@ -139,7 +139,7 @@ begin
   v_status := case when p_error is null then 'succeeded' else 'failed' end;
   if v_step.status <> 'running' then
     if v_step.status = v_status
-      and v_step.output is not distinct from case when p_error is null then coalesce(p_output, 'null'::jsonb) else null end
+      and v_step.output is not distinct from (case when p_error is null then coalesce(p_output, 'null'::jsonb) else null end)
       and v_step.error is not distinct from p_error then
       return jsonb_build_object('step_id', v_step.step_id, 'status', v_step.status);
     end if;

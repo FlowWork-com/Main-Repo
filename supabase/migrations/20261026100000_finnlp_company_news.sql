@@ -404,270 +404,30 @@ begin
     end if;
 
     if v_step->>'toolId' = 'finnlp-company-news' then
-      if (select count(*) from jsonb_object_keys(
+      if jsonb_typeof(v_input) is distinct from 'object'
+        or (select count(*) from jsonb_object_keys(
           case when jsonb_typeof(v_input) = 'object' then v_input else '{}'::jsonb end
         )) <> 3
-        or coalesce(v_input->>'ticker', '') !~ '^[A-Za-z][A-Za-z0-9.-]{0,9}
-  end loop;
-
-  if exists (
-    select 1
-    from jsonb_array_elements(v_proposal->'steps') as steps(step)
-    cross join lateral jsonb_array_elements_text(steps.step->'dependencies') as dependencies(dependency)
-    where dependencies.dependency = steps.step->>'id'
-      or not (dependencies.dependency = any(v_ids))
-  ) then
-    raise exception 'Plan contains an invalid dependency.' using errcode = '22023';
-  end if;
-
-  if exists (
-    select 1
-    from jsonb_array_elements_text(coalesce(v_proposal->'dependencies', '[]'::jsonb)) as dependencies(dependency)
-    where not (dependencies.dependency = any(v_ids))
-  ) or (
-    select count(*) from jsonb_array_elements_text(coalesce(v_proposal->'dependencies', '[]'::jsonb))
-  ) <> (
-    select count(distinct dependency)
-    from jsonb_array_elements_text(coalesce(v_proposal->'dependencies', '[]'::jsonb)) as dependencies(dependency)
-  ) then
-    raise exception 'Plan contains an invalid dependency.' using errcode = '22023';
-  end if;
-
-  if exists (
-    with recursive edges(step_id, dependency_id) as (
-      select steps.step->>'id', dependencies.dependency
-      from jsonb_array_elements(v_proposal->'steps') as steps(step)
-      cross join lateral jsonb_array_elements_text(steps.step->'dependencies') as dependencies(dependency)
-    ), paths(start_id, node_id, path, has_cycle) as (
-      select step_id, dependency_id, array[step_id, dependency_id], step_id = dependency_id
-      from edges
-      union all
-      select paths.start_id, edges.dependency_id, paths.path || edges.dependency_id,
-        edges.dependency_id = any(paths.path)
-      from paths
-      join edges on edges.step_id = paths.node_id
-      where not paths.has_cycle
-    )
-    select 1 from paths where has_cycle
-  ) then
-    raise exception 'Plan dependency graph contains a cycle.' using errcode = '22023';
-  end if;
-
-  v_validation := case
-    when lower(coalesce(v_proposal->>'goal', '') || ' ' || coalesce(v_proposal->'limitations', '[]'::jsonb)::text)
-      ~ '(browser|playwright|puppeteer|selenium|automation|scrape|email|smtp|gmail|send mail|calendar|crm|slack|shell|filesystem)'
-    then 'invalid'
-    else 'valid'
-  end;
-  if (v_validation = 'valid' and jsonb_array_length(v_proposal->'steps') = 0)
-    or (v_validation = 'invalid' and jsonb_array_length(v_proposal->'steps') <> 0) then
-    raise exception 'Unsupported capabilities must be represented without executable steps.' using errcode = '22023';
-  end if;
-  select coalesce(max(p.version), 0) + 1 into v_version
-  from public.workflow_plans p where p.workspace_id = v_workspace_id and p.task_id = p_task_id;
-
-  v_plan := v_proposal || jsonb_build_object(
-    'id', v_plan_id,
-    'taskId', p_task_id,
-    'version', v_version,
-    'steps', v_steps,
-    'validationStatus', v_validation
-  );
-
-  insert into public.workflow_plans (
-    id, workspace_id, task_id, version, proposed_by, plan
-  ) values (
-    v_plan_id, v_workspace_id, p_task_id, v_version, v_user_id, v_plan
-  );
-  return jsonb_build_object(
-    'id', v_plan_id,
-    'workspace_id', v_workspace_id,
-    'task_id', p_task_id,
-    'version', v_version,
-    'decision', 'proposed',
-    'plan', v_plan,
-    'created_at', now()
-  );
-end;
-$$;
-        or coalesce(v_input->>'startDate', '') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}
-  end loop;
-
-  if exists (
-    select 1
-    from jsonb_array_elements(v_proposal->'steps') as steps(step)
-    cross join lateral jsonb_array_elements_text(steps.step->'dependencies') as dependencies(dependency)
-    where dependencies.dependency = steps.step->>'id'
-      or not (dependencies.dependency = any(v_ids))
-  ) then
-    raise exception 'Plan contains an invalid dependency.' using errcode = '22023';
-  end if;
-
-  if exists (
-    select 1
-    from jsonb_array_elements_text(coalesce(v_proposal->'dependencies', '[]'::jsonb)) as dependencies(dependency)
-    where not (dependencies.dependency = any(v_ids))
-  ) or (
-    select count(*) from jsonb_array_elements_text(coalesce(v_proposal->'dependencies', '[]'::jsonb))
-  ) <> (
-    select count(distinct dependency)
-    from jsonb_array_elements_text(coalesce(v_proposal->'dependencies', '[]'::jsonb)) as dependencies(dependency)
-  ) then
-    raise exception 'Plan contains an invalid dependency.' using errcode = '22023';
-  end if;
-
-  if exists (
-    with recursive edges(step_id, dependency_id) as (
-      select steps.step->>'id', dependencies.dependency
-      from jsonb_array_elements(v_proposal->'steps') as steps(step)
-      cross join lateral jsonb_array_elements_text(steps.step->'dependencies') as dependencies(dependency)
-    ), paths(start_id, node_id, path, has_cycle) as (
-      select step_id, dependency_id, array[step_id, dependency_id], step_id = dependency_id
-      from edges
-      union all
-      select paths.start_id, edges.dependency_id, paths.path || edges.dependency_id,
-        edges.dependency_id = any(paths.path)
-      from paths
-      join edges on edges.step_id = paths.node_id
-      where not paths.has_cycle
-    )
-    select 1 from paths where has_cycle
-  ) then
-    raise exception 'Plan dependency graph contains a cycle.' using errcode = '22023';
-  end if;
-
-  v_validation := case
-    when lower(coalesce(v_proposal->>'goal', '') || ' ' || coalesce(v_proposal->'limitations', '[]'::jsonb)::text)
-      ~ '(browser|playwright|puppeteer|selenium|automation|scrape|email|smtp|gmail|send mail|calendar|crm|slack|shell|filesystem)'
-    then 'invalid'
-    else 'valid'
-  end;
-  if (v_validation = 'valid' and jsonb_array_length(v_proposal->'steps') = 0)
-    or (v_validation = 'invalid' and jsonb_array_length(v_proposal->'steps') <> 0) then
-    raise exception 'Unsupported capabilities must be represented without executable steps.' using errcode = '22023';
-  end if;
-  select coalesce(max(p.version), 0) + 1 into v_version
-  from public.workflow_plans p where p.workspace_id = v_workspace_id and p.task_id = p_task_id;
-
-  v_plan := v_proposal || jsonb_build_object(
-    'id', v_plan_id,
-    'taskId', p_task_id,
-    'version', v_version,
-    'steps', v_steps,
-    'validationStatus', v_validation
-  );
-
-  insert into public.workflow_plans (
-    id, workspace_id, task_id, version, proposed_by, plan
-  ) values (
-    v_plan_id, v_workspace_id, p_task_id, v_version, v_user_id, v_plan
-  );
-  return jsonb_build_object(
-    'id', v_plan_id,
-    'workspace_id', v_workspace_id,
-    'task_id', p_task_id,
-    'version', v_version,
-    'decision', 'proposed',
-    'plan', v_plan,
-    'created_at', now()
-  );
-end;
-$$;
-        or coalesce(v_input->>'endDate', '') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}
-  end loop;
-
-  if exists (
-    select 1
-    from jsonb_array_elements(v_proposal->'steps') as steps(step)
-    cross join lateral jsonb_array_elements_text(steps.step->'dependencies') as dependencies(dependency)
-    where dependencies.dependency = steps.step->>'id'
-      or not (dependencies.dependency = any(v_ids))
-  ) then
-    raise exception 'Plan contains an invalid dependency.' using errcode = '22023';
-  end if;
-
-  if exists (
-    select 1
-    from jsonb_array_elements_text(coalesce(v_proposal->'dependencies', '[]'::jsonb)) as dependencies(dependency)
-    where not (dependencies.dependency = any(v_ids))
-  ) or (
-    select count(*) from jsonb_array_elements_text(coalesce(v_proposal->'dependencies', '[]'::jsonb))
-  ) <> (
-    select count(distinct dependency)
-    from jsonb_array_elements_text(coalesce(v_proposal->'dependencies', '[]'::jsonb)) as dependencies(dependency)
-  ) then
-    raise exception 'Plan contains an invalid dependency.' using errcode = '22023';
-  end if;
-
-  if exists (
-    with recursive edges(step_id, dependency_id) as (
-      select steps.step->>'id', dependencies.dependency
-      from jsonb_array_elements(v_proposal->'steps') as steps(step)
-      cross join lateral jsonb_array_elements_text(steps.step->'dependencies') as dependencies(dependency)
-    ), paths(start_id, node_id, path, has_cycle) as (
-      select step_id, dependency_id, array[step_id, dependency_id], step_id = dependency_id
-      from edges
-      union all
-      select paths.start_id, edges.dependency_id, paths.path || edges.dependency_id,
-        edges.dependency_id = any(paths.path)
-      from paths
-      join edges on edges.step_id = paths.node_id
-      where not paths.has_cycle
-    )
-    select 1 from paths where has_cycle
-  ) then
-    raise exception 'Plan dependency graph contains a cycle.' using errcode = '22023';
-  end if;
-
-  v_validation := case
-    when lower(coalesce(v_proposal->>'goal', '') || ' ' || coalesce(v_proposal->'limitations', '[]'::jsonb)::text)
-      ~ '(browser|playwright|puppeteer|selenium|automation|scrape|email|smtp|gmail|send mail|calendar|crm|slack|shell|filesystem)'
-    then 'invalid'
-    else 'valid'
-  end;
-  if (v_validation = 'valid' and jsonb_array_length(v_proposal->'steps') = 0)
-    or (v_validation = 'invalid' and jsonb_array_length(v_proposal->'steps') <> 0) then
-    raise exception 'Unsupported capabilities must be represented without executable steps.' using errcode = '22023';
-  end if;
-  select coalesce(max(p.version), 0) + 1 into v_version
-  from public.workflow_plans p where p.workspace_id = v_workspace_id and p.task_id = p_task_id;
-
-  v_plan := v_proposal || jsonb_build_object(
-    'id', v_plan_id,
-    'taskId', p_task_id,
-    'version', v_version,
-    'steps', v_steps,
-    'validationStatus', v_validation
-  );
-
-  insert into public.workflow_plans (
-    id, workspace_id, task_id, version, proposed_by, plan
-  ) values (
-    v_plan_id, v_workspace_id, p_task_id, v_version, v_user_id, v_plan
-  );
-  return jsonb_build_object(
-    'id', v_plan_id,
-    'workspace_id', v_workspace_id,
-    'task_id', p_task_id,
-    'version', v_version,
-    'decision', 'proposed',
-    'plan', v_plan,
-    'created_at', now()
-  );
-end;
-$$;
+        or coalesce(v_input->>'ticker', '') !~ '^[A-Za-z][A-Za-z0-9.-]{0,9}$'
+        or coalesce(v_input->>'startDate', '') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+        or coalesce(v_input->>'endDate', '') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
         or exists (
-          select 1 from jsonb_object_keys(v_input) as input_keys(key)
+          select 1
+          from jsonb_object_keys(
+            case when jsonb_typeof(v_input) = 'object' then v_input else '{}'::jsonb end
+          ) as input_keys(key)
           where input_keys.key not in ('ticker', 'startDate', 'endDate')
         ) then
         raise exception 'Plan contains invalid finnlp-company-news input.' using errcode = '22023';
       end if;
+
       begin
         v_news_start_date := (v_input->>'startDate')::date;
         v_news_end_date := (v_input->>'endDate')::date;
       exception when others then
         raise exception 'Plan contains invalid finnlp-company-news input.' using errcode = '22023';
       end;
+
       if v_news_start_date > v_news_end_date
         or v_news_end_date > (timezone('utc', now()))::date
         or (v_news_end_date - v_news_start_date) not between 0 and 30 then

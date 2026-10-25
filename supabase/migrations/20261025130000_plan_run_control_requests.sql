@@ -408,8 +408,12 @@ $;
 revoke all on function public.record_workflow_plan_run_lifecycle_event()
   from public, anon, authenticated;
 
-create trigger workflow_plan_runs_log_lifecycle
-  after insert or update of status on public.workflow_plan_runs
+create trigger workflow_plan_runs_log_started
+  after insert on public.workflow_plan_runs
+  for each row execute function public.record_workflow_plan_run_lifecycle_event();
+
+create trigger workflow_plan_runs_log_succeeded
+  after update of status on public.workflow_plan_runs
   for each row execute function public.record_workflow_plan_run_lifecycle_event();
 
 insert into public.workflow_plan_run_events (

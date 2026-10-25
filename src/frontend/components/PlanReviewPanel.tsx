@@ -40,7 +40,6 @@ export function PlanReviewPanel({
   const [runStatus, setRunStatus] = useState<'running' | 'paused' | 'succeeded' | 'failed' | 'cancelled' | ''>('');
   const [runPauseReason, setRunPauseReason] = useState('');
   const [stepStatuses, setStepStatuses] = useState<Record<string, string>>({});
-  const [activeStep, setActiveStep] = useState('');
 
   useEffect(() => {
     let active = true;

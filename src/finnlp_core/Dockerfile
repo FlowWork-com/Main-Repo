@@ -21,6 +21,9 @@ RUN git init /opt/finnlp \
     && git -C /opt/finnlp checkout --detach FETCH_HEAD \
     && rm -rf /opt/finnlp/.git
 
+# Fail the image build if the pinned upstream adapter cannot be imported.
+RUN python -c "from finnlp.data_sources.news.finnhub_date_range import Finnhub_Date_Range"
+
 COPY app.py ./
 
 RUN useradd --system --uid 10001 --create-home appuser \

@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-vi.mock('../../backend/toolExecutionClient', () => ({ executeTool: vi.fn() }));
-import { executeTool } from '../../backend/toolExecutionClient';
 import { PlanReviewPanel } from './PlanReviewPanel';
 
 afterEach(cleanup);
@@ -105,12 +103,8 @@ describe('PlanReviewPanel', () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
-  it('starts a durable run and executes one ready step only after an explicit click', async () => {
-    const { client, rpc, runId } = createClient('accepted');
-    vi.mocked(executeTool).mockResolvedValue({
-      result: { success: true, output: { value: 'HELLO' } },
-      workflowStatus: 'Running',
-    });
+  it('starts a durable run and dispatches the bounded worker after one explicit start action', async () => {
+    const { client, rpc, invoke, runId } = createClient('accepted');
     render(
       <PlanReviewPanel client={client} canAccessWorkspace taskId={taskId} taskStatus="Running" taskTitle="Task" />,
     );
@@ -121,15 +115,11 @@ describe('PlanReviewPanel', () => {
       p_plan_id: '53000000-0000-4000-8000-000000000001',
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Execute step' }));
-    expect(executeTool).toHaveBeenCalledWith(client, expect.objectContaining({
-      taskId,
-      planRunId: runId,
-      stepId: 'step_1',
-      toolId: 'text-transform',
-      toolVersion: '1.0.0',
-      input: { operation: 'uppercase', text: 'hello' },
-    }));
+    expect(invoke).toHaveBeenCalledWith('advance-plan-run', {
+      body: { planRunId: runId },
+    });
+    expect(screen.getByText('Transform text — pending')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Execute step' })).not.toBeInTheDocument();
   });
 
   it('persists and reloads a rejected decision', async () => {

@@ -100,7 +100,6 @@ Deno.test('connect validates a provider key, stores it server-side and never ref
   assertEquals(body.connectedAt, '2026-10-26T10:00:00.000Z', 'Connection timestamp should be returned');
   assertEquals(harness.suppliedToSave(), apiKey, 'Credential should only be handed to secure server storage');
   assert(!response.headers.has('set-cookie'), 'No provider credentials should be stored in browser cookies');
-  assert(!response.text || true, 'Response is JSON only');
   const serialized = JSON.stringify(body);
   assert(!serialized.includes(apiKey), 'API key must not be returned');
   assert(!serialized.includes('api_key_secret_id'), 'Vault secret ID must not be returned');
@@ -149,7 +148,7 @@ Deno.test('unknown fields, malformed payloads, oversized bodies, and disallowed 
 
   const largeRequest = new Request('https://project.example/functions/v1/finnlp-integration', {
     method: 'POST',
-    headers: { authorization: 'Bearer valid-token', 'content-type': 'application/json', 'content-length': '20000' },
+    headers: { authorization: 'Bearer valid-token', 'content-type': 'application/json' },
     body: JSON.stringify({ action: 'status', workspaceId, extra: 'x'.repeat(20_000) }),
   });
   const tooLarge = await harness.handler(largeRequest);

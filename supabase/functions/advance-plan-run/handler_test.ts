@@ -1,4 +1,9 @@
-import { assertEquals } from 'jsr:@std/assert@1';
+function assertEquals(actual: unknown, expected: unknown): void {
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new Error(`Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+  }
+}
+
 import {
   createAdvancePlanRunHandler,
   parseAllowedOrigins,

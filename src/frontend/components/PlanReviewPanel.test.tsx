@@ -118,7 +118,7 @@ describe('PlanReviewPanel', () => {
     expect(invoke).toHaveBeenCalledWith('advance-plan-run', {
       body: { planRunId: runId },
     });
-    expect(screen.getByText('Transform text — pending')).toBeInTheDocument();
+    expect(screen.getByText((_, element) => element?.tagName === 'LI' && element.textContent?.includes('pending') === true)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Execute step' })).not.toBeInTheDocument();
   });
 

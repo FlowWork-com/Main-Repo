@@ -35,3 +35,5 @@ verify_jwt = true
 verify_jwt = false
 [functions.advance-plan-run]
 verify_jwt = false
+[edge_runtime]
+policy = "per_worker"

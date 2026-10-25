@@ -25,7 +25,6 @@ export interface FinnhubProviderOptions {
 export class SupabaseFinnlpCompanyNewsProvider implements FinnlpCompanyNewsProvider {
   private readonly fetcher: typeof fetch;
   private readonly timeoutMs: number;
-  private readonly now: () => Date;
 
   constructor(
     private readonly serviceClient: SupabaseClient,
@@ -33,7 +32,6 @@ export class SupabaseFinnlpCompanyNewsProvider implements FinnlpCompanyNewsProvi
   ) {
     this.fetcher = options.fetcher ?? fetch;
     this.timeoutMs = options.timeoutMs ?? PROVIDER_TIMEOUT_MS;
-    this.now = options.now ?? (() => new Date());
   }
 
   async fetchCompanyNews(

@@ -68,6 +68,7 @@ insert into public.workflow_plans (
 on conflict (id) do nothing;
 
 create temporary table phase6_test_run (id uuid);
+grant select, insert on phase6_test_run to authenticated, service_role;
 select set_config('request.jwt.claim.sub', '71000000-0000-4000-8000-000000000001', true);
 set local role authenticated;
 insert into phase6_test_run
@@ -157,5 +158,6 @@ select is(
   'authorized member can cancel a paused run'
 );
 
+reset role;
 select * from finish();
 rollback;

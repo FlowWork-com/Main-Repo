@@ -20,14 +20,14 @@ returns trigger
 language plpgsql
 security definer
 set search_path = pg_catalog, public, vault, pg_temp
-as $
+as $$
 begin
   if old.api_key_secret_id is not null then
     perform vault.delete_secret(old.api_key_secret_id);
   end if;
   return old;
 end;
-$;
+$$;
 
 revoke all on function public.cleanup_finnlp_secret_after_connection_delete()
   from public, anon, authenticated, service_role;
@@ -146,8 +146,6 @@ language plpgsql
 security definer
 set search_path = pg_catalog, public, vault, auth, pg_temp
 as $$
-declare
-  v_secret_id uuid;
 begin
   if auth.role() is distinct from 'service_role' then
     raise exception 'Privileged server access is required.' using errcode = '42501';
@@ -156,7 +154,7 @@ begin
     raise exception 'Invalid FinNLP connection reference.' using errcode = '22023';
   end if;
 
-  select c.api_key_secret_id into v_secret_id
+  perform 1
   from public.workspace_finnlp_connections c
   where c.workspace_id = p_workspace_id and c.user_id = p_user_id
   for update;

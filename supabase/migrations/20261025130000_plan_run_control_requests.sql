@@ -298,8 +298,7 @@ begin
   end if;
 
   if v_run.status = 'running' then
-    if v_run.worker_lease_owner is not null
-      and v_run.worker_lease_expires_at > clock_timestamp() then
+    if v_run.worker_lease_owner is not null then
       update public.workflow_plan_runs
       set pause_reason = 'user_pause_requested'
       where id = v_run.id;
@@ -344,8 +343,7 @@ begin
   end if;
 
   if v_run.status = 'running' then
-    if v_run.worker_lease_owner is not null
-      and v_run.worker_lease_expires_at > clock_timestamp() then
+    if v_run.worker_lease_owner is not null then
       update public.workflow_plan_runs
       set cancel_requested_at = coalesce(cancel_requested_at, clock_timestamp()),
           pause_reason = 'user_cancel_requested'

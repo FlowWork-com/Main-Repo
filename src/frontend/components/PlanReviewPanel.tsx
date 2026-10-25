@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createMvpTools } from '../../tools/mvpTools';
 import { ToolRegistry } from '../../tools/toolRegistry';
 import { PlannerError, validatePlan, type WorkflowPlan } from '../../planning/planning';
+import { executeTool } from '../../backend/toolExecutionClient';
 
 interface PersistedPlan {
   readonly id: string;
@@ -34,6 +35,10 @@ export function PlanReviewPanel({
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [runId, setRunId] = useState('');
+  const [runStatus, setRunStatus] = useState<'running' | 'succeeded' | ''>('');
+  const [stepStatuses, setStepStatuses] = useState<Record<string, string>>({});
+  const [activeStep, setActiveStep] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -49,6 +54,27 @@ export function PlanReviewPanel({
       });
     return () => { active = false; };
   }, [client, taskId]);
+
+  useEffect(() => {
+    if (!proposal || proposal.decision !== 'accepted') {
+      setRunId('');
+      setRunStatus('');
+      setStepStatuses({});
+      return;
+    }
+    let active = true;
+    void loadLatestRun(client, taskId, proposal.id)
+      .then((run) => {
+        if (!active) return;
+        setRunId(run?.id ?? '');
+        setRunStatus(run?.status ?? '');
+        setStepStatuses(run?.steps ?? {});
+      })
+      .catch(() => {
+        if (active) setError('Unable to load saved plan execution progress.');
+      });
+    return () => { active = false; };
+  }, [client, proposal?.id, proposal?.decision, taskId]);
 
   async function requestPlan() {
     if (!canAccessWorkspace || !goal.trim()) return;
@@ -72,6 +98,61 @@ export function PlanReviewPanel({
       setError(plannerMessage(caught));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function startRun() {
+    if (!proposal || proposal.decision !== 'accepted' || !canAccessWorkspace || taskStatus !== 'Running' || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const { data, error: runError } = await client.rpc('start_workflow_plan_run', {
+        p_plan_id: proposal.id,
+      });
+      if (runError || !isRecord(data) || typeof data.id !== 'string' ||
+        (data.status !== 'running' && data.status !== 'succeeded')) {
+        throw new Error('RUN_START_FAILED');
+      }
+      setRunId(data.id);
+      setRunStatus(data.status);
+      const run = await loadLatestRun(client, taskId, proposal.id);
+      setStepStatuses(run?.steps ?? Object.fromEntries(proposal.plan.steps.map((step) => [step.id, 'pending'])));
+    } catch {
+      setError('Unable to start this plan run. Confirm the task is Running and the plan is accepted.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function executeStep(stepId: string) {
+    if (!proposal || !runId || !canAccessWorkspace || taskStatus !== 'Running' || activeStep) return;
+    const step = proposal.plan.steps.find((candidate) => candidate.id === stepId);
+    if (!step || !step.dependencies.every((dependency) => stepStatuses[dependency] === 'succeeded')) return;
+    setActiveStep(stepId);
+    setError('');
+    try {
+      const response = await executeTool(client, {
+        taskId,
+        planRunId: runId,
+        stepId: step.id,
+        executionId: crypto.randomUUID(),
+        requestId: crypto.randomUUID(),
+        toolId: step.toolId,
+        toolVersion: step.toolVersion,
+        input: step.input,
+      });
+      if (!response.result.success) {
+        setError(response.result.error.message);
+      }
+      const run = await loadLatestRun(client, taskId, proposal.id);
+      if (run) {
+        setRunStatus(run.status);
+        setStepStatuses(run.steps);
+      }
+    } catch {
+      setError('The step outcome could not be confirmed. Refresh execution progress before retrying.');
+    } finally {
+      setActiveStep('');
     }
   }
 
@@ -157,6 +238,37 @@ export function PlanReviewPanel({
               </li>
             ))}
           </ol>
+          {proposal.decision === 'accepted' && taskStatus === 'Running' && !runId && (
+            <button className="button" disabled={busy} onClick={() => void startRun()} type="button">
+              {busy ? 'Starting run…' : 'Start supervised execution'}
+            </button>
+          )}
+          {proposal.decision === 'accepted' && runId && (
+            <div className="form-stack" aria-label="Plan execution progress">
+              <h4>Execution progress</h4>
+              <p>Run status: {runStatus || 'loading'}</p>
+              <ol>
+                {proposal.plan.steps.map((step) => {
+                  const status = stepStatuses[step.id] ?? 'pending';
+                  const ready = step.dependencies.every((dependency) => stepStatuses[dependency] === 'succeeded');
+                  return (
+                    <li key={step.id}>
+                      <strong>{step.title}</strong> — {status}
+                      <button
+                        className="button button--secondary"
+                        disabled={taskStatus !== 'Running' || !canAccessWorkspace || activeStep !== '' || !ready || (status !== 'pending' && status !== 'failed')}
+                        onClick={() => void executeStep(step.id)}
+                        type="button"
+                      >
+                        {activeStep === step.id ? 'Executing…' : status === 'failed' ? 'Retry step' : 'Execute step'}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
+              <p className="notice">Each step requires a separate click. Dependencies must succeed first. A completed run moves the workflow to verification, not directly to Completed.</p>
+            </div>
+          )}
           {proposal.decision === 'proposed' && taskStatus === 'Planning' && (
             <div className="task-actions">
               <button className="button button--danger" disabled={busy} onClick={() => void decide('rejected')} type="button">
@@ -176,6 +288,38 @@ export function PlanReviewPanel({
       )}
     </section>
   );
+}
+
+async function loadLatestRun(
+  client: SupabaseClient,
+  taskId: string,
+  planId: string,
+): Promise<{ readonly id: string; readonly status: 'running' | 'succeeded'; readonly steps: Record<string, string> } | null> {
+  const { data: run, error } = await client
+    .from('workflow_plan_runs')
+    .select('id, status')
+    .eq('task_id', taskId)
+    .eq('plan_id', planId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!isRecord(run) || typeof run.id !== 'string' || (run.status !== 'running' && run.status !== 'succeeded')) {
+    return null;
+  }
+  const { data: rows, error: stepsError } = await client
+    .from('workflow_plan_step_runs')
+    .select('step_id, status')
+    .eq('run_id', run.id)
+    .order('step_index', { ascending: true });
+  if (stepsError) throw stepsError;
+  const steps: Record<string, string> = {};
+  for (const row of rows ?? []) {
+    if (isRecord(row) && typeof row.step_id === 'string' && typeof row.status === 'string') {
+      steps[row.step_id] = row.status;
+    }
+  }
+  return { id: run.id, status: run.status, steps };
 }
 
 async function loadLatestPlan(client: SupabaseClient, taskId: string): Promise<PersistedPlan | null> {

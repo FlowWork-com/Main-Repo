@@ -15,6 +15,27 @@ alter table public.workspace_finnlp_connections enable row level security;
 revoke all on public.workspace_finnlp_connections from public, anon, authenticated, service_role;
 grant select, insert, update, delete on public.workspace_finnlp_connections to service_role;
 
+create function public.cleanup_finnlp_secret_after_connection_delete()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public, vault, pg_temp
+as $
+begin
+  if old.api_key_secret_id is not null then
+    perform vault.delete_secret(old.api_key_secret_id);
+  end if;
+  return old;
+end;
+$;
+
+revoke all on function public.cleanup_finnlp_secret_after_connection_delete()
+  from public, anon, authenticated, service_role;
+
+create trigger workspace_finnlp_connections_delete_secret
+  after delete on public.workspace_finnlp_connections
+  for each row execute function public.cleanup_finnlp_secret_after_connection_delete();
+
 create function public.connect_finnlp_connection(
   p_workspace_id uuid,
   p_user_id uuid,
@@ -145,7 +166,6 @@ begin
 
   delete from public.workspace_finnlp_connections c
   where c.workspace_id = p_workspace_id and c.user_id = p_user_id;
-  perform vault.delete_secret(v_secret_id);
   return true;
 end;
 $$;

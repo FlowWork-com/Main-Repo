@@ -1,5 +1,8 @@
 begin;
 
+alter table public.workflow_plans
+  add constraint workflow_plans_id_workspace_task_unique unique (id, workspace_id, task_id);
+
 create table public.workflow_plan_runs (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null,
@@ -174,7 +177,8 @@ $$;
 create function public.claim_workflow_plan_step(
   p_run_id uuid,
   p_step_id text,
-  p_execution_id uuid
+  p_execution_id uuid,
+  p_actor_id uuid
 )
 returns jsonb
 language plpgsql
@@ -182,12 +186,15 @@ security definer
 set search_path = pg_catalog, public, pg_temp
 as $$
 declare
-  v_user_id uuid := auth.uid();
   v_run public.workflow_plan_runs%rowtype;
   v_step public.workflow_plan_step_runs%rowtype;
 begin
-  if v_user_id is null then
-    raise exception 'Authentication is required.' using errcode = '42501';
+  if p_actor_id is null or not exists (
+    select 1 from public.workspace_members wm
+    join public.workflow_plan_runs r on r.workspace_id = wm.workspace_id
+    where r.id = p_run_id and wm.user_id = p_actor_id
+  ) then
+    raise exception 'Plan run access is required.' using errcode = '42501';
   end if;
   if p_run_id is null or p_execution_id is null
     or p_step_id is null or char_length(trim(p_step_id)) not between 1 and 100 then
@@ -254,7 +261,8 @@ create function public.finish_workflow_plan_step(
   p_step_id text,
   p_execution_id uuid,
   p_output jsonb,
-  p_error jsonb
+  p_error jsonb,
+  p_actor_id uuid
 )
 returns jsonb
 language plpgsql
@@ -262,13 +270,16 @@ security definer
 set search_path = pg_catalog, public, pg_temp
 as $$
 declare
-  v_user_id uuid := auth.uid();
   v_run public.workflow_plan_runs%rowtype;
   v_step public.workflow_plan_step_runs%rowtype;
   v_status text;
 begin
-  if v_user_id is null then
-    raise exception 'Authentication is required.' using errcode = '42501';
+  if p_actor_id is null or not exists (
+    select 1 from public.workspace_members wm
+    join public.workflow_plan_runs r on r.workspace_id = wm.workspace_id
+    where r.id = p_run_id and wm.user_id = p_actor_id
+  ) then
+    raise exception 'Plan run access is required.' using errcode = '42501';
   end if;
   if p_run_id is null or p_execution_id is null or p_step_id is null
     or (p_output is not null and p_error is not null)
@@ -327,10 +338,10 @@ end;
 $$;
 
 revoke all on function public.start_workflow_plan_run(uuid) from public, anon;
-revoke all on function public.claim_workflow_plan_step(uuid, text, uuid) from public, anon;
-revoke all on function public.finish_workflow_plan_step(uuid, text, uuid, jsonb, jsonb) from public, anon;
+revoke all on function public.claim_workflow_plan_step(uuid, text, uuid, uuid) from public, anon, authenticated;
+revoke all on function public.finish_workflow_plan_step(uuid, text, uuid, jsonb, jsonb, uuid) from public, anon, authenticated;
 grant execute on function public.start_workflow_plan_run(uuid) to authenticated;
-grant execute on function public.claim_workflow_plan_step(uuid, text, uuid) to authenticated;
-grant execute on function public.finish_workflow_plan_step(uuid, text, uuid, jsonb, jsonb) to authenticated;
+grant execute on function public.claim_workflow_plan_step(uuid, text, uuid, uuid) to service_role;
+grant execute on function public.finish_workflow_plan_step(uuid, text, uuid, jsonb, jsonb, uuid) to service_role;
 
 commit;

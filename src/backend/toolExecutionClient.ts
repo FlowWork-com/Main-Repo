@@ -10,6 +10,8 @@ import {
 
 export interface ExecuteToolRequest {
   readonly taskId: string;
+  readonly planRunId?: string;
+  readonly stepId?: string;
   readonly executionId: string;
   readonly requestId: string;
   readonly toolId: string;

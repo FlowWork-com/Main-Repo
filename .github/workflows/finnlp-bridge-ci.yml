@@ -1,0 +1,64 @@
+name: FinNLP Bridge CI
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "src/finnlp_core/**"
+      - "run_pipeline.py"
+      - "agents_config.yml"
+      - "compose.yaml"
+      - ".env.example"
+      - ".github/workflows/finnlp-bridge-ci.yml"
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "src/finnlp_core/**"
+      - "run_pipeline.py"
+      - "agents_config.yml"
+      - "compose.yaml"
+      - ".env.example"
+      - ".github/workflows/finnlp-bridge-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: src/finnlp_core/requirements.txt
+
+      - name: Install bridge dependencies
+        run: python -m pip install -r src/finnlp_core/requirements.txt
+
+      - name: Test bridge contract
+        run: python -m unittest discover -s src/finnlp_core -p "test_*.py" -v
+
+      - name: Validate Python syntax
+        run: python -m py_compile src/finnlp_core/app.py src/finnlp_core/test_app.py run_pipeline.py
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build FinNLP bridge image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src/finnlp_core
+          file: ./src/finnlp_core/Dockerfile
+          tags: flowwork-finnlp-bridge:ci
+          load: true

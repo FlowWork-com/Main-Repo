@@ -153,6 +153,12 @@ begin
   if p_workspace_id is null or p_user_id is null then
     raise exception 'Invalid FinNLP connection reference.' using errcode = '22023';
   end if;
+  if not exists (
+    select 1 from public.workspace_members wm
+    where wm.workspace_id = p_workspace_id and wm.user_id = p_user_id
+  ) then
+    raise exception 'Workspace access is required.' using errcode = '42501';
+  end if;
 
   perform 1
   from public.workspace_finnlp_connections c

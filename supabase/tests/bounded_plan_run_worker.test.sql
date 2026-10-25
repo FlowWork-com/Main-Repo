@@ -1,6 +1,6 @@
 begin;
 
-select plan(10);
+select plan(13);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -156,6 +156,79 @@ select is(
   public.cancel_workflow_plan_run((select id from phase6_test_run))->>'status',
   'cancelled',
   'authorized member can cancel a paused run'
+);
+
+
+reset role;
+insert into public.tasks (
+  id, workspace_id, owner_id, title, details, status, attempt
+) values (
+  '73000000-0000-4000-8000-000000000002',
+  '72000000-0000-4000-8000-000000000001',
+  '71000000-0000-4000-8000-000000000001',
+  'Cancellation request test', '', 'Running', 1
+);
+insert into public.workflow_plans (
+  id, workspace_id, task_id, version, proposed_by, plan, decision, decided_by, decided_at
+) values (
+  '74000000-0000-4000-8000-000000000002',
+  '72000000-0000-4000-8000-000000000001',
+  '73000000-0000-4000-8000-000000000002',
+  1,
+  '71000000-0000-4000-8000-000000000001',
+  jsonb_build_object(
+    'id', '74000000-0000-4000-8000-000000000002',
+    'taskId', '73000000-0000-4000-8000-000000000002',
+    'goal', 'Uppercase hello.',
+    'summary', 'Transform text.',
+    'validationStatus', 'valid',
+    'steps', jsonb_build_array(jsonb_build_object(
+      'id', 'step_1',
+      'title', 'Transform text',
+      'toolId', 'text-transform',
+      'toolVersion', '1.0.0',
+      'input', jsonb_build_object('operation', 'uppercase', 'text', 'hello'),
+      'dependencies', '[]'::jsonb
+    ))
+  ),
+  'accepted',
+  '71000000-0000-4000-8000-000000000001',
+  now()
+);
+create temporary table phase6_test_run2 (id uuid);
+grant select, insert on phase6_test_run2 to authenticated, service_role;
+set local role authenticated;
+insert into phase6_test_run2
+select (public.start_workflow_plan_run('74000000-0000-4000-8000-000000000002')->>'id')::uuid;
+
+reset role;
+set local role service_role;
+select is(
+  public.claim_workflow_plan_run_worker((select id from phase6_test_run2), '75000000-0000-4000-8000-000000000005', 120)->>'status',
+  'running',
+  'second run obtains a worker lease before cancellation'
+);
+
+reset role;
+set local role authenticated;
+select is(
+  public.cancel_workflow_plan_run((select id from phase6_test_run2))->>'status',
+  'running',
+  'cancellation during an active lease is recorded as a request'
+);
+
+reset role;
+set local role service_role;
+select is(
+  public.finish_workflow_plan_run_worker(
+    (select id from phase6_test_run2),
+    '75000000-0000-4000-8000-000000000005',
+    null,
+    false,
+    'UNKNOWN'
+  )->>'status',
+  'cancelled',
+  'worker stops after recording the pending cancellation request'
 );
 
 reset role;

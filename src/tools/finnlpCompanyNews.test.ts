@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ToolExecutionContext } from './contracts';
+import { isPersistableJson, type ToolExecutionContext } from './contracts';
 import {
   createFinnlpCompanyNewsTool,
   FinnlpNewsProviderError,
@@ -92,6 +92,22 @@ describe('FinNLP company news tool', () => {
     if (result.success) {
       expect(result.output).toMatchObject({ articleCount: 20, truncated: true });
       expect((result.output as { articles: unknown[] }).articles).toHaveLength(20);
+    }
+  });
+
+  it('keeps multilingual provider output within the persisted JSON size limit', async () => {
+    const fetchCompanyNews = vi.fn(async () => Array.from({ length: 20 }, (_, index) => ({
+      ...article(index),
+      headline: '市场消息📰'.repeat(100),
+      summary: '财报与市场动态📈'.repeat(300),
+    })));
+    const tool = createFinnlpCompanyNewsTool({ fetchCompanyNews });
+    const result = await tool.execute(context, validInput);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(isPersistableJson(result.output)).toBe(true);
+      expect(result.output).toMatchObject({ truncated: true });
+      expect((result.output as { articles: unknown[] }).articles.length).toBeLessThan(20);
     }
   });
 

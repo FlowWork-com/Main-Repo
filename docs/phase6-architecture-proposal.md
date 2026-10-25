@@ -1,4 +1,4 @@
-# Phase 6 architecture proposal: bounded plan-run worker
+# Phase 6: bounded plan-run worker
 
 ## Repository findings
 
@@ -7,7 +7,7 @@
 - The checked-in Supabase config does not configure a cron/scheduler extension or queue service. The implementation must not silently depend on one.
 - Current tool definitions do not expose a reviewed idempotency/safe-retry contract. Ambiguous failures must pause instead of automatically replaying a potentially external side effect.
 
-## Proposed smallest safe architecture
+## Implemented architecture
 
 1. Add a Postgres-backed dispatch queue with a unique outstanding job per run, bounded attempts, lease owner/expiry, and sanitized event history. Use row locks / `SKIP LOCKED` and compare-and-set updates to prevent duplicate concurrent claims.
 2. A server-side Edge Function processes at most one plan step per invocation. It re-reads run/task/step state, checks membership/accepted plan and dependencies, validates the persisted tool input through the canonical registry, claims a lease, executes via the existing `ToolExecutionService`, and commits the outcome before dispatching follow-up work.
@@ -24,3 +24,12 @@
 - No automatic replay of non-idempotent or ambiguous operations.
 - No assumed pg_cron, pg_net, pgmq, or other extension unless availability is verified and CI can exercise the required path.
 - No direct pushes to `main`; this is a draft PR until checks and review are complete.
+
+
+## Implemented behavior and remaining operational notes
+
+- `workflow_plan_runs` doubles as the durable dispatch record and has a single database lease owner/expiry, heartbeat timestamp, policy version, maximum elapsed time, and maximum automatic step attempts.
+- `advance-plan-run` verifies either a user JWT plus workspace membership or an internal server-only dispatch credential. It uses `EdgeRuntime.waitUntil` and invokes itself for the next step only after durable finalization; each invocation claims one lease and attempts at most one step.
+- User controls are backed by guarded RPCs. Only a clean user pause is automatically resumable. A failed step, elapsed limit, or expired lease with an in-flight step remains paused for review.
+- Current tool contracts do not expose idempotency metadata, so the stored policy allows one automatic attempt per step and no automatic retries. This intentionally favors duplicate-effect safety over unattended recovery.
+- CI checks and tests the worker handler and its SQL privilege/lease behavior. Production runtime configuration and a staging end-to-end run still need to be verified in the target Supabase project; local CI does not certify production background-task availability.

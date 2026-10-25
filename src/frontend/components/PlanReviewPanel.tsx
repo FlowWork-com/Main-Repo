@@ -57,15 +57,13 @@ export function PlanReviewPanel({
     return () => { active = false; };
   }, [client, taskId]);
 
+  const proposalId = proposal?.id;
+  const proposalDecision = proposal?.decision;
+
   useEffect(() => {
-    if (!proposal || proposal.decision !== 'accepted') {
-      setRunId('');
-      setRunStatus('');
-      setStepStatuses({});
-      return;
-    }
+    if (!proposalId || proposalDecision !== 'accepted') return;
     let active = true;
-    void loadLatestRun(client, taskId, proposal.id)
+    void loadLatestRun(client, taskId, proposalId)
       .then((run) => {
         if (!active) return;
         setRunId(run?.id ?? '');
@@ -76,7 +74,7 @@ export function PlanReviewPanel({
         if (active) setError('Unable to load saved plan execution progress.');
       });
     return () => { active = false; };
-  }, [client, proposal?.id, proposal?.decision, taskId]);
+  }, [client, proposalId, proposalDecision, taskId]);
 
   async function requestPlan() {
     if (!canAccessWorkspace || !goal.trim()) return;

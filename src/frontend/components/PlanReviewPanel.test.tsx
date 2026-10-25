@@ -122,14 +122,14 @@ describe('PlanReviewPanel', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Execute step' }));
-    expect(await vi.waitFor(() => expect(executeTool).toHaveBeenCalledWith(client, expect.objectContaining({
+    expect(executeTool).toHaveBeenCalledWith(client, expect.objectContaining({
       taskId,
       planRunId: runId,
       stepId: 'step_1',
       toolId: 'text-transform',
       toolVersion: '1.0.0',
       input: { operation: 'uppercase', text: 'hello' },
-    })))).toBeUndefined();
+    }));
   });
 
   it('persists and reloads a rejected decision', async () => {

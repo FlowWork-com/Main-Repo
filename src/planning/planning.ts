@@ -124,7 +124,17 @@ export function validatePlan(
     throw createPlannerError('INVALID_PLAN', 'The plan does not match the requested task and goal.');
   }
   const unsupported = detectUnsupportedCapabilities(normalized.goal, normalized.limitations);
-  ensureStepCount(normalized, unsupported.length > 0);
+  const explicitlyBlocked = normalized.steps.length === 0 && normalized.limitations.length > 0;
+  ensureStepCount(normalized, unsupported.length > 0 || explicitlyBlocked);
+  if (unsupported.length > 0 || explicitlyBlocked) {
+    return {
+      ...normalized,
+      steps: [],
+      dependencies: [],
+      validationStatus: 'invalid',
+      limitations: [...new Set([...normalized.limitations, ...unsupported])],
+    };
+  }
   const stepIds = new Set(normalized.steps.map((step) => step.id));
   const graph = new Map<string, string[]>();
 
@@ -183,16 +193,6 @@ export function validatePlan(
 
   if (hasCycle(graph)) {
     throw createPlannerError('INVALID_PLAN', 'Plan dependency graph contains a cycle.');
-  }
-
-  if (unsupported.length > 0) {
-    return {
-      ...normalized,
-      steps: [],
-      dependencies: [],
-      validationStatus: 'invalid',
-      limitations: [...new Set([...normalized.limitations, ...unsupported])],
-    };
   }
 
   return {
@@ -388,15 +388,37 @@ function containsCrossTaskReference(value: unknown, taskId: string): boolean {
 
 function detectUnsupportedCapabilities(goal: string, limitations: readonly string[]): readonly string[] {
   const statement = `${goal} ${limitations.join(' ')}`.toLowerCase();
-  const unsupported = [] as string[];
-
-  if (/(browser|playwright|puppeteer|selenium|automation|scrape)/i.test(statement)) {
-    unsupported.push('Browser automation is unavailable in this workspace.');
+  const unsupported: string[] = [];
+  const capabilityRules: readonly { pattern: RegExp; limitation: string }[] = [
+    {
+      pattern: /\\b(?:browser automation|automate (?:the )?browser|playwright|puppeteer|selenium|scrape (?:a |the )?website)\\b/i,
+      limitation: 'Browser automation is unavailable in this workspace.',
+    },
+    {
+      pattern: /\\b(?:send (?:an? )?email|send mail|email (?:the|to) [a-z0-9])/i,
+      limitation: 'Email sending is not supported by the registered tool catalog.',
+    },
+    {
+      pattern: /\\b(?:create|send|schedule|modify|cancel) (?:a |an )?(?:calendar event|calendar invite|meeting invite)\\b/i,
+      limitation: 'Calendar changes are not supported by the registered tool catalog.',
+    },
+    {
+      pattern: /\\b(?:update|modify|delete|create) (?:a |the )?(?:crm record|customer record|salesforce record)\\b/i,
+      limitation: 'CRM record changes are not supported by the registered tool catalog.',
+    },
+    {
+      pattern: /\\b(?:send|post) (?:a |the )?(?:slack message|message to slack)\\b/i,
+      limitation: 'Sending Slack messages is not supported by the registered tool catalog.',
+    },
+    {
+      pattern: /\\b(?:run|execute) (?:arbitrary )?(?:shell command|terminal command|script)\\b|\\bfilesystem access\\b/i,
+      limitation: 'Arbitrary shell and filesystem access are not supported by the registered tool catalog.',
+    },
+  ];
+  for (const rule of capabilityRules) {
+    if (rule.pattern.test(statement)) unsupported.push(rule.limitation);
   }
-  if (/(email|smtp|gmail|send mail|calendar|crm|slack|shell|filesystem)/i.test(statement)) {
-    unsupported.push('This requested capability is outside the current tool registry.');
-  }
-  return unsupported;
+  return [...new Set(unsupported)];
 }
 
 function hasCycle(graph: Map<string, readonly string[]>): boolean {

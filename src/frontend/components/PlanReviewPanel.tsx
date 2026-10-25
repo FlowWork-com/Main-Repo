@@ -138,6 +138,7 @@ export function PlanReviewPanel({
       setRunStatus(data.status);
       const run = await loadLatestRun(client, taskId, proposal.id);
       setStepStatuses(run?.steps ?? Object.fromEntries(proposal.plan.steps.map((step) => [step.id, 'pending'])));
+      setRunPauseReason(run?.pauseReason ?? '');
       if (data.status === 'running') {
         const { error: dispatchError } = await client.functions.invoke('advance-plan-run', {
           body: { planRunId: data.id },
@@ -298,7 +299,7 @@ export function PlanReviewPanel({
                   </li>
                 ))}
               </ol>
-              {runStatus === 'running' && (
+              {runStatus === 'running' && runPauseReason !== 'user_pause_requested' && runPauseReason !== 'user_cancel_requested' && (
                 <div className="task-actions">
                   <button className="button button--secondary" disabled={busy} onClick={() => void dispatchRun()} type="button">
                     {busy ? 'Working…' : 'Retry worker dispatch'}
@@ -310,6 +311,12 @@ export function PlanReviewPanel({
                     Cancel run
                   </button>
                 </div>
+              )}
+              {runStatus === 'running' && runPauseReason === 'user_pause_requested' && (
+                <p className="notice">Pause requested. The current step will finish, then the worker will stop before starting another step.</p>
+              )}
+              {runStatus === 'running' && runPauseReason === 'user_cancel_requested' && (
+                <p className="notice">Cancellation requested. The current step may finish, but no later step will be scheduled.</p>
               )}
               {runStatus === 'paused' && runPauseReason === 'user_paused' && (
                 <button className="button" disabled={busy} onClick={() => void changeRunState('resume')} type="button">

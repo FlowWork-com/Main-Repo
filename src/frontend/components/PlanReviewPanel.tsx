@@ -298,17 +298,21 @@ export function PlanReviewPanel({
                   </li>
                 ))}
               </ol>
-              {runStatus === 'running' && runPauseReason !== 'user_pause_requested' && runPauseReason !== 'user_cancel_requested' && (
+              {runStatus === 'running' && (
                 <div className="task-actions">
                   <button className="button button--secondary" disabled={busy} onClick={() => void dispatchRun()} type="button">
                     {busy ? 'Working…' : 'Retry worker dispatch'}
                   </button>
-                  <button className="button button--secondary" disabled={busy} onClick={() => void changeRunState('pause')} type="button">
-                    Pause run
-                  </button>
-                  <button className="button button--danger" disabled={busy} onClick={() => void changeRunState('cancel')} type="button">
-                    Cancel run
-                  </button>
+                  {runPauseReason !== 'user_pause_requested' && runPauseReason !== 'user_cancel_requested' && (
+                    <>
+                      <button className="button button--secondary" disabled={busy} onClick={() => void changeRunState('pause')} type="button">
+                        Pause run
+                      </button>
+                      <button className="button button--danger" disabled={busy} onClick={() => void changeRunState('cancel')} type="button">
+                        Cancel run
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
               {runStatus === 'running' && runPauseReason === 'user_pause_requested' && (

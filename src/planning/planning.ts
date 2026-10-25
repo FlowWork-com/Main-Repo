@@ -391,27 +391,27 @@ function detectUnsupportedCapabilities(goal: string, limitations: readonly strin
   const unsupported: string[] = [];
   const capabilityRules: readonly { pattern: RegExp; limitation: string }[] = [
     {
-      pattern: /\\b(?:browser automation|automate (?:the )?browser|playwright|puppeteer|selenium|scrape (?:a |the )?website)\\b/i,
+      pattern: /\b(?:browser automation|automate (?:the )?browser|playwright|puppeteer|selenium|scrape (?:a |the )?website)\b/i,
       limitation: 'Browser automation is unavailable in this workspace.',
     },
     {
-      pattern: /\\b(?:send (?:an? )?email|send mail|email (?:the|to) [a-z0-9])/i,
+      pattern: /\b(?:send (?:an? )?email|send mail|email (?:the|to) [a-z0-9])/i,
       limitation: 'Email sending is not supported by the registered tool catalog.',
     },
     {
-      pattern: /\\b(?:create|send|schedule|modify|cancel) (?:a |an )?(?:calendar event|calendar invite|meeting invite)\\b/i,
+      pattern: /\b(?:create|send|schedule|modify|cancel) (?:a |an )?(?:calendar event|calendar invite|meeting invite)\b/i,
       limitation: 'Calendar changes are not supported by the registered tool catalog.',
     },
     {
-      pattern: /\\b(?:update|modify|delete|create) (?:a |the )?(?:crm record|customer record|salesforce record)\\b/i,
+      pattern: /\b(?:update|modify|delete|create) (?:a |the )?(?:crm record|customer record|salesforce record)\b/i,
       limitation: 'CRM record changes are not supported by the registered tool catalog.',
     },
     {
-      pattern: /\\b(?:send|post) (?:a |the )?(?:slack message|message to slack)\\b/i,
+      pattern: /\b(?:send|post) (?:a |the )?(?:slack message|message to slack)\b/i,
       limitation: 'Sending Slack messages is not supported by the registered tool catalog.',
     },
     {
-      pattern: /\\b(?:run|execute) (?:arbitrary )?(?:shell command|terminal command|script)\\b|\\bfilesystem access\\b/i,
+      pattern: /\b(?:run|execute) (?:arbitrary )?(?:shell command|terminal command|script)\b|\bfilesystem access\b/i,
       limitation: 'Arbitrary shell and filesystem access are not supported by the registered tool catalog.',
     },
   ];

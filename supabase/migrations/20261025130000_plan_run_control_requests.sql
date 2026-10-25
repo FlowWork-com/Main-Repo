@@ -1,5 +1,15 @@
 begin;
 
+alter table public.workflow_plan_run_events
+  drop constraint if exists workflow_plan_run_events_event_type_check;
+alter table public.workflow_plan_run_events
+  add constraint workflow_plan_run_events_event_type_check
+  check (event_type in (
+    'worker_claimed', 'step_succeeded', 'step_failed', 'paused',
+    'pause_requested', 'resumed', 'cancelled', 'cancel_requested',
+    'lease_expired', 'run_succeeded'
+  ));
+
 create or replace function public.claim_workflow_plan_step(
   p_run_id uuid,
   p_step_id text,
@@ -296,7 +306,7 @@ begin
       insert into public.workflow_plan_run_events (
         run_id, workspace_id, task_id, event_type, actor_id, metadata
       ) values (
-        v_run.id, v_run.workspace_id, v_run.task_id, 'paused', v_user_id,
+        v_run.id, v_run.workspace_id, v_run.task_id, 'pause_requested', v_user_id,
         jsonb_build_object('request_pending', true)
       );
       return jsonb_build_object('id', v_run.id, 'status', 'running', 'pause_requested', true);
@@ -343,7 +353,7 @@ begin
       insert into public.workflow_plan_run_events (
         run_id, workspace_id, task_id, event_type, actor_id, metadata
       ) values (
-        v_run.id, v_run.workspace_id, v_run.task_id, 'cancelled', v_user_id,
+        v_run.id, v_run.workspace_id, v_run.task_id, 'cancel_requested', v_user_id,
         jsonb_build_object('request_pending', true)
       );
       return jsonb_build_object('id', v_run.id, 'status', 'running', 'cancel_requested', true);

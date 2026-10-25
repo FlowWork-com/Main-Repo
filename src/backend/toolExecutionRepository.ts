@@ -69,6 +69,7 @@ export interface ToolExecutionRepository extends TaskFileMetadataSource, TaskFil
     context: ToolExecutionContext,
     planRunId: string,
     stepId: string,
+    requestedInput: unknown,
   ): Promise<{ readonly toolId: string; readonly toolVersion: string; readonly input: unknown }>;
   completePlanStep(
     context: ToolExecutionContext,
@@ -210,6 +211,7 @@ export class SupabaseToolExecutionRepository
     context: ToolExecutionContext,
     planRunId: string,
     stepId: string,
+    _requestedInput: unknown,
   ): Promise<{ readonly toolId: string; readonly toolVersion: string; readonly input: unknown }> {
     const { data, error } = await this.client.rpc('claim_workflow_plan_step', {
       p_run_id: planRunId,

@@ -23,6 +23,8 @@ export interface ToolExecutionRequest {
   readonly userId: string;
   readonly workspaceId: string;
   readonly taskId: string;
+  readonly planRunId: string;
+  readonly stepId: string;
   readonly executionId: string;
   readonly requestId: string;
   readonly toolId: string;
@@ -158,7 +160,7 @@ export class ToolExecutionService {
           ),
         );
       }
-      return this.resumeStoredExecution(aggregate, context, existing);
+      return this.resumeStoredExecution(aggregate, context, existing, request);
     }
 
     let workflow = aggregate;
@@ -190,6 +192,37 @@ export class ToolExecutionService {
       );
     }
 
+    let step: { readonly toolId: string; readonly toolVersion: string; readonly input: unknown };
+    try {
+      step = await this.executionRepository.claimPlanStep(
+        context,
+        request.planRunId,
+        request.stepId,
+      );
+    } catch {
+      return unchanged(
+        workflow,
+        toolFailure(
+          'INVALID_EXECUTION_CONTEXT',
+          'The plan step is not ready to execute or its run is unavailable.',
+        ),
+      );
+    }
+    if (
+      step.toolId !== request.toolId ||
+      step.toolVersion !== request.toolVersion ||
+      !isPersistableJson(step.input) ||
+      canonicalJson(step.input) !== canonicalJson(request.input as JsonValue)
+    ) {
+      return unchanged(
+        workflow,
+        toolFailure(
+          'INVALID_EXECUTION_CONTEXT',
+          'The requested tool and input do not match the persisted plan step.',
+        ),
+      );
+    }
+
     let claimed: boolean;
     try {
       claimed = await this.executionRepository.claimExecution(context, request.input);
@@ -209,7 +242,7 @@ export class ToolExecutionService {
       }
       if (racedExecution) {
         if (matchesRequest(racedExecution, request)) {
-          return this.resumeStoredExecution(workflow, context, racedExecution);
+          return this.resumeStoredExecution(workflow, context, racedExecution, request);
         }
         return unchanged(
           workflow,
@@ -243,7 +276,7 @@ export class ToolExecutionService {
         );
       }
       if (racedExecution && matchesRequest(racedExecution, request)) {
-        return this.resumeStoredExecution(workflow, context, racedExecution);
+        return this.resumeStoredExecution(workflow, context, racedExecution, request);
       }
       return unchanged(
         workflow,
@@ -263,7 +296,25 @@ export class ToolExecutionService {
     }
 
     await this.executionRepository.completeExecution(context, result);
-    workflow = await this.applyResultToWorkflow(workflow, context, result);
+    let runStatus: 'running' | 'succeeded';
+    try {
+      runStatus = await this.executionRepository.completePlanStep(
+        context,
+        request.planRunId,
+        request.stepId,
+        result,
+      );
+    } catch {
+      return unchanged(
+        workflow,
+        toolFailure(
+          'EXECUTOR_UNAVAILABLE',
+          'The tool result was saved, but the plan step result could not be confirmed.',
+          true,
+        ),
+      );
+    }
+    workflow = await this.applyResultToWorkflow(workflow, context, result, runStatus);
     return { result, workflow };
   }
 
@@ -271,6 +322,7 @@ export class ToolExecutionService {
     workflow: WorkflowAggregate,
     context: ToolExecutionContext,
     execution: StoredToolExecution,
+    request: ToolExecutionRequest,
   ): Promise<ToolExecutionOutcome> {
     if (execution.status === 'running') {
       return unchanged(
@@ -286,7 +338,13 @@ export class ToolExecutionService {
       execution.result ??
       toolFailure('EXECUTION_FAILED', 'The stored execution result is incomplete.');
     if (workflow.task.status === 'Running') {
-      workflow = await this.applyResultToWorkflow(workflow, context, result);
+      const runStatus = await this.executionRepository.completePlanStep(
+        context,
+        request.planRunId,
+        request.stepId,
+        result,
+      );
+      workflow = await this.applyResultToWorkflow(workflow, context, result, runStatus);
     }
     return { result, workflow };
   }
@@ -295,9 +353,10 @@ export class ToolExecutionService {
     aggregate: WorkflowAggregate,
     context: ToolExecutionContext,
     result: ToolExecutionResult,
+    runStatus: 'running' | 'succeeded',
   ): Promise<WorkflowAggregate> {
     if (result.success) {
-      if (aggregate.task.status === 'Running') {
+      if (aggregate.task.status === 'Running' && runStatus === 'succeeded') {
         return this.applyCommand(
           aggregate,
           context,
@@ -307,7 +366,9 @@ export class ToolExecutionService {
       }
       return aggregate;
     }
-    if (aggregate.task.status === 'Running') {
+    // A failed step remains retryable inside the active plan run. Do not fail the
+    // entire workflow until the plan-level recovery policy decides to stop.
+    if (aggregate.task.status === 'Running' && runStatus === 'succeeded') {
       return this.applyCommand(
         aggregate,
         context,
@@ -359,6 +420,10 @@ function createContext(
     request.workspaceId !== aggregate.task.tenantId ||
     typeof request.taskId !== 'string' ||
     request.taskId !== aggregate.task.id ||
+    typeof request.planRunId !== 'string' ||
+    !isUuid(request.planRunId) ||
+    typeof request.stepId !== 'string' ||
+    !/^[a-zA-Z0-9_-]{1,100}$/.test(request.stepId) ||
     typeof request.executionId !== 'string' ||
     !isUuid(request.executionId) ||
     typeof request.requestId !== 'string' ||

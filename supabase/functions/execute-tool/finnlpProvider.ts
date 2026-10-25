@@ -82,7 +82,7 @@ export async function validateFinnhubApiKey(
   apiKey: string,
   options: FinnhubProviderOptions = {},
 ): Promise<FinnhubKeyValidation> {
-  if (apiKey.trim().length < 16 || apiKey.trim().length > 512 || /[\r\n\u0000]/.test(apiKey)) {
+  if (apiKey.trim().length < 16 || apiKey.trim().length > 512 || hasControlCharacters(apiKey)) {
     return { status: 'unauthorized' };
   }
   const now = options.now?.() ?? new Date();
@@ -190,6 +190,14 @@ function throwForProviderStatus(status: number): void {
   if (status === 401 || status === 403) throw new FinnlpNewsProviderError('UNAUTHORIZED');
   if (status === 429) throw new FinnlpNewsProviderError('RATE_LIMITED');
   if (status < 200 || status >= 300) throw new FinnlpNewsProviderError('UNAVAILABLE');
+}
+
+function hasControlCharacters(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code < 0x20 || code === 0x7f) return true;
+  }
+  return false;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

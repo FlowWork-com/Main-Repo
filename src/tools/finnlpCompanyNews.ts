@@ -103,7 +103,17 @@ export function createFinnlpCompanyNewsTool(
         if (!Array.isArray(sourceArticles)) {
           return toolFailure('EXECUTION_FAILED', 'The news provider returned an invalid response.');
         }
-        const articles = sourceArticles.slice(0, FINNLP_NEWS_MAX_ARTICLES).map(normalizeArticle);
+        const articles = sourceArticles.slice(0, FINNLP_NEWS_MAX_ARTICLES).map((article) => {
+          const normalized = normalizeArticle(article);
+          return {
+            id: normalized.id,
+            headline: normalized.headline,
+            summary: normalized.summary,
+            source: normalized.source,
+            url: normalized.url,
+            publishedAt: normalized.publishedAt,
+          };
+        });
         const reference = `finnhub://company-news/${normalizedInput.ticker}/${normalizedInput.startDate}/${normalizedInput.endDate}`;
         return {
           success: true,

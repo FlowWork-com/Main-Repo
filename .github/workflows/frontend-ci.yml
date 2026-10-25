@@ -56,7 +56,7 @@ jobs:
           deno check --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/google-workspace/index.ts
           deno test --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/google-workspace/provider_test.ts
           deno test --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/google-workspace/handler_test.ts
-          deno check --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/advance-plan-run/index.ts
+          deno check --allow-import=cdn.sheetjs.com:443 --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/advance-plan-run/index.ts
           deno test --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/advance-plan-run/handler_test.ts
 
       - name: Set up Supabase CLI

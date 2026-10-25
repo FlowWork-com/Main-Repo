@@ -19,6 +19,31 @@ interface CategoryMetric {
   validPlans: number; blockedPlans: number; invalidPlans: number;
 }
 
+function hasValidDependencyGraph(steps: Array<{ id: string; dependencies?: unknown }>): boolean {
+  const ids = new Set(steps.map((step) => step.id));
+  if (ids.size !== steps.length) return false;
+  const graph = new Map<string, string[]>();
+  for (const step of steps) {
+    if (!Array.isArray(step.dependencies) || !step.dependencies.every((item) => typeof item === 'string')) return false;
+    const dependencies = step.dependencies as string[];
+    if (new Set(dependencies).size !== dependencies.length ||
+        dependencies.some((id) => id === step.id || !ids.has(id))) return false;
+    graph.set(step.id, dependencies);
+  }
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const visit = (id: string): boolean => {
+    if (visiting.has(id)) return false;
+    if (visited.has(id)) return true;
+    visiting.add(id);
+    for (const dependency of graph.get(id) ?? []) if (!visit(dependency)) return false;
+    visiting.delete(id);
+    visited.add(id);
+    return true;
+  };
+  return [...ids].every(visit);
+}
+
 function evaluateCase(testCase: (typeof PLANNER_EVALUATION_DATASET)[number]) {
   if (testCase.mockProvider === 'timeout') return { outcome: 'blocked' as const, errorCode: 'PROVIDER_TIMEOUT' };
   if (testCase.mockProvider === 'error') return { outcome: 'blocked' as const, errorCode: 'PROVIDER_UNAVAILABLE' };
@@ -83,15 +108,15 @@ describe('offline planner evaluation benchmark', () => {
       }
       if (testCase.plan && typeof testCase.plan === 'object' && 'steps' in testCase.plan &&
           Array.isArray((testCase.plan as { steps: unknown[] }).steps)) {
-        const steps = (testCase.plan as { steps: Array<{ toolId: string; toolVersion: string; input: unknown }> }).steps;
+        const steps = (testCase.plan as { steps: Array<{ id: string; toolId: string; toolVersion: string; input: unknown; dependencies?: unknown }> }).steps;
         totalSteps += steps.length;
         for (const step of steps) {
           if (registry.has(step.toolId, step.toolVersion)) registeredToolVersionPasses += 1;
           if (registry.get(step.toolId, step.toolVersion)?.validateInput(step.input)) inputSchemaPasses += 1;
         }
-        if (steps.length <= MAX_PLAN_STEPS) dependencyGraphCases += 1;
-        if (steps.length <= MAX_PLAN_STEPS && steps.every((step) => registry.has(step.toolId, step.toolVersion))) {
-          dependencyGraphPasses += Number(result.outcome === 'valid');
+        if (steps.length <= MAX_PLAN_STEPS) {
+          dependencyGraphCases += 1;
+          dependencyGraphPasses += Number(hasValidDependencyGraph(steps));
         }
       }
       if (result.outcome === 'valid') metric.validPlans += 1;

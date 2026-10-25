@@ -97,8 +97,8 @@ reset role;
 set local role authenticated;
 select is(
   public.pause_workflow_plan_run((select id from phase6_test_run))->>'status',
-  'paused',
-  'authorized member can pause a running plan'
+  'running',
+  'authorized pause request waits for the active worker lease to finish'
 );
 
 reset role;

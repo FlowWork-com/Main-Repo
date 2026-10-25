@@ -46,11 +46,9 @@ function clientWithKey(key: string | null, error: unknown = null) {
 }
 
 Deno.test('provider calls only the fixed HTTPS company-news endpoint and normalizes response data', async () => {
-  let observedUrl: URL | null = null;
-  let observedMethod = '';
+  const observedRequests: Array<{ url: string; method: string }> = [];
   const fakeFetch: typeof fetch = async (input, init) => {
-    observedUrl = new URL(String(input));
-    observedMethod = String(init?.method);
+    observedRequests.push({ url: String(input), method: String(init?.method) });
     return Response.json([{
       id: 123,
       headline: 'Headline',
@@ -67,11 +65,12 @@ Deno.test('provider calls only the fixed HTTPS company-news endpoint and normali
     startDate: '2026-10-01',
     endDate: '2026-10-03',
   });
-  assertEquals(observedUrl?.origin, 'https://finnhub.io', 'Provider must not accept arbitrary hosts');
-  assertEquals(observedUrl?.pathname, '/api/v1/company-news', 'Provider must use only company-news');
-  assertEquals(observedUrl?.searchParams.get('symbol'), 'AAPL', 'Ticker must be passed');
-  assertEquals(observedUrl?.searchParams.get('token'), 'server-only-api-key', 'Secret stays in provider request');
-  assertEquals(observedMethod, 'GET', 'Provider must be read-only');
+  const observedUrl = new URL(observedRequests[0].url);
+  assertEquals(observedUrl.origin, 'https://finnhub.io', 'Provider must not accept arbitrary hosts');
+  assertEquals(observedUrl.pathname, '/api/v1/company-news', 'Provider must use only company-news');
+  assertEquals(observedUrl.searchParams.get('symbol'), 'AAPL', 'Ticker must be passed');
+  assertEquals(observedUrl.searchParams.get('token'), 'server-only-api-key', 'Secret stays in provider request');
+  assertEquals(observedRequests[0].method, 'GET', 'Provider must be read-only');
   assertEquals(articles[0].headline, 'Headline', 'Article headline must be mapped');
   assertEquals(articles[0].publishedAt, new Date(1790812800 * 1000).toISOString(), 'Timestamp must be normalized');
   assertEquals(calls[0], {
@@ -135,21 +134,22 @@ Deno.test('provider timeout cancels the underlying request', async () => {
 });
 
 Deno.test('connection check uses company-news with a fixed symbol/date and distinguishes API rejection', async () => {
-  let url: URL | null = null;
+  const requestedUrls: string[] = [];
   const now = () => new Date('2026-10-26T14:00:00.000Z');
   const valid = await validateFinnhubApiKey('valid-finnhub-api-key-123', {
     now,
     fetcher: async (input, init) => {
-      url = new URL(String(input));
+      requestedUrls.push(String(input));
       assertEquals(init?.method, 'GET', 'Credential validation must be read-only');
       return Response.json([]);
     },
   });
   assertEquals(valid.status, 'valid', 'A successful empty news response is still valid');
-  assertEquals(url?.origin, 'https://finnhub.io', 'Credential validator uses only trusted endpoint');
-  assertEquals(url?.pathname, '/api/v1/company-news', 'Credential validator must not query other endpoints');
-  assertEquals(url?.searchParams.get('symbol'), 'AAPL', 'Credential validation uses fixed symbol');
-  assertEquals(url?.searchParams.get('from'), '2026-10-26', 'Credential validation uses today only');
+  const url = new URL(requestedUrls[0]);
+  assertEquals(url.origin, 'https://finnhub.io', 'Credential validator uses only trusted endpoint');
+  assertEquals(url.pathname, '/api/v1/company-news', 'Credential validator must not query other endpoints');
+  assertEquals(url.searchParams.get('symbol'), 'AAPL', 'Credential validation uses fixed symbol');
+  assertEquals(url.searchParams.get('from'), '2026-10-26', 'Credential validation uses today only');
 
   const rejected = await validateFinnhubApiKey('invalid-finnhub-api-key-123', {
     now,

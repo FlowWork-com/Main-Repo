@@ -198,6 +198,7 @@ export class ToolExecutionService {
         context,
         request.planRunId,
         request.stepId,
+        request.input,
       );
     } catch {
       return unchanged(

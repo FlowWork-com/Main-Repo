@@ -126,13 +126,13 @@ export function validatePlan(
   const unsupported = detectUnsupportedCapabilities(normalized.goal, normalized.limitations);
   const explicitlyBlocked = normalized.steps.length === 0 && normalized.limitations.length > 0;
   ensureStepCount(normalized, unsupported.length > 0 || explicitlyBlocked);
-  if (unsupported.length > 0 || explicitlyBlocked) {
+  if (explicitlyBlocked && unsupported.length === 0) {
     return {
       ...normalized,
       steps: [],
       dependencies: [],
       validationStatus: 'invalid',
-      limitations: [...new Set([...normalized.limitations, ...unsupported])],
+      limitations: normalized.limitations,
     };
   }
   const stepIds = new Set(normalized.steps.map((step) => step.id));
@@ -193,6 +193,16 @@ export function validatePlan(
 
   if (hasCycle(graph)) {
     throw createPlannerError('INVALID_PLAN', 'Plan dependency graph contains a cycle.');
+  }
+
+  if (unsupported.length > 0) {
+    return {
+      ...normalized,
+      steps: [],
+      dependencies: [],
+      validationStatus: 'invalid',
+      limitations: [...new Set([...normalized.limitations, ...unsupported])],
+    };
   }
 
   return {

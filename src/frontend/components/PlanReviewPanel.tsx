@@ -23,12 +23,14 @@ export function PlanReviewPanel({
   taskStatus,
   taskId,
   taskTitle,
+  onTaskRefresh,
 }: {
   readonly client: SupabaseClient;
   readonly canAccessWorkspace: boolean;
   readonly taskStatus: string;
   readonly taskId: string;
   readonly taskTitle: string;
+  readonly onTaskRefresh?: () => Promise<unknown>;
 }) {
   const [goal, setGoal] = useState(taskTitle);
   const [proposal, setProposal] = useState<PersistedPlan | null>(null);
@@ -149,6 +151,7 @@ export function PlanReviewPanel({
         setRunStatus(run.status);
         setStepStatuses(run.steps);
       }
+      await onTaskRefresh?.();
     } catch {
       setError('The step outcome could not be confirmed. Refresh execution progress before retrying.');
     } finally {

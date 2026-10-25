@@ -1,61 +1,85 @@
+#!/usr/bin/env python3
+"""Fetch real FinNLP/Finnhub news and print the evidence handoff as Markdown.
+
+Start the local service with Docker Compose and set FINNLP_BRIDGE_API_KEY first.
+This CLI intentionally does not invent articles or execute workflow decisions.
+"""
+
+import argparse
+import json
 import os
 import sys
-import yaml
-from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
+from urllib.request import Request, urlopen
 
-# Fix python search paths
-sys.path.insert(0, str(Path(__file__).parent / "src" / "finnlp_core"))
 
-def run_cohesive_agent_flow(ticker: str):
-    # 1. Read your master system YAML layout configuration
-    with open("agents_config.yml", "r") as f:
-        config = yaml.safe_load(f)
-    print(f"🚀 Initializing unified workspace pipeline: [{config['system_name']}]")
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("ticker", help="Stock symbol, for example AAPL")
+    parser.add_argument("start_date", help="Inclusive start date in YYYY-MM-DD format")
+    parser.add_argument("end_date", help="Inclusive end date in YYYY-MM-DD format")
+    parser.add_argument(
+        "--base-url",
+        default=os.getenv("FINNLP_BRIDGE_URL", "http://127.0.0.1:8000"),
+        help="Bridge base URL (defaults to FINNLP_BRIDGE_URL or localhost)",
+    )
+    return parser.parse_args()
 
-    print(f"🤖 Step 1: Activating FinNLP Agent to gather market intelligence for {ticker}...")
-    print("📰 Ingesting internet-scale data streams (Finnhub API news layers)...")
-    
-    # 2. Automated Fail-Safe Data Pump (Bypasses the broken scripts[3] web scraper)
-    mock_market_data = [
-        {
-            "headline": f"{ticker} Shares Surge on Institutional Volume Growth",
-            "summary": f"Market trackers report massive order accumulations for {ticker} following positive supply line updates and macro sector trend turnarounds."
+
+def main() -> int:
+    args = parse_args()
+    bridge_key = os.getenv("FINNLP_BRIDGE_API_KEY", "").strip()
+    if not bridge_key:
+        print("FINNLP_BRIDGE_API_KEY is not set; refusing to send an unauthenticated request.", file=sys.stderr)
+        return 2
+
+    parsed = urlsplit(args.base_url)
+    is_loopback = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+    if parsed.scheme != "https" and not (parsed.scheme == "http" and is_loopback):
+        print("The bridge URL must use HTTPS, except for a loopback development URL.", file=sys.stderr)
+        return 2
+    if not parsed.netloc:
+        print("The bridge URL is invalid.", file=sys.stderr)
+        return 2
+
+    payload = json.dumps({
+        "ticker": args.ticker,
+        "start_date": args.start_date,
+        "end_date": args.end_date,
+    }).encode("utf-8")
+    request = Request(
+        args.base_url.rstrip("/") + "/execute/news",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + bridge_key,
         },
-        {
-            "headline": f"Regulatory Filings Reveal New Venture Alignments for {ticker}",
-            "summary": f"Recent structural filings indicate {ticker} is expanding its footprint into distributed data architecture integrations."
-        }
-    ]
+        method="POST",
+    )
 
-    # 3. Translate Agent 1's findings into your universal Markdown Wire-Format
-    print("📝 Step 2: Translating raw intelligence assets into a unified Markdown payload...")
-    markdown_payload = f"# FinNLP Automated Market Intelligence\n**Target Asset Symbol:** {ticker}\n\n## 📰 Scraped Headlines & Summary Stream\n"
-    
-    for idx, article in enumerate(mock_market_data):
-        markdown_payload += f"### {idx+1}. {article['headline']}\n> {article['summary']}\n\n"
+    try:
+        with urlopen(request, timeout=75) as response:
+            result = json.loads(response.read().decode("utf-8"))
+    except HTTPError as error:
+        try:
+            body = json.loads(error.read().decode("utf-8"))
+            detail = body.get("detail", "bridge_request_failed")
+        except (ValueError, AttributeError):
+            detail = "bridge_request_failed"
+        print(f"FinNLP bridge returned HTTP {error.code}: {detail}", file=sys.stderr)
+        return 1
+    except (URLError, TimeoutError, json.JSONDecodeError):
+        print("Unable to retrieve a valid response from the FinNLP bridge. Check its health and provider configuration.", file=sys.stderr)
+        return 1
 
-    # 4. Pipe that exact Markdown straight into Agent 2 (FlowWork Planning Engine)
-    print("🤖 Step 3: Piping the Markdown payload wire directly into the FlowWork Decision Agent...")
-    
-    # Simulating FlowWork's internal step-validation loops reading the context string
-    system_prompt = f"Review this live financial layout:\n{markdown_payload}"
-    
-    # 5. Output the single cohesive merged report text layout
-    final_report = f"""
-======================================================================
-                  💎 UNIFIED AGENT SYSTEM OUTPUT 💎
-======================================================================
-{markdown_payload}
-## 🛠️ FlowWork Planning Action Decision
-* **Orchestration Agent:** {config['workflow_agent']['name']}
-* **Validation Profile:** Configured Endpoint [Structured JSON Mode]
-* **State Transition:** Pending Human Verification Reference
-* **Status:** SUCCESS ✅ Cohesive multi-agent context loop completed.
-======================================================================
-"""
-    return final_report
+    markdown = result.get("summary_markdown")
+    if not isinstance(markdown, str):
+        print("FinNLP bridge response did not contain summary_markdown.", file=sys.stderr)
+        return 1
+    print(markdown)
+    return 0
+
 
 if __name__ == "__main__":
-    # Execute the unified, cohesive pipeline flow
-    result = run_cohesive_agent_flow("AAPL")
-    print(result)
+    raise SystemExit(main())

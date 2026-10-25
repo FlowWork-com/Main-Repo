@@ -23,7 +23,7 @@
 - No arbitrary code, shell, SQL, or model-controlled URLs.
 - No automatic replay of non-idempotent or ambiguous operations.
 - No assumed pg_cron, pg_net, pgmq, or other extension unless availability is verified and CI can exercise the required path.
-- No direct pushes to `main`; this is a draft PR until checks and review are complete.
+- The implementation PR is not a production deployment approval; verify the target Supabase runtime and review the complete CI result before rollout.
 
 
 ## Implemented behavior and remaining operational notes

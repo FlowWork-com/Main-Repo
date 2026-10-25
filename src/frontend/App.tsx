@@ -26,6 +26,7 @@ import { TaskTimeline } from './components/TaskTimeline';
 import { TaskAttachmentsPanel } from './components/TaskAttachmentsPanel';
 import { PromptTemplatesPanel } from './components/PromptTemplatesPanel';
 import { GoogleWorkspacePanel } from './components/GoogleWorkspacePanel';
+import { FinnlpIntegrationPanel } from './components/FinnlpIntegrationPanel';
 import { InvoiceExtractionQualityPanel } from './components/InvoiceExtractionQualityPanel';
 
 export function App() {
@@ -481,6 +482,12 @@ function WorkspaceView({
       {error && <p className="error-message" role="alert">{error}</p>}
 
       <GoogleWorkspacePanel
+        client={client}
+        workspaceId={workspace.id}
+        canAccessWorkspace={canAccessWorkspace}
+      />
+
+      <FinnlpIntegrationPanel
         client={client}
         workspaceId={workspace.id}
         canAccessWorkspace={canAccessWorkspace}

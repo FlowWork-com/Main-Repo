@@ -132,7 +132,7 @@ const handler = createAdvancePlanRunHandler<SupabaseClient>({
         workspaceId: run.workspace_id,
         taskId: run.task_id,
         planRunId: runId,
-        stepId,
+        stepId: next.step_id,
         executionId,
         requestId: `plan-run:${runId}:${stepId}:${executionId}`,
         toolId: next.tool_id,

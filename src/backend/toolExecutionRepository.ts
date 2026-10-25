@@ -65,6 +65,17 @@ export interface ToolExecutionRepository extends TaskFileMetadataSource, TaskFil
     context: ToolExecutionContext,
     result: ToolExecutionResult,
   ): Promise<void>;
+  claimPlanStep(
+    context: ToolExecutionContext,
+    planRunId: string,
+    stepId: string,
+  ): Promise<{ readonly toolId: string; readonly toolVersion: string; readonly input: unknown }>;
+  completePlanStep(
+    context: ToolExecutionContext,
+    planRunId: string,
+    stepId: string,
+    result: ToolExecutionResult,
+  ): Promise<'running' | 'succeeded'>;
 }
 
 interface ExecutionRow {
@@ -193,6 +204,62 @@ export class SupabaseToolExecutionRepository
       p_actor_id: context.userId,
     });
     if (error) throw operationError('save tool execution result');
+  }
+
+  async claimPlanStep(
+    context: ToolExecutionContext,
+    planRunId: string,
+    stepId: string,
+  ): Promise<{ readonly toolId: string; readonly toolVersion: string; readonly input: unknown }> {
+    const { data, error } = await this.client.rpc('claim_workflow_plan_step', {
+      p_run_id: planRunId,
+      p_step_id: stepId,
+      p_execution_id: context.executionId,
+      p_actor_id: context.userId,
+    });
+    if (error || !data || typeof data !== 'object' || Array.isArray(data)) {
+      throw operationError('claim plan step');
+    }
+    const row = data as Record<string, unknown>;
+    if (
+      row.step_id !== stepId ||
+      row.execution_id !== context.executionId ||
+      typeof row.tool_id !== 'string' ||
+      typeof row.tool_version !== 'string' ||
+      !isPersistableJson(row.input)
+    ) {
+      throw operationError('validate plan step claim');
+    }
+    return { toolId: row.tool_id, toolVersion: row.tool_version, input: row.input };
+  }
+
+  async completePlanStep(
+    context: ToolExecutionContext,
+    planRunId: string,
+    stepId: string,
+    result: ToolExecutionResult,
+  ): Promise<'running' | 'succeeded'> {
+    const { error } = await this.client.rpc('finish_workflow_plan_step', {
+      p_run_id: planRunId,
+      p_step_id: stepId,
+      p_execution_id: context.executionId,
+      p_output: result.success ? result.output : null,
+      p_error: result.success ? null : result.error,
+      p_actor_id: context.userId,
+    });
+    if (error) throw operationError('save plan step result');
+
+    const { data, error: statusError } = await this.client
+      .from('workflow_plan_runs')
+      .select('status')
+      .eq('id', planRunId)
+      .eq('workspace_id', context.workspaceId)
+      .eq('task_id', context.taskId)
+      .maybeSingle();
+    if (statusError || !data || (data.status !== 'running' && data.status !== 'succeeded')) {
+      throw operationError('load plan run status');
+    }
+    return data.status;
   }
 
   async getTaskFileContent(

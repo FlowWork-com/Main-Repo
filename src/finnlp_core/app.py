@@ -51,7 +51,7 @@ def _require_bridge_key(authorization: str | None) -> None:
     if (
         not separator
         or scheme.lower() != "bearer"
-        or not hmac.compare_digest(supplied.strip(), expected)
+        or not hmac.compare_digest(supplied.strip().encode("utf-8"), expected.encode("utf-8"))
     ):
         raise HTTPException(status_code=401, detail="unauthorized")
 

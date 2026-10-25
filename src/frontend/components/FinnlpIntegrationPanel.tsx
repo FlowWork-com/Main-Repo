@@ -51,7 +51,7 @@ export function FinnlpIntegrationPanel({
   }, [canAccessWorkspace, client, workspaceId]);
 
   useEffect(() => {
-    void refreshStatus();
+    void Promise.resolve().then(refreshStatus);
   }, [refreshStatus]);
 
   async function connect(event: FormEvent<HTMLFormElement>) {

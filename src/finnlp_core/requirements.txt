@@ -1,0 +1,9 @@
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+finnhub-python==2.4.29
+pandas==2.3.3
+lxml==6.0.2
+tqdm==4.67.1
+requests==2.32.5
+parsel==1.10.0
+httpx==0.28.1

@@ -74,6 +74,9 @@ begin
   if v_step.status not in ('pending', 'failed') then
     raise exception 'Plan step is not available to execute.' using errcode = '23505';
   end if;
+  if v_step.attempt >= v_run.max_step_attempts then
+    raise exception 'Plan step attempt limit reached.' using errcode = '22023';
+  end if;
   if exists (
     select 1
     from jsonb_array_elements_text(v_step.dependencies) as dependency(step_id)

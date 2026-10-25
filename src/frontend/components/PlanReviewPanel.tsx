@@ -3,7 +3,6 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createMvpTools } from '../../tools/mvpTools';
 import { ToolRegistry } from '../../tools/toolRegistry';
 import { PlannerError, validatePlan, type WorkflowPlan } from '../../planning/planning';
-import { executeTool } from '../../backend/toolExecutionClient';
 
 interface PersistedPlan {
   readonly id: string;
@@ -38,7 +37,8 @@ export function PlanReviewPanel({
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [runId, setRunId] = useState('');
-  const [runStatus, setRunStatus] = useState<'running' | 'succeeded' | ''>('');
+  const [runStatus, setRunStatus] = useState<'running' | 'paused' | 'succeeded' | 'failed' | 'cancelled' | ''>('');
+  const [runPauseReason, setRunPauseReason] = useState('');
   const [stepStatuses, setStepStatuses] = useState<Record<string, string>>({});
   const [activeStep, setActiveStep] = useState('');
 
@@ -68,6 +68,7 @@ export function PlanReviewPanel({
         if (!active) return;
         setRunId(run?.id ?? '');
         setRunStatus(run?.status ?? '');
+        setRunPauseReason(run?.pauseReason ?? '');
         setStepStatuses(run?.steps ?? {});
       })
       .catch(() => {
@@ -75,6 +76,26 @@ export function PlanReviewPanel({
       });
     return () => { active = false; };
   }, [client, proposalId, proposalDecision, taskId]);
+
+  useEffect(() => {
+    if (!proposalId || proposalDecision !== 'accepted' || runStatus !== 'running') return;
+    let active = true;
+    const refresh = async () => {
+      try {
+        const run = await loadLatestRun(client, taskId, proposalId);
+        if (!active || !run) return;
+        setRunId(run.id);
+        setRunStatus(run.status);
+        setRunPauseReason(run.pauseReason);
+        setStepStatuses(run.steps);
+        if (run.status === 'succeeded') await onTaskRefresh?.();
+      } catch {
+        if (active) setError('Unable to refresh saved execution progress.');
+      }
+    };
+    const timer = setInterval(() => { void refresh(); }, 2_000);
+    return () => { active = false; clearInterval(timer); };
+  }, [client, proposalId, proposalDecision, runStatus, taskId, onTaskRefresh]);
 
   async function requestPlan() {
     if (!canAccessWorkspace || !goal.trim()) return;
@@ -117,6 +138,12 @@ export function PlanReviewPanel({
       setRunStatus(data.status);
       const run = await loadLatestRun(client, taskId, proposal.id);
       setStepStatuses(run?.steps ?? Object.fromEntries(proposal.plan.steps.map((step) => [step.id, 'pending'])));
+      if (data.status === 'running') {
+        const { error: dispatchError } = await client.functions.invoke('advance-plan-run', {
+          body: { planRunId: data.id },
+        });
+        if (dispatchError) setError('The run was saved, but worker dispatch could not be confirmed. Retry worker dispatch from the progress controls.');
+      }
     } catch {
       setError('Unable to start this plan run. Confirm the task is Running and the plan is accepted.');
     } finally {
@@ -124,36 +151,52 @@ export function PlanReviewPanel({
     }
   }
 
-  async function executeStep(stepId: string) {
-    if (!proposal || !runId || !canAccessWorkspace || taskStatus !== 'Running' || activeStep) return;
-    const step = proposal.plan.steps.find((candidate) => candidate.id === stepId);
-    if (!step || !step.dependencies.every((dependency) => stepStatuses[dependency] === 'succeeded')) return;
-    setActiveStep(stepId);
+  async function dispatchRun() {
+    if (!runId || !canAccessWorkspace || runStatus !== 'running' || busy) return;
+    setBusy(true);
     setError('');
     try {
-      const response = await executeTool(client, {
-        taskId,
-        planRunId: runId,
-        stepId: step.id,
-        executionId: crypto.randomUUID(),
-        requestId: crypto.randomUUID(),
-        toolId: step.toolId,
-        toolVersion: step.toolVersion,
-        input: step.input,
+      const { error: dispatchError } = await client.functions.invoke('advance-plan-run', {
+        body: { planRunId: runId },
       });
-      if (!response.result.success) {
-        setError(response.result.error.message);
+      if (dispatchError) throw new Error('DISPATCH_FAILED');
+    } catch {
+      setError('Worker dispatch could not be confirmed. The durable run state is unchanged; retry dispatch when ready.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function changeRunState(action: 'pause' | 'resume' | 'cancel') {
+    if (!runId || !canAccessWorkspace || busy) return;
+    setBusy(true);
+    setError('');
+    const rpcName = action === 'pause' ? 'pause_workflow_plan_run'
+      : action === 'resume' ? 'resume_workflow_plan_run' : 'cancel_workflow_plan_run';
+    try {
+      const { data, error: stateError } = await client.rpc(rpcName, { p_run_id: runId });
+      if (stateError || !isRecord(data) || typeof data.status !== 'string') throw new Error('RUN_STATE_FAILED');
+      setRunStatus(data.status as 'running' | 'paused' | 'succeeded' | 'failed' | 'cancelled');
+      if (action === 'resume') {
+        setRunPauseReason('');
+        const { error: dispatchError } = await client.functions.invoke('advance-plan-run', {
+          body: { planRunId: runId },
+        });
+        if (dispatchError) throw new Error('DISPATCH_FAILED');
+      } else if (action === 'pause') {
+        setRunPauseReason('user_paused');
       }
-      const run = await loadLatestRun(client, taskId, proposal.id);
+      const run = await loadLatestRun(client, taskId, proposal?.id ?? '');
       if (run) {
         setRunStatus(run.status);
+        setRunPauseReason(run.pauseReason);
         setStepStatuses(run.steps);
       }
       await onTaskRefresh?.();
     } catch {
-      setError('The step outcome could not be confirmed. Refresh execution progress before retrying.');
+      setError('Unable to update the run. Refresh progress and try again. A running external action may finish before a pause or cancellation takes effect.');
     } finally {
-      setActiveStep('');
+      setBusy(false);
     }
   }
 
@@ -249,25 +292,34 @@ export function PlanReviewPanel({
               <h4>Execution progress</h4>
               <p>Run status: {runStatus || 'loading'}</p>
               <ol>
-                {proposal.plan.steps.map((step) => {
-                  const status = stepStatuses[step.id] ?? 'pending';
-                  const ready = step.dependencies.every((dependency) => stepStatuses[dependency] === 'succeeded');
-                  return (
-                    <li key={step.id}>
-                      <strong>{step.title}</strong> — {status}
-                      <button
-                        className="button button--secondary"
-                        disabled={taskStatus !== 'Running' || !canAccessWorkspace || activeStep !== '' || !ready || (status !== 'pending' && status !== 'failed')}
-                        onClick={() => void executeStep(step.id)}
-                        type="button"
-                      >
-                        {activeStep === step.id ? 'Executing…' : status === 'failed' ? 'Retry step' : 'Execute step'}
-                      </button>
-                    </li>
-                  );
-                })}
+                {proposal.plan.steps.map((step) => (
+                  <li key={step.id}>
+                    <strong>{step.title}</strong> — {stepStatuses[step.id] ?? 'pending'}
+                  </li>
+                ))}
               </ol>
-              <p className="notice">Each step requires a separate click. Dependencies must succeed first. A completed run moves the workflow to verification, not directly to Completed.</p>
+              {runStatus === 'running' && (
+                <div className="task-actions">
+                  <button className="button button--secondary" disabled={busy} onClick={() => void dispatchRun()} type="button">
+                    {busy ? 'Working…' : 'Retry worker dispatch'}
+                  </button>
+                  <button className="button button--secondary" disabled={busy} onClick={() => void changeRunState('pause')} type="button">
+                    Pause run
+                  </button>
+                  <button className="button button--danger" disabled={busy} onClick={() => void changeRunState('cancel')} type="button">
+                    Cancel run
+                  </button>
+                </div>
+              )}
+              {runStatus === 'paused' && runPauseReason === 'user_paused' && (
+                <button className="button" disabled={busy} onClick={() => void changeRunState('resume')} type="button">
+                  Resume run
+                </button>
+              )}
+              {runStatus === 'paused' && runPauseReason !== 'user_paused' && (
+                <p className="notice">This run is paused for review. FlowWork will not automatically replay a failed or ambiguous step. Review the task execution history before deciding how to proceed.</p>
+              )}
+              <p className="notice">The worker advances one validated step per bounded invocation. Progress is persisted server-side, and a completed run moves the workflow to verification, not directly to Completed. A currently running external action may finish before pause or cancellation takes effect.</p>
             </div>
           )}
           {proposal.decision === 'proposed' && taskStatus === 'Planning' && (
@@ -295,17 +347,17 @@ async function loadLatestRun(
   client: SupabaseClient,
   taskId: string,
   planId: string,
-): Promise<{ readonly id: string; readonly status: 'running' | 'succeeded'; readonly steps: Record<string, string> } | null> {
+): Promise<{ readonly id: string; readonly status: 'running' | 'paused' | 'succeeded' | 'failed' | 'cancelled'; readonly pauseReason: string; readonly steps: Record<string, string> } | null> {
   const { data: run, error } = await client
     .from('workflow_plan_runs')
-    .select('id, status')
+    .select('id, status, pause_reason')
     .eq('task_id', taskId)
     .eq('plan_id', planId)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error) throw error;
-  if (!isRecord(run) || typeof run.id !== 'string' || (run.status !== 'running' && run.status !== 'succeeded')) {
+  if (!isRecord(run) || typeof run.id !== 'string' || !['running', 'paused', 'succeeded', 'failed', 'cancelled'].includes(String(run.status))) {
     return null;
   }
   const { data: rows, error: stepsError } = await client
@@ -320,7 +372,7 @@ async function loadLatestRun(
       steps[row.step_id] = row.status;
     }
   }
-  return { id: run.id, status: run.status, steps };
+  return { id: run.id, status: run.status as 'running' | 'paused' | 'succeeded' | 'failed' | 'cancelled', pauseReason: typeof run.pause_reason === 'string' ? run.pause_reason : '', steps };
 }
 
 async function loadLatestPlan(client: SupabaseClient, taskId: string): Promise<PersistedPlan | null> {

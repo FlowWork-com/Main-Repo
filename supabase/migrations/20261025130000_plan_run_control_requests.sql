@@ -5,7 +5,7 @@ alter table public.workflow_plan_run_events
 alter table public.workflow_plan_run_events
   add constraint workflow_plan_run_events_event_type_check
   check (event_type in (
-    'worker_claimed', 'step_succeeded', 'step_failed', 'paused',
+    'run_started', 'worker_claimed', 'step_succeeded', 'step_failed', 'paused',
     'pause_requested', 'resumed', 'cancelled', 'cancel_requested',
     'lease_expired', 'run_succeeded'
   ));
@@ -239,11 +239,6 @@ begin
         worker_lease_owner = null, worker_lease_expires_at = null,
         last_heartbeat_at = clock_timestamp()
     where id = v_run.id and status = 'running';
-    insert into public.workflow_plan_run_events (
-      run_id, workspace_id, task_id, event_type, worker_id
-    ) values (
-      v_run.id, v_run.workspace_id, v_run.task_id, 'run_succeeded', p_worker_id
-    );
     return jsonb_build_object('status', 'succeeded', 'run_id', v_run.id);
   end if;
 
@@ -382,6 +377,63 @@ begin
   return jsonb_build_object('id', v_run.id, 'status', v_run.status, 'cancel_requested', false);
 end;
 $$;
+
+
+create function public.record_workflow_plan_run_lifecycle_event()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public, pg_temp
+as $
+begin
+  if tg_op = 'INSERT' then
+    insert into public.workflow_plan_run_events (
+      run_id, workspace_id, task_id, event_type, actor_id, metadata
+    ) values (
+      new.id, new.workspace_id, new.task_id, 'run_started', new.started_by,
+      jsonb_build_object('policy_version', new.policy_version)
+    );
+  elsif old.status is distinct from new.status and new.status = 'succeeded' then
+    insert into public.workflow_plan_run_events (
+      run_id, workspace_id, task_id, event_type, actor_id, worker_id, metadata
+    ) values (
+      new.id, new.workspace_id, new.task_id, 'run_succeeded', new.started_by,
+      old.worker_lease_owner, jsonb_build_object('policy_version', new.policy_version)
+    );
+  end if;
+  return new;
+end;
+$;
+
+revoke all on function public.record_workflow_plan_run_lifecycle_event()
+  from public, anon, authenticated;
+
+create trigger workflow_plan_runs_log_lifecycle
+  after insert or update of status on public.workflow_plan_runs
+  for each row execute function public.record_workflow_plan_run_lifecycle_event();
+
+insert into public.workflow_plan_run_events (
+  run_id, workspace_id, task_id, event_type, actor_id, metadata
+)
+select r.id, r.workspace_id, r.task_id, 'run_started', r.started_by,
+       jsonb_build_object('policy_version', r.policy_version)
+from public.workflow_plan_runs r
+where not exists (
+  select 1 from public.workflow_plan_run_events e
+  where e.run_id = r.id and e.event_type = 'run_started'
+);
+
+insert into public.workflow_plan_run_events (
+  run_id, workspace_id, task_id, event_type, actor_id, worker_id, metadata
+)
+select r.id, r.workspace_id, r.task_id, 'run_succeeded', r.started_by,
+       r.worker_lease_owner, jsonb_build_object('policy_version', r.policy_version)
+from public.workflow_plan_runs r
+where r.status = 'succeeded'
+  and not exists (
+    select 1 from public.workflow_plan_run_events e
+    where e.run_id = r.id and e.event_type = 'run_succeeded'
+  );
 
 revoke all on function public.claim_workflow_plan_step(uuid, text, uuid, uuid)
   from public, anon, authenticated;

@@ -155,7 +155,7 @@ export class FinnlpRequestError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
-    readonly message: string,
+    message: string,
   ) {
     super(message);
   }

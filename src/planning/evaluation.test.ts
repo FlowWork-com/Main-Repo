@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createMvpTools } from '../tools/mvpTools';
 import { ToolRegistry } from '../tools/toolRegistry';
-import { validatePlan, type PlannerErrorCode } from './planning';
+import { MAX_PLAN_STEPS, validatePlan, type PlannerErrorCode } from './planning';
 import {
   PLANNER_EVALUATION_DATASET,
   PLANNER_EVALUATION_DATASET_VERSION,
@@ -42,12 +42,23 @@ describe('offline planner evaluation benchmark', () => {
     expect(PLANNER_EVALUATION_DATASET_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
     expect(PLANNER_EVALUATION_PROMPT_VERSION).toBeTruthy();
     expect(new Set(PLANNER_EVALUATION_DATASET.map((item) => item.id)).size).toBe(PLANNER_EVALUATION_DATASET.length);
-    expect(new Set(PLANNER_EVALUATION_DATASET.map((item) => item.category)).size).toBeGreaterThanOrEqual(7);
+    expect(new Set(PLANNER_EVALUATION_DATASET.map((item) => item.category)).size).toBeGreaterThanOrEqual(9);
   });
 
   it('enforces golden invariants and emits aggregate category metrics only', () => {
     const metrics = new Map<PlannerEvaluationCategory, CategoryMetric>();
     const failures: string[] = [];
+    let totalSteps = 0;
+    let registeredToolVersionPasses = 0;
+    let inputSchemaPasses = 0;
+    let dependencyGraphCases = 0;
+    let dependencyGraphPasses = 0;
+    let unsupportedCases = 0;
+    let unsupportedBlocked = 0;
+    let injectionCases = 0;
+    let injectionRejected = 0;
+    let maxStepCases = 0;
+    let maxStepRejected = 0;
     for (const testCase of PLANNER_EVALUATION_DATASET) {
       const metric = metrics.get(testCase.category) ?? {
         cases: 0, providerSuccess: 0, providerTimeout: 0, providerError: 0,
@@ -58,6 +69,31 @@ describe('offline planner evaluation benchmark', () => {
       if (testCase.mockProvider === 'timeout') metric.providerTimeout += 1;
       if (testCase.mockProvider === 'error') metric.providerError += 1;
       const result = evaluateCase(testCase);
+      if (testCase.category === 'unsupported_capability') {
+        unsupportedCases += 1;
+        if (result.outcome === 'blocked') unsupportedBlocked += 1;
+      }
+      if (testCase.category === 'prompt_injection') {
+        injectionCases += 1;
+        if (result.outcome === 'invalid' || result.outcome === 'blocked') injectionRejected += 1;
+      }
+      if (testCase.category === 'max_step_enforcement') {
+        maxStepCases += 1;
+        if (result.outcome === 'invalid') maxStepRejected += 1;
+      }
+      if (testCase.plan && typeof testCase.plan === 'object' && 'steps' in testCase.plan &&
+          Array.isArray((testCase.plan as { steps: unknown[] }).steps)) {
+        const steps = (testCase.plan as { steps: Array<{ toolId: string; toolVersion: string; input: unknown }> }).steps;
+        totalSteps += steps.length;
+        for (const step of steps) {
+          if (registry.has(step.toolId, step.toolVersion)) registeredToolVersionPasses += 1;
+          if (registry.get(step.toolId, step.toolVersion)?.validateInput(step.input)) inputSchemaPasses += 1;
+        }
+        if (steps.length <= MAX_PLAN_STEPS) dependencyGraphCases += 1;
+        if (steps.length <= MAX_PLAN_STEPS && steps.every((step) => registry.has(step.toolId, step.toolVersion))) {
+          dependencyGraphPasses += Number(result.outcome === 'valid');
+        }
+      }
       if (result.outcome === 'valid') metric.validPlans += 1;
       if (result.outcome === 'blocked') metric.blockedPlans += 1;
       if (result.outcome === 'invalid') metric.invalidPlans += 1;
@@ -73,15 +109,32 @@ describe('offline planner evaluation benchmark', () => {
       blockedPlans: total.blockedPlans + metric.blockedPlans,
       invalidPlans: total.invalidPlans + metric.invalidPlans,
     }), { cases: 0, providerSuccess: 0, providerTimeout: 0, providerError: 0, validPlans: 0, blockedPlans: 0, invalidPlans: 0 });
+    const rates = {
+      providerSuccessRate: totals.cases ? totals.providerSuccess / totals.cases : null,
+      providerTimeoutRate: totals.cases ? totals.providerTimeout / totals.cases : null,
+      providerErrorRate: totals.cases ? totals.providerError / totals.cases : null,
+      validPlanRate: totals.cases ? totals.validPlans / totals.cases : null,
+      registeredToolVersionPassRate: totalSteps ? registeredToolVersionPasses / totalSteps : null,
+      inputSchemaPassRate: totalSteps ? inputSchemaPasses / totalSteps : null,
+      dependencyGraphValidityRate: dependencyGraphCases ? dependencyGraphPasses / dependencyGraphCases : null,
+      unsupportedCapabilityDetectionRate: unsupportedCases ? unsupportedBlocked / unsupportedCases : null,
+      maliciousInstructionRejectionRate: injectionCases ? injectionRejected / injectionCases : null,
+      maxStepEnforcementRate: maxStepCases ? maxStepRejected / maxStepCases : null,
+      planDecisionCounts: 'not measured by this offline harness',
+    };
     console.info('[planner-evaluation] ' + JSON.stringify({
       benchmark: 'planner-offline', datasetVersion: PLANNER_EVALUATION_DATASET_VERSION,
       promptVersion: PLANNER_EVALUATION_PROMPT_VERSION, providerMode: 'mocked-deterministic',
-      categories: Object.fromEntries(metrics), totals,
+      categories: Object.fromEntries(metrics), totals, rates,
     }));
     expect(failures).toEqual([]);
     expect(metrics.get('prompt_injection')?.invalidPlans).toBe(1);
     expect(metrics.get('malformed_tool_input')?.invalidPlans).toBe(1);
     expect(metrics.get('unsupported_capability')?.blockedPlans).toBe(1);
+    expect(metrics.get('malformed_dependency_graph')?.invalidPlans).toBe(1);
+    expect(metrics.get('max_step_enforcement')?.invalidPlans).toBe(1);
+    expect(maxStepRejected).toBe(1);
+    expect(injectionRejected).toBe(1);
   });
 
   it('ignores model-supplied validation flags and canonically checks tool ID/version/input/graph', () => {

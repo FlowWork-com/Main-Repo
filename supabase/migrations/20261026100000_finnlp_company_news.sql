@@ -23,7 +23,7 @@ set search_path = pg_catalog, public, vault, pg_temp
 as $$
 begin
   if old.api_key_secret_id is not null then
-    perform vault.delete_secret(old.api_key_secret_id);
+    delete from vault.secrets where id = old.api_key_secret_id;
   end if;
   return old;
 end;
@@ -92,7 +92,7 @@ begin
   returning connected_at into v_connected_at;
 
   if v_had_old_secret then
-    perform vault.delete_secret(v_old_secret_id);
+    delete from vault.secrets where id = v_old_secret_id;
   end if;
 
   return jsonb_build_object('connected', true, 'connected_at', v_connected_at);

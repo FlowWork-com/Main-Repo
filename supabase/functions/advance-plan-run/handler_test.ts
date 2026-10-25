@@ -1,4 +1,7 @@
-import { assertEquals } from 'jsr:@std/assert@1';
+function assertEquals(actual: unknown, expected: unknown): void {
+  if (actual !== expected) throw new Error(`Expected ${String(expected)}, got ${String(actual)}`);
+}
+
 import {
   createAdvancePlanRunHandler,
   parseAllowedOrigins,

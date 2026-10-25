@@ -160,7 +160,7 @@ export function createFinnlpCompanyNewsTool(
 function normalizeArticle(article: FinnlpNewsArticle): FinnlpNewsArticle {
   const safeText = (value: unknown, max: number, fallback = ''): string => {
     if (typeof value !== 'string') return fallback;
-    const bounded = value.trim().replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, ' ').slice(0, max);
+    const bounded = stripControlCharacters(value.trim()).slice(0, max);
     return isCredentialLikeString(bounded) ? '[source text redacted]' : bounded;
   };
   const candidateUrl = typeof article.url === 'string' ? article.url : '';
@@ -184,6 +184,17 @@ function normalizeArticle(article: FinnlpNewsArticle): FinnlpNewsArticle {
       ? new Date(article.publishedAt).toISOString()
       : null,
   };
+}
+
+function stripControlCharacters(value: string): string {
+  let output = '';
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0;
+    const isControl = code <= 8 || code === 11 || code === 12 ||
+      (code >= 14 && code <= 31) || code === 127;
+    output += isControl ? ' ' : character;
+  }
+  return output;
 }
 
 function isCalendarDate(value: string): boolean {

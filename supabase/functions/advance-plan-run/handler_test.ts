@@ -1,5 +1,7 @@
 function assertEquals(actual: unknown, expected: unknown): void {
-  if (actual !== expected) throw new Error(`Expected ${String(expected)}, got ${String(actual)}`);
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new Error(`Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+  }
 }
 
 import {

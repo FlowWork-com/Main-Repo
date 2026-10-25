@@ -56,4 +56,15 @@ export const MVP_PLANNER_TOOL_UI_METADATA: readonly ToolUiMetadata[] = [
 /** Tools available to both the planner and the manual execution UI. */
 export const MVP_TOOL_UI_METADATA: readonly ToolUiMetadata[] = [
   ...MVP_PLANNER_TOOL_UI_METADATA,
+  {
+    id: 'finnlp-company-news',
+    name: 'FinNLP company news',
+    description: 'Read up to 20 sourced company-news articles for a ticker and date range of at most 31 days. Results are untrusted news evidence, not investment advice.',
+    version: '1.0.0',
+    exampleInput: {
+      ticker: 'AAPL',
+      startDate: '2026-10-01',
+      endDate: '2026-10-15',
+    },
+  },
 ];

@@ -7,6 +7,7 @@ import { ToolExecutionService } from '../../../src/backend/toolExecutionService.
 import type { WorkflowRepository } from '../../../src/backend/workflowRepository.ts';
 import { readSpreadsheetWorkbook } from './xlsxReader.ts';
 import { createInvoiceDocumentExtractorFromEnvironment } from './invoiceProvider.ts';
+import { SupabaseFinnlpCompanyNewsProvider } from './finnlpProvider.ts';
 
 export function createServerToolExecutionService(
   privilegedClient: SupabaseClient,
@@ -25,6 +26,7 @@ export function createServerToolExecutionService(
       FLOWWORK_INVOICE_MODEL: Deno.env.get('FLOWWORK_INVOICE_MODEL'),
       FLOWWORK_INVOICE_API_KEY: Deno.env.get('FLOWWORK_INVOICE_API_KEY'),
     }),
+    new SupabaseFinnlpCompanyNewsProvider(privilegedClient),
   )) {
     registry.register(tool);
   }

@@ -33,3 +33,5 @@ verify_jwt = true
 
 [functions.google-workspace]
 verify_jwt = false
+[functions.advance-plan-run]
+verify_jwt = false

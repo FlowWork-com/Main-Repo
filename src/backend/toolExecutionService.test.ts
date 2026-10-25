@@ -59,6 +59,8 @@ function request(
     readonly userId: string;
     readonly workspaceId: string;
     readonly taskId: string;
+    readonly planRunId: string;
+    readonly stepId: string;
     readonly executionId: string;
     readonly requestId: string;
     readonly toolId: string;
@@ -70,6 +72,8 @@ function request(
     userId: identity.ownerId,
     workspaceId: identity.tenantId,
     taskId: identity.id,
+    planRunId: '45000000-0000-4000-8000-000000000001',
+    stepId: 'step_1',
     executionId,
     requestId: 'request-1',
     toolId: 'echo',
@@ -94,6 +98,7 @@ function workflowRepository(): WorkflowRepository & {
 
 class MemoryExecutionRepository implements ToolExecutionRepository {
   record: StoredToolExecution | null = null;
+  planRunStatus: 'running' | 'succeeded' = 'succeeded';
   authorized = true;
   authorize = vi.fn(async () => this.authorized);
   hasApprovedRequest = vi.fn(async () => true);
@@ -117,6 +122,13 @@ class MemoryExecutionRepository implements ToolExecutionRepository {
       return true;
     },
   );
+  claimPlanStep = vi.fn(async (
+    context: ToolExecutionContext,
+    _planRunId: string,
+    _stepId: string,
+    requestedInput: unknown,
+  ) => ({ toolId: context.toolId, toolVersion: context.toolVersion, input: requestedInput }));
+  completePlanStep = vi.fn(async () => this.planRunStatus);
   completeExecution = vi.fn(
     async (
       _context: ToolExecutionContext,
@@ -176,6 +188,20 @@ describe('ToolExecutionService', () => {
     expect(executions.claimExecution).toHaveBeenCalledOnce();
     expect(executions.completeExecution).toHaveBeenCalledOnce();
     expect(workflows.persistEvents).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the workflow Running until every plan step has succeeded', async () => {
+    const executions = new MemoryExecutionRepository();
+    executions.planRunStatus = 'running';
+    const workflows = workflowRepository();
+    const service = createService(executions, workflows);
+
+    const outcome = await service.execute(request(), workflow());
+
+    expect(outcome.result.success).toBe(true);
+    expect(outcome.workflow.task.status).toBe('Running');
+    expect(executions.claimPlanStep).toHaveBeenCalledOnce();
+    expect(executions.completePlanStep).toHaveBeenCalledOnce();
   });
 
   it('replays completed idempotent executions without invoking the tool twice', async () => {

@@ -9,9 +9,25 @@ services:
     ports:
       - "8080:8080"
     restart: unless-stopped
+  finnlp-agent-bridge:
+    build:
+      context: ./src/finnlp_core
+      dockerfile: Dockerfile
+    environment:
+      - FLOWWORK_PLANNER_API_KEY=${FLOWWORK_PLANNER_API_KEY}
+      - FLOWWORK_PLAN_SIGNING_KEY=${FLOWWORK_PLAN_SIGNING_KEY}
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/execute/news"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
 
 secrets:
   VITE_SUPABASE_URL:
     environment: VITE_SUPABASE_URL
   VITE_SUPABASE_ANON_KEY:
     environment: VITE_SUPABASE_ANON_KEY
+  

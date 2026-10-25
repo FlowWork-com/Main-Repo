@@ -1,0 +1,13 @@
+version: "1.0"
+system_name: "unified_financial_agents"
+
+# Step 1: Ingest Data
+data_agent:
+  name: "FinNLP Ingestion Agent"
+  module: "src.finnlp_core.finnlp.data_sources.news.finnhub_date_range"
+  class: "Finnhub_Date_Range"
+
+# Step 2: Formulate Decision
+workflow_agent:
+  name: "FlowWork Planning Agent"
+  model: "openai-compatible"

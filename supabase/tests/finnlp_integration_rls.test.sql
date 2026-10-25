@@ -1,6 +1,6 @@
 begin;
 
-select plan(18);
+select plan(20);
 
 select ok(
   not has_table_privilege('authenticated', 'public.workspace_finnlp_connections', 'select'),
@@ -227,17 +227,82 @@ select throws_ok(
 );
 
 select throws_ok(
-  $$ select pg_temp.create_signed_finnlp_plan(
+  $ select pg_temp.create_signed_finnlp_plan(
        'a3000000-0000-4000-8000-000000000001',
        jsonb_set(
          (select value from finnlp_plan_payload),
          '{steps,0,input,endDate}',
          '"2026-10-27"'::jsonb
        )
-     ) $$,
+     ) $,
   '22023',
   'Plan contains invalid finnlp-company-news input.',
   'the database rejects future end dates'
+);
+
+reset role;
+
+insert into auth.users (
+  id, instance_id, aud, role, email, encrypted_password,
+  email_confirmed_at, created_at, updated_at
+) values (
+  'a1000000-0000-4000-8000-000000000002',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated', 'finnlp-cascade@example.test', '',
+  now(), now(), now()
+)
+on conflict (id) do nothing;
+
+insert into public.workspaces (id, name, created_by)
+values (
+  'a2000000-0000-4000-8000-000000000002',
+  'FinNLP cascade cleanup test workspace',
+  'a1000000-0000-4000-8000-000000000002'
+)
+on conflict (id) do nothing;
+
+insert into public.workspace_members (workspace_id, user_id, role)
+values (
+  'a2000000-0000-4000-8000-000000000002',
+  'a1000000-0000-4000-8000-000000000002',
+  'owner'
+)
+on conflict (workspace_id, user_id) do nothing;
+
+create temporary table finnlp_cascade_secret_ids(id uuid);
+insert into finnlp_cascade_secret_ids
+select vault.create_secret(
+  'finnlp-cascade-cleanup-test-key-123456',
+  'finnlp-cascade-cleanup-test',
+  'Temporary secret to verify workspace-membership cascade cleanup.'
+);
+
+insert into public.workspace_finnlp_connections (
+  workspace_id, user_id, api_key_secret_id
+)
+select
+  'a2000000-0000-4000-8000-000000000002',
+  'a1000000-0000-4000-8000-000000000002',
+  id
+from finnlp_cascade_secret_ids;
+
+select lives_ok(
+  $ delete from public.workspace_members
+     where workspace_id = 'a2000000-0000-4000-8000-000000000002'
+       and user_id = 'a1000000-0000-4000-8000-000000000002' $,
+  'removing a workspace member also removes their FinNLP connection'
+);
+select ok(
+  not exists (
+    select 1 from public.workspace_finnlp_connections c
+    where c.workspace_id = 'a2000000-0000-4000-8000-000000000002'
+      and c.user_id = 'a1000000-0000-4000-8000-000000000002'
+  )
+  and not exists (
+    select 1 from vault.secrets s
+    join finnlp_cascade_secret_ids x on x.id = s.id
+  ),
+  'workspace-membership cascade deletes the associated Vault secret'
 );
 
 select * from finish();

@@ -1,13 +1,19 @@
-version: "1.0"
-system_name: "unified_financial_agents"
+version: "1.1"
+system_name: "flowwork_finnlp_news_evidence"
 
-# Step 1: Ingest Data
+# The service loads this class from a pinned upstream FinNLP revision.
 data_agent:
-  name: "FinNLP Ingestion Agent"
-  module: "src.finnlp_core.finnlp.data_sources.news.finnhub_date_range"
+  name: "FinNLP Finnhub Date-Range News"
+  module: "finnlp.data_sources.news.finnhub_date_range"
   class: "Finnhub_Date_Range"
+  api_key_env: "FINNHUB_API_KEY"
+  max_date_range_days: 31
 
-# Step 2: Formulate Decision
+# This boundary hands sourced evidence back to FlowWork. It does not claim to
+# have called the FlowWork planner, accepted a plan, or executed a workflow.
 workflow_agent:
-  name: "FlowWork Planning Agent"
-  model: "openai-compatible"
+  name: "FlowWork Evidence Handoff"
+  endpoint: "/execute/news"
+  input_format: "application/json"
+  output_format: "structured JSON with summary_markdown"
+  makes_decisions: false

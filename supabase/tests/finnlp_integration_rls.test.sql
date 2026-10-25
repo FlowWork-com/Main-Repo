@@ -1,6 +1,6 @@
 begin;
 
-select plan(20);
+select plan(28);
 
 select ok(
   not has_table_privilege('authenticated', 'public.workspace_finnlp_connections', 'select'),
@@ -103,6 +103,101 @@ select ok(
   'deleting a connection row also deletes its stored Vault secret'
 );
 
+select set_config('request.jwt.claim.role', 'service_role', true);
+set local role service_role;
+
+select is(
+  public.connect_finnlp_connection(
+    'a2000000-0000-4000-8000-000000000001',
+    'a1000000-0000-4000-8000-000000000001',
+    'finnlp-initial-test-key-123456789'
+  )->>'connected',
+  'true',
+  'the service role can store a validated provider key in Vault'
+);
+
+select is(
+  public.read_finnlp_api_key(
+    'a2000000-0000-4000-8000-000000000001',
+    'a1000000-0000-4000-8000-000000000001'
+  ),
+  'finnlp-initial-test-key-123456789',
+  'the trusted reader returns the saved key only for its workspace member'
+);
+
+select is(
+  public.read_finnlp_api_key(
+    'a2000000-0000-4000-8000-000000000001',
+    'a1000000-0000-4000-8000-000000000099'
+  ),
+  null::text,
+  'the trusted reader returns no key for a nonmember'
+);
+
+create temporary table finnlp_secret_rotation_ids(old_id uuid, new_id uuid);
+insert into finnlp_secret_rotation_ids(old_id)
+select api_key_secret_id
+from public.workspace_finnlp_connections
+where workspace_id = 'a2000000-0000-4000-8000-000000000001'
+  and user_id = 'a1000000-0000-4000-8000-000000000001';
+
+select is(
+  public.connect_finnlp_connection(
+    'a2000000-0000-4000-8000-000000000001',
+    'a1000000-0000-4000-8000-000000000001',
+    'finnlp-replacement-test-key-123456789'
+  )->>'connected',
+  'true',
+  'replacing a provider key succeeds atomically'
+);
+
+update finnlp_secret_rotation_ids
+set new_id = c.api_key_secret_id
+from public.workspace_finnlp_connections c
+where c.workspace_id = 'a2000000-0000-4000-8000-000000000001'
+  and c.user_id = 'a1000000-0000-4000-8000-000000000001';
+
+select ok(
+  not exists (
+    select 1 from vault.secrets s
+    join finnlp_secret_rotation_ids r on r.old_id = s.id
+  ),
+  'key replacement deletes the old Vault secret'
+);
+
+select is(
+  public.read_finnlp_api_key(
+    'a2000000-0000-4000-8000-000000000001',
+    'a1000000-0000-4000-8000-000000000001'
+  ),
+  'finnlp-replacement-test-key-123456789',
+  'after replacement, only the newest key is returned'
+);
+
+select is(
+  public.disconnect_finnlp_connection(
+    'a2000000-0000-4000-8000-000000000001',
+    'a1000000-0000-4000-8000-000000000001'
+  ),
+  true,
+  'disconnect removes a member connection through the guarded service RPC'
+);
+
+select ok(
+  not exists (
+    select 1 from vault.secrets s
+    join finnlp_secret_rotation_ids r on r.new_id = s.id
+  )
+  and not exists (
+    select 1 from public.workspace_finnlp_connections c
+    where c.workspace_id = 'a2000000-0000-4000-8000-000000000001'
+      and c.user_id = 'a1000000-0000-4000-8000-000000000001'
+  ),
+  'disconnect removes both connection metadata and current Vault secret'
+);
+
+reset role;
+
 insert into public.tasks (
   id, workspace_id, owner_id, title, details, status, attempt
 ) values (
@@ -167,6 +262,7 @@ as $$
   );
 $$;
 
+select set_config('request.jwt.claim.role', 'authenticated', true);
 select set_config('request.jwt.claim.sub', 'a1000000-0000-4000-8000-000000000001', true);
 set local role authenticated;
 

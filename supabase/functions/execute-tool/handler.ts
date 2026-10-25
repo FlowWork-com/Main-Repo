@@ -25,8 +25,8 @@ const allowedOrigins = (value: string | undefined): ReadonlySet<string> =>
 
 interface ExecuteToolPayload {
   readonly taskId: string;
-  readonly planRunId: string;
-  readonly stepId: string;
+  readonly planRunId?: string;
+  readonly stepId?: string;
   readonly executionId: string;
   readonly requestId: string;
   readonly toolId: string;
@@ -233,9 +233,9 @@ async function readPayload(request: Request): Promise<ExecuteToolPayload> {
   const input = value.input;
   if (
     !isUuid(taskId) ||
-    !isUuid(planRunId) ||
-    typeof stepId !== 'string' ||
-    !/^[a-zA-Z0-9_-]{1,100}$/.test(stepId) ||
+    ((planRunId === undefined) !== (stepId === undefined)) ||
+    (planRunId !== undefined && !isUuid(planRunId)) ||
+    (stepId !== undefined && (typeof stepId !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(stepId))) ||
     !isUuid(executionId) ||
     typeof requestId !== 'string' ||
     !requestId.trim() ||
@@ -252,7 +252,16 @@ async function readPayload(request: Request): Promise<ExecuteToolPayload> {
   ) {
     throw new ToolRequestError(400, 'INVALID_REQUEST', 'Request fields are invalid.');
   }
-  return { taskId, planRunId, stepId, executionId, requestId, toolId, toolVersion, input };
+  return {
+    taskId,
+    ...(typeof planRunId === 'string' ? { planRunId } : {}),
+    ...(typeof stepId === 'string' ? { stepId } : {}),
+    executionId,
+    requestId,
+    toolId,
+    toolVersion,
+    input,
+  };
 }
 
 function createCorsHeaders(origin: string): HeadersInit {

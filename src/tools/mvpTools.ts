@@ -269,7 +269,7 @@ export function createMvpTools(
     textTransform,
     createInvoiceCsvReviewTool(fileContentSource, spreadsheetWorkbookReader),
     createInvoiceDocumentExtractionTool(fileContentSource, invoiceDocumentExtractor),
-    createFinnlpCompanyNewsTool(finnIpCompanyNewsProvider),
+    createFinnlpCompanyNewsTool(finnlpCompanyNewsProvider),
   ];
 }
 

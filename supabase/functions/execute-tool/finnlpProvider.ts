@@ -82,12 +82,13 @@ export async function validateFinnhubApiKey(
   apiKey: string,
   options: FinnhubProviderOptions = {},
 ): Promise<FinnhubKeyValidation> {
-  if (apiKey.trim().length < 16 || apiKey.trim().length > 512 || hasControlCharacters(apiKey)) {
+  const normalizedKey = apiKey.trim();
+  if (normalizedKey.length < 16 || normalizedKey.length > 512 || hasControlCharacters(apiKey)) {
     return { status: 'unauthorized' };
   }
   const now = options.now?.() ?? new Date();
   const today = now.toISOString().slice(0, 10);
-  const url = companyNewsUrl(apiKey, { ticker: 'AAPL', startDate: today, endDate: today });
+  const url = companyNewsUrl(normalizedKey, { ticker: 'AAPL', startDate: today, endDate: today });
   try {
     const result = await fetchJson(
       url,

@@ -116,8 +116,7 @@ begin
     or (p_output is not null and pg_column_size(p_output) > 65536)
     or (p_error is not null and pg_column_size(p_error) > 4096)
     or (p_output is not null and public.tool_data_contains_credentials(p_output))
-    or (p_error is not null and public.tool_data_contains_credentials(p_error))
-    or (p_output is null and p_error is null) then
+    or (p_error is not null and public.tool_data_contains_credentials(p_error)) then
     raise exception 'Invalid step result.' using errcode = '22023';
   end if;
 

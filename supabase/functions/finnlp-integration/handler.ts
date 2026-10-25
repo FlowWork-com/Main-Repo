@@ -88,7 +88,7 @@ export function createFinnlpIntegrationHandler<Context>(
       typeof payload.apiKey !== 'string' ||
       payload.apiKey.trim().length < 16 ||
       payload.apiKey.trim().length > 512 ||
-      /[\r\n\u0000-\u001f\u007f]/.test(payload.apiKey)
+      hasControlCharacters(payload.apiKey)
     )) {
       return errorResponse(400, 'INVALID_PROVIDER_CREDENTIAL', 'A valid Finnhub API key is required.', corsHeaders);
     }
@@ -237,6 +237,14 @@ function jsonResponse(
       'cache-control': 'no-store',
     },
   });
+}
+
+function hasControlCharacters(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code < 0x20 || code === 0x7f) return true;
+  }
+  return false;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

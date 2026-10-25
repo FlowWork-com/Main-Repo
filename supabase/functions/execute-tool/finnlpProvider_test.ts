@@ -136,7 +136,7 @@ Deno.test('provider timeout cancels the underlying request', async () => {
 Deno.test('connection check uses company-news with a fixed symbol/date and distinguishes API rejection', async () => {
   const requestedUrls: string[] = [];
   const now = () => new Date('2026-10-26T14:00:00.000Z');
-  const valid = await validateFinnhubApiKey('valid-finnhub-api-key-123', {
+  const valid = await validateFinnhubApiKey('  valid-finnhub-api-key-123  ', {
     now,
     fetcher: async (input, init) => {
       requestedUrls.push(String(input));
@@ -150,6 +150,7 @@ Deno.test('connection check uses company-news with a fixed symbol/date and disti
   assertEquals(url.pathname, '/api/v1/company-news', 'Credential validator must not query other endpoints');
   assertEquals(url.searchParams.get('symbol'), 'AAPL', 'Credential validation uses fixed symbol');
   assertEquals(url.searchParams.get('from'), '2026-10-26', 'Credential validation uses today only');
+  assertEquals(url.searchParams.get('token'), 'valid-finnhub-api-key-123', 'Credential validation trims outer whitespace before sending the key');
 
   const rejected = await validateFinnhubApiKey('invalid-finnhub-api-key-123', {
     now,

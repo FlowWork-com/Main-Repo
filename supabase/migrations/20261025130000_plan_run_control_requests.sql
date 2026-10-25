@@ -384,7 +384,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = pg_catalog, public, pg_temp
-as $
+as $$
 begin
   if tg_op = 'INSERT' then
     insert into public.workflow_plan_run_events (
@@ -403,7 +403,7 @@ begin
   end if;
   return new;
 end;
-$;
+$$;
 
 revoke all on function public.record_workflow_plan_run_lifecycle_event()
   from public, anon, authenticated;

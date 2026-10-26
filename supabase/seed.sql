@@ -1,0 +1,2 @@
+-- FlowWork has no deterministic seed data yet.
+-- Keep real workspace, invoice, auth, and provider data out of local seed files.

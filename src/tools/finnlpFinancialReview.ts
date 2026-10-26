@@ -3,7 +3,6 @@ import {
   isPersistableJson,
   toolFailure,
   type ToolDefinition,
-  type ToolExecutionContext,
 } from './contracts';
 import {
   FinnlpNewsProviderError,

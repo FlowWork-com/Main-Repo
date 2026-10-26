@@ -244,6 +244,8 @@ insert into finnlp_plan_payload values (
   )
 );
 
+grant select on finnlp_plan_payload to authenticated;
+
 create function pg_temp.create_signed_finnlp_plan(p_task_id uuid, p_plan jsonb)
 returns jsonb
 language sql

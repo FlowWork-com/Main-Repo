@@ -87,7 +87,7 @@ values
     '81000000-0000-4000-8000-000000000001',
     '{"mimetype":"text/plain","size":4}'::jsonb
   )
-on conflict (bucket_id, name) do nothing;
+on conflict do nothing;
 
 select is(
   (select public from storage.buckets where id = 'workflow-files'),

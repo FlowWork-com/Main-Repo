@@ -76,7 +76,7 @@ begin
 
   v_new_secret_id := vault.create_secret(
     p_api_key,
-    'finnlp-api-key-' || p_workspace_id::text || '-' || p_user_id::text,
+    null,
     'Finnhub API credential for the read-only FlowWork FinNLP company-news tool.'
   );
 
@@ -192,6 +192,30 @@ comment on function public.read_finnlp_api_key(uuid, uuid) is
   'Returns the Vault-held API key only to the trusted server-side service role for the explicit workspace member. Never call from a browser path.';
 comment on function public.disconnect_finnlp_connection(uuid, uuid) is
   'Deletes the workspace/user connection row and its Vault secret in one transaction. Service-role only.';
+
+create or replace function public.delete_google_workspace_secret(p_secret_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = pg_catalog, public, vault, auth, pg_temp
+as $
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'Privileged server access is required.' using errcode = '42501';
+  end if;
+  if p_secret_id is null then
+    raise exception 'A Google secret reference is required.' using errcode = '22023';
+  end if;
+  delete from vault.secrets where id = p_secret_id;
+  return found;
+end;
+$;
+
+revoke all on function public.delete_google_workspace_secret(uuid)
+  from public, anon, authenticated, service_role;
+grant execute on function public.delete_google_workspace_secret(uuid) to service_role;
+comment on function public.delete_google_workspace_secret(uuid) is
+  'Deletes a Vault-held Google secret. Service-role only; uses the supported Vault secrets table deletion API.';
 
 create or replace function public.create_workflow_plan(
   p_task_id uuid,

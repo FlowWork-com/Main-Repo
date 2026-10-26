@@ -1,5 +1,9 @@
 name: Frontend CI
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main, master]
@@ -12,6 +16,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -68,7 +73,20 @@ jobs:
           version: 2.39.2
 
       - name: Start local Supabase
-        run: supabase start -x studio,mailpit,storage-api,realtime,edge-runtime,logflare,vector
+        timeout-minutes: 10
+        run: |
+          set +e
+          timeout --signal=TERM --kill-after=30s 420s supabase start -x studio,mailpit,storage-api,realtime,edge-runtime,logflare,vector
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "Supabase startup failed or exceeded the 7-minute startup deadline (exit $status)."
+            docker ps -a
+            for container in $(docker ps -aq); do
+              echo "Recent logs for container $container"
+              docker logs --tail 100 "$container" 2>&1 || true
+            done
+            exit "$status"
+          fi
 
       - name: Lint local database schema
         run: supabase db lint --local
@@ -78,6 +96,7 @@ jobs:
 
   container:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

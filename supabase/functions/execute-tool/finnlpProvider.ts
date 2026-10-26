@@ -25,7 +25,6 @@ export interface FinnhubProviderOptions {
 export class SupabaseFinnlpCompanyNewsProvider implements FinnlpCompanyNewsProvider {
   private readonly fetcher: typeof fetch;
   private readonly timeoutMs: number;
-  private readonly now: () => Date;
 
   constructor(
     private readonly serviceClient: SupabaseClient,
@@ -33,7 +32,6 @@ export class SupabaseFinnlpCompanyNewsProvider implements FinnlpCompanyNewsProvi
   ) {
     this.fetcher = options.fetcher ?? fetch;
     this.timeoutMs = options.timeoutMs ?? PROVIDER_TIMEOUT_MS;
-    this.now = options.now ?? (() => new Date());
   }
 
   async fetchCompanyNews(
@@ -84,12 +82,13 @@ export async function validateFinnhubApiKey(
   apiKey: string,
   options: FinnhubProviderOptions = {},
 ): Promise<FinnhubKeyValidation> {
-  if (apiKey.trim().length < 16 || apiKey.trim().length > 512 || /[\r\n\u0000]/.test(apiKey)) {
+  const normalizedKey = apiKey.trim();
+  if (normalizedKey.length < 16 || normalizedKey.length > 512 || hasControlCharacters(apiKey)) {
     return { status: 'unauthorized' };
   }
   const now = options.now?.() ?? new Date();
   const today = now.toISOString().slice(0, 10);
-  const url = companyNewsUrl(apiKey, { ticker: 'AAPL', startDate: today, endDate: today });
+  const url = companyNewsUrl(normalizedKey, { ticker: 'AAPL', startDate: today, endDate: today });
   try {
     const result = await fetchJson(
       url,
@@ -192,6 +191,14 @@ function throwForProviderStatus(status: number): void {
   if (status === 401 || status === 403) throw new FinnlpNewsProviderError('UNAUTHORIZED');
   if (status === 429) throw new FinnlpNewsProviderError('RATE_LIMITED');
   if (status < 200 || status >= 300) throw new FinnlpNewsProviderError('UNAVAILABLE');
+}
+
+function hasControlCharacters(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code < 0x20 || code === 0x7f) return true;
+  }
+  return false;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

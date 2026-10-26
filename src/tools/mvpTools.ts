@@ -260,7 +260,7 @@ export function createMvpTools(
   fileContentSource?: TaskFileContentSource,
   spreadsheetWorkbookReader?: SpreadsheetWorkbookReader,
   invoiceDocumentExtractor?: InvoiceDocumentExtractor,
-  finnIpCompanyNewsProvider?: FinnlpCompanyNewsProvider,
+  finnlpCompanyNewsProvider?: FinnlpCompanyNewsProvider,
 ): readonly ToolDefinition[] {
   return [
     echo,
@@ -269,7 +269,7 @@ export function createMvpTools(
     textTransform,
     createInvoiceCsvReviewTool(fileContentSource, spreadsheetWorkbookReader),
     createInvoiceDocumentExtractionTool(fileContentSource, invoiceDocumentExtractor),
-    createFinnlpCompanyNewsTool(finnIpCompanyNewsProvider),
+    createFinnlpCompanyNewsTool(finnlpCompanyNewsProvider),
   ];
 }
 

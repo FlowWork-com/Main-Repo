@@ -443,8 +443,13 @@ function readTextList(value: unknown, maxItems: number, maxLength: number): stri
   if (!Array.isArray(value) || value.length > maxItems || !value.every((item) => typeof item === 'string')) {
     return null;
   }
-  const values = value.map((item) => safeOutputText(item, maxLength));
-  return values.some((item) => !item) ? null : values;
+  const values: string[] = [];
+  for (const item of value) {
+    const safe = safeOutputText(item, maxLength);
+    if (!safe) return null;
+    values.push(safe);
+  }
+  return values;
 }
 
 function newsProviderErrorMessage(error: unknown): string {

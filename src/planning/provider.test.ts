@@ -86,8 +86,10 @@ describe('planner provider adapter', () => {
     const sentBody = JSON.parse(String(capturedRequest?.body)) as {
       response_format: unknown;
       messages: Array<{ role: string; content: string }>;
+      temperature?: number;
     };
     expect(sentBody.response_format).toEqual({ type: 'json_object' });
+    expect(sentBody.temperature).toBeUndefined();
     expect(sentBody.messages[0]?.content).toContain('55000000-0000-4000-8000-000000000001');
     expect(sentBody.messages[0]?.content).toContain('untrusted data');
     expect(sentBody.messages[0]?.content).toContain('XLS, or XLSX');

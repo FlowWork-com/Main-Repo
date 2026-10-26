@@ -113,7 +113,6 @@ class OpenAICompatibleFinnlpFinancialReviewer implements FinnlpFinancialReviewer
       ];
       const body = JSON.stringify({
         model: this.config.modelName,
-        temperature: 0,
         response_format: { type: 'json_object' },
         messages,
       });

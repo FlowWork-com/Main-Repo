@@ -47,7 +47,7 @@ Deno.test('invoice provider sends PDF as a file part and returns bounded JSON co
   const filePart = user.content[1] as { type: string; file: { filename: string; file_data: string } };
   assertEquals(filePart.type, 'file');
   assertEquals(filePart.file.filename, 'invoice.pdf');
-  assertStringIncludes(filePart.file.file_data, 'JVBERi0xLjc=');
+  assertEquals(filePart.file.file_data, 'data:application/pdf;base64,JVBERi0xLjc=');
   assertEquals((result as Record<string, unknown>)['invoiceNumber'], { value: 'INV-1', confidence: 0.9 });
 });
 

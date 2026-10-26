@@ -198,7 +198,7 @@ returns boolean
 language plpgsql
 security definer
 set search_path = pg_catalog, public, vault, auth, pg_temp
-as $
+as $$
 begin
   if auth.role() is distinct from 'service_role' then
     raise exception 'Privileged server access is required.' using errcode = '42501';
@@ -209,7 +209,7 @@ begin
   delete from vault.secrets where id = p_secret_id;
   return found;
 end;
-$;
+$$;
 
 revoke all on function public.delete_google_workspace_secret(uuid)
   from public, anon, authenticated, service_role;

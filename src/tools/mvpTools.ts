@@ -9,6 +9,7 @@ import { createInvoiceCsvReviewTool } from './invoiceCsvReview';
 import { createInvoiceDocumentExtractionTool, type InvoiceDocumentExtractor } from './invoiceDocumentExtraction';
 import { MVP_PLANNER_TOOL_UI_METADATA } from './toolMetadata';
 import { createFinnlpCompanyNewsTool, type FinnlpCompanyNewsProvider } from './finnlpCompanyNews';
+import { createFinnlpFinancialReviewTool, type FinnlpFinancialReviewer } from './finnlpFinancialReview';
 
 export interface TaskFileMetadata {
   readonly id: string;
@@ -261,6 +262,7 @@ export function createMvpTools(
   spreadsheetWorkbookReader?: SpreadsheetWorkbookReader,
   invoiceDocumentExtractor?: InvoiceDocumentExtractor,
   finnlpCompanyNewsProvider?: FinnlpCompanyNewsProvider,
+  finnlpFinancialReviewer?: FinnlpFinancialReviewer,
 ): readonly ToolDefinition[] {
   return [
     echo,
@@ -270,6 +272,7 @@ export function createMvpTools(
     createInvoiceCsvReviewTool(fileContentSource, spreadsheetWorkbookReader),
     createInvoiceDocumentExtractionTool(fileContentSource, invoiceDocumentExtractor),
     createFinnlpCompanyNewsTool(finnlpCompanyNewsProvider),
+    createFinnlpFinancialReviewTool(finnlpCompanyNewsProvider, finnlpFinancialReviewer),
   ];
 }
 

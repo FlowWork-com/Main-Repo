@@ -8,6 +8,7 @@ import type { WorkflowRepository } from '../../../src/backend/workflowRepository
 import { readSpreadsheetWorkbook } from './xlsxReader.ts';
 import { createInvoiceDocumentExtractorFromEnvironment } from './invoiceProvider.ts';
 import { SupabaseFinnlpCompanyNewsProvider } from './finnlpProvider.ts';
+import { createFinnlpFinancialReviewerFromEnvironment } from './finnlpReviewProvider.ts';
 
 export function createServerToolExecutionService(
   privilegedClient: SupabaseClient,
@@ -27,6 +28,12 @@ export function createServerToolExecutionService(
       FLOWWORK_INVOICE_API_KEY: Deno.env.get('FLOWWORK_INVOICE_API_KEY'),
     }),
     new SupabaseFinnlpCompanyNewsProvider(privilegedClient),
+    createFinnlpFinancialReviewerFromEnvironment({
+      FLOWWORK_FINNLP_REVIEW_PROVIDER: Deno.env.get('FLOWWORK_FINNLP_REVIEW_PROVIDER'),
+      FLOWWORK_FINNLP_REVIEW_BASE_URL: Deno.env.get('FLOWWORK_FINNLP_REVIEW_BASE_URL'),
+      FLOWWORK_FINNLP_REVIEW_MODEL: Deno.env.get('FLOWWORK_FINNLP_REVIEW_MODEL'),
+      FLOWWORK_FINNLP_REVIEW_API_KEY: Deno.env.get('FLOWWORK_FINNLP_REVIEW_API_KEY'),
+    }),
   )) {
     registry.register(tool);
   }

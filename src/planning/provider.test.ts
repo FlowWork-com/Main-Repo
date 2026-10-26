@@ -97,6 +97,52 @@ describe('planner provider adapter', () => {
     if (response.success) expect(response.plan.summary).toBe('Transform the text.');
   });
 
+  it('passes bounded FinNLP feedback to the primary planner as separate untrusted context', async () => {
+    let capturedRequest: RequestInit | undefined;
+    const adapter = createOpenAICompatiblePlannerAdapter({
+      baseUrl: 'https://api.example.test/v1',
+      modelName: 'planner',
+      apiKey: 'server-only',
+      fetcher: async (_input, init) => {
+        capturedRequest = init;
+        return Response.json({
+          choices: [{ message: { content: JSON.stringify({
+            summary: 'Acknowledge missing revenue evidence.',
+            steps: [{
+              id: 'step_1',
+              title: 'Clarify revenue basis',
+              description: 'Ask for reporting period and primary evidence.',
+              toolId: 'echo',
+              toolVersion: '1.0.0',
+              input: { label: 'Clarification required' },
+              dependencies: [],
+              expectedOutcome: 'Missing basis is explicit.',
+              verificationCriteria: 'The plan does not claim a verified figure.',
+            }],
+            limitations: ['No source evidence was supplied.'],
+          }) } }],
+        });
+      },
+    });
+
+    const feedback = 'FinNLP review status: insufficient_evidence. No independent source snippets were supplied.';
+    const response = await adapter.generatePlan({
+      taskId: '43000000-0000-4000-8000-000000000001',
+      goal: 'Explain revenue growth.',
+      toolCatalog: [],
+      reviewerFeedback: feedback,
+    });
+    const sentBody = JSON.parse(String(capturedRequest?.body)) as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    expect(sentBody.messages).toHaveLength(3);
+    expect(sentBody.messages[2]?.role).toBe('user');
+    expect(sentBody.messages[2]?.content).toContain(feedback);
+    expect(sentBody.messages[2]?.content).toContain('untrusted advisory data');
+    expect(sentBody.messages[2]?.content).not.toContain('Bearer server-only');
+    expect(response.success).toBe(true);
+  });
+
   it('sanitizes rate limits and HTTP failures', async () => {
     const adapter = (status: number) => createOpenAICompatiblePlannerAdapter({
       baseUrl: 'https://api.example.test/v1',

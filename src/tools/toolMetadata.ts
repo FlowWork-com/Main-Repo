@@ -67,4 +67,14 @@ export const MVP_TOOL_UI_METADATA: readonly ToolUiMetadata[] = [
       endDate: '2026-10-15',
     },
   },
+  {
+    id: 'finnlp-financial-review',
+    name: 'FinNLP financial review',
+    description: 'Use FinNLP as a specialist financial-language verifier for a claim or another agent’s draft answer. It decodes ambiguous terms, separates facts from assumptions, reports source support or contradictions, and returns follow-up questions and a handoff for the main agent. Optionally retrieves bounded Finnhub company-news evidence for a ticker and date range. Advisory only: it is not the main planner, financial advice, trade execution, or approval to act.',
+    version: '1.0.0',
+    exampleInput: {
+      claim: 'Revenue increased 8% year over year.',
+      draftAnswer: 'The company experienced year-over-year revenue growth.',
+    },
+  },
 ];

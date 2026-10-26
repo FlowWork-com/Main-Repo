@@ -323,14 +323,14 @@ select throws_ok(
 );
 
 select throws_ok(
-  $ select pg_temp.create_signed_finnlp_plan(
+  $$ select pg_temp.create_signed_finnlp_plan(
        'a3000000-0000-4000-8000-000000000001',
        jsonb_set(
          (select value from finnlp_plan_payload),
          '{steps,0,input,endDate}',
          '"2026-10-27"'::jsonb
        )
-     ) $,
+     ) $$,
   '22023',
   'Plan contains invalid finnlp-company-news input.',
   'the database rejects future end dates'
@@ -383,7 +383,7 @@ select
 from finnlp_cascade_secret_ids;
 
 select lives_ok(
-  $ delete from public.workspace_members
+  $$ delete from public.workspace_members
      where workspace_id = 'a2000000-0000-4000-8000-000000000002'
        and user_id = 'a1000000-0000-4000-8000-000000000002' $,
   'removing a workspace member also removes their FinNLP connection'

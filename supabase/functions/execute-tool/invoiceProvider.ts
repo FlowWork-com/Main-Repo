@@ -55,7 +55,7 @@ export function createOpenAICompatibleInvoiceExtractor(
         type: 'file',
         file: {
           filename: file.fileName,
-          file_data: base64Data,
+          file_data: `data:application/pdf;base64,${base64Data}`,
         },
       }
       : {

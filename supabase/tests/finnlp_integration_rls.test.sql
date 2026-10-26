@@ -385,7 +385,7 @@ from finnlp_cascade_secret_ids;
 select lives_ok(
   $$ delete from public.workspace_members
      where workspace_id = 'a2000000-0000-4000-8000-000000000002'
-       and user_id = 'a1000000-0000-4000-8000-000000000002' $,
+       and user_id = 'a1000000-0000-4000-8000-000000000002' $$,
   'removing a workspace member also removes their FinNLP connection'
 );
 select ok(

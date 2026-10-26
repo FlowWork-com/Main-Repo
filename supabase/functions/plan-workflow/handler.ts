@@ -1,5 +1,7 @@
-import { buildToolCatalogForPlanner, createPlannerError, validatePlan, type PlannerRequest, type WorkflowPlan } from '../../../src/planning/planning.ts';
+import { buildToolCatalogForPlanner, createPlannerError, validatePlan, type PlannerAdapter, type PlannerRequest, type WorkflowPlan } from '../../../src/planning/planning.ts';
 import { createPlannerAdapterFromEnvironment, type PlannerEnvironment } from '../../../src/planning/provider.ts';
+import { isCredentialLikeString } from '../../../src/tools/contracts.ts';
+import { normalizeFinnlpFinancialReview, type FinnlpFinancialReviewer } from '../../../src/tools/finnlpFinancialReview.ts';
 import { createMvpTools } from '../../../src/tools/mvpTools.ts';
 import { ToolRegistry } from '../../../src/tools/toolRegistry.ts';
 
@@ -19,6 +21,8 @@ export interface PlanWorkflowPayload {
 export interface PlanWorkflowDependencies<Context> {
   readonly origins: ReadonlySet<string>;
   readonly plannerEnvironment?: PlannerEnvironment;
+  readonly createPlannerAdapter?: (environment: PlannerEnvironment) => PlannerAdapter | null;
+  readonly financialReviewer?: FinnlpFinancialReviewer;
   readonly authenticate: (
     accessToken: string,
   ) => Promise<AuthenticatedCaller<Context> | null>;
@@ -132,7 +136,10 @@ export function createPlanWorkflowHandler<Context>(
       registry.register(tool);
     }
 
-    const plannerAdapter = createPlannerAdapterFromEnvironment(dependencies.plannerEnvironment ?? {});
+    const plannerEnvironment = dependencies.plannerEnvironment ?? {};
+    const plannerAdapter = dependencies.createPlannerAdapter
+      ? dependencies.createPlannerAdapter(plannerEnvironment)
+      : createPlannerAdapterFromEnvironment(plannerEnvironment);
     if (!plannerAdapter) {
       return errorResponse(503, 'PLANNER_NOT_CONFIGURED', 'The planner is not configured.', corsHeaders);
     }
@@ -149,7 +156,17 @@ export function createPlanWorkflowHandler<Context>(
       if (!providerResponse.success) {
         return errorResponse(502, providerResponse.error.code, providerResponse.error.message, corsHeaders);
       }
-      const plan = validatePlan(providerResponse.plan, registry, { taskId: task.id, goal: payload.goal });
+      let plan = validatePlan(providerResponse.plan, registry, { taskId: task.id, goal: payload.goal });
+      if (isFinanciallyRelevant(payload.goal, plan)) {
+        plan = await applyFinnlpReviewAndRefinePlan(
+          dependencies,
+          plannerAdapter,
+          requestBody,
+          registry,
+          plan,
+          payload.goal,
+        );
+      }
       if (new TextEncoder().encode(JSON.stringify(plan)).byteLength > maxRequestBytes) {
         throw createPlannerError('INVALID_PLAN', 'The proposed plan is too large to save.');
       }
@@ -173,6 +190,123 @@ export function createPlanWorkflowHandler<Context>(
       return errorResponse(503, 'PROVIDER_UNAVAILABLE', 'The planner provider is temporarily unavailable.', corsHeaders);
     }
   };
+}
+
+function isFinanciallyRelevant(goal: string, plan: WorkflowPlan): boolean {
+  const reviewText = [
+    goal,
+    plan.summary,
+    ...plan.steps.map((step) => `${step.title} ${step.description} ${step.expectedOutcome}`),
+  ].join(' ');
+  if (plan.steps.some((step) => step.toolId === 'finnlp-financial-review')) return true;
+  return /\b(?:financial|finance|accounting|accountant|invoice|revenue|sales|earnings|profit|loss|cash flow|balance sheet|income statement|ebitda|net income|gross margin|operating margin|fiscal|quarterly|year.over.year|yoy|eps|roi|roe|debt|credit|interest rate|yield|currency|exchange rate|forex|stock|share price|market cap|valuation|dividend|portfolio|accounts payable|accounts receivable)\b/i.test(reviewText);
+}
+
+async function applyFinnlpReviewAndRefinePlan<Context>(
+  dependencies: PlanWorkflowDependencies<Context>,
+  plannerAdapter: PlannerAdapter,
+  requestBody: PlannerRequest,
+  registry: ToolRegistry,
+  initialPlan: WorkflowPlan,
+  goal: string,
+): Promise<WorkflowPlan> {
+  if (!dependencies.financialReviewer) {
+    return appendPlanLimitations(initialPlan, [
+      'FinNLP sidecar is not configured; financial language and claims were not reviewed by the specialist verifier.',
+    ]);
+  }
+
+  const draftAnswer = [
+    `Initial plan summary: ${initialPlan.summary}`,
+    ...initialPlan.steps.slice(0, 10).map((step, index) =>
+      `${index + 1}. ${step.title}: ${step.description}. Expected outcome: ${step.expectedOutcome}`),
+    ...initialPlan.limitations.slice(0, 3).map((limitation) => `Existing limitation: ${limitation}`),
+  ].join('\n').slice(0, 3_500);
+  if (isCredentialLikeString(goal) || isCredentialLikeString(draftAnswer)) {
+    return appendPlanLimitations(initialPlan, [
+      'FinNLP review was skipped because credential-like text was detected; no specialist review or financial verification was performed.',
+    ]);
+  }
+
+  let review: ReturnType<typeof normalizeFinnlpFinancialReview>;
+  try {
+    const rawReview = await dependencies.financialReviewer.reviewFinancialClaim(
+      { signal: new AbortController().signal },
+      { claim: goal, draftAnswer, sources: [] },
+    );
+    review = normalizeFinnlpFinancialReview(rawReview, []);
+  } catch {
+    dependencies.logFailure?.('FINNLP_REVIEW_UNAVAILABLE');
+    return appendPlanLimitations(initialPlan, [
+      'FinNLP sidecar could not complete its review; the original plan was retained without specialist feedback and no financial verification was performed.',
+    ]);
+  }
+  if (!review) {
+    dependencies.logFailure?.('FINNLP_REVIEW_INVALID');
+    return appendPlanLimitations(initialPlan, [
+      'FinNLP sidecar returned an invalid review; the original plan was retained and no financial verification was performed.',
+    ]);
+  }
+
+  const reviewNotes = createFinNlpPlanNotes(review);
+  try {
+    const refinedResponse = await plannerAdapter.generatePlan({
+      ...requestBody,
+      reviewerFeedback: review.handoffMessage,
+    });
+    if (!refinedResponse.success) {
+      dependencies.logFailure?.('FINNLP_PLAN_REFINEMENT_FAILED');
+      return appendPlanLimitations(initialPlan, [
+        'FinNLP supplied feedback, but the main planner could not revise its draft; the original plan is retained and needs human review.',
+        ...reviewNotes,
+      ]);
+    }
+    const refinedPlan = validatePlan(refinedResponse.plan, registry, {
+      taskId: requestBody.taskId,
+      goal: requestBody.goal,
+    });
+    return appendPlanLimitations(refinedPlan, reviewNotes);
+  } catch {
+    dependencies.logFailure?.('FINNLP_PLAN_REFINEMENT_INVALID');
+    return appendPlanLimitations(initialPlan, [
+      'FinNLP supplied feedback, but the main planner produced an invalid or unavailable revision; the original plan is retained and needs human review.',
+      ...reviewNotes,
+    ]);
+  }
+}
+
+function createFinNlpPlanNotes(
+  review: NonNullable<ReturnType<typeof normalizeFinnlpFinancialReview>>,
+): string[] {
+  const ambiguitySummary = review.ambiguities.slice(0, 3)
+    .map((item) => `${item.term}: ${item.clarificationQuestion}`)
+    .join(' | ');
+  const questionSummary = review.questionsForMainAgent.slice(0, 3).join(' | ');
+  return [
+    `FinNLP review status: ${review.reviewStatus}. Human review is still required; model confidence is a qualitative self-assessment only.`,
+    `FinNLP decoded meaning: ${review.decodedMeaning}`,
+    `FinNLP evidence assessment: ${review.assessmentSummary}`,
+    ambiguitySummary || questionSummary
+      ? `FinNLP clarification: ${[ambiguitySummary, questionSummary].filter(Boolean).join(' | ')}`
+      : 'FinNLP clarification: no specific ambiguity was returned; verify material financial claims against primary evidence.',
+    `FinNLP next step: ${review.nextStepForMainAgent}. No independent source snippets were supplied during planning review, so this is not factual verification.`,
+  ];
+}
+
+function appendPlanLimitations(plan: WorkflowPlan, notes: readonly string[]): WorkflowPlan {
+  const additions = notes
+    .map((note) => note.replace(/\s+/g, ' ').trim().slice(0, 390))
+    .filter(Boolean)
+    .slice(0, 5);
+  let limitations = [...plan.limitations];
+  if (limitations.length + additions.length > 20) {
+    const keep = Math.max(0, 20 - additions.length - 1);
+    limitations = [
+      ...limitations.slice(0, keep),
+      'Some original plan limitations were omitted to preserve the bounded FinNLP review handoff.',
+    ];
+  }
+  return { ...plan, limitations: [...limitations, ...additions].slice(0, 20) };
 }
 
 async function readPayload(request: Request): Promise<PlanWorkflowPayload> {

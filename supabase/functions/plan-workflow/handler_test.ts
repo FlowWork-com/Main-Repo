@@ -1,5 +1,6 @@
 import { assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts';
 import { createPlanWorkflowHandler } from './handler.ts';
+import type { PlannerRequest, PlannerResponse, WorkflowPlan } from '../../../src/planning/planning.ts';
 
 const taskId = '43000000-0000-4000-8000-000000000001';
 const userId = '41000000-0000-4000-8000-000000000001';
@@ -143,4 +144,134 @@ Deno.test('plan-workflow persists an explicitly enabled development mock only in
   const response = await handler(post(JSON.stringify({ taskId, goal: 'Summarize this task.' })));
   assertEquals(response.status, 200);
   assertEquals(persisted, true);
+});
+
+
+Deno.test('financial plans get one FinNLP handoff and one main-planner refinement without claiming factual verification', async () => {
+  const requests: PlannerRequest[] = [];
+  let reviewerCalls = 0;
+  let persistedPlan: WorkflowPlan | null = null;
+
+  const makePlan = (request: PlannerRequest): WorkflowPlan => ({
+    id: '66000000-0000-4000-8000-000000000001',
+    taskId: request.taskId,
+    goal: request.goal,
+    summary: 'Review the supplied revenue statement with explicit limitations.',
+    steps: [{
+      id: 'step-one',
+      title: 'Summarize financial request',
+      description: 'Summarize the request without inventing accounting data.',
+      toolId: 'echo',
+      toolVersion: '1.0.0',
+      input: { label: request.goal },
+      dependencies: [],
+      expectedOutcome: 'The request is represented as structured data.',
+      verificationCriteria: 'The output preserves the supplied request.',
+      validation: { valid: true, blockingReasons: [] },
+    }],
+    dependencies: [],
+    createdAt: '2026-10-26T00:00:00.000Z',
+    version: 1,
+    validationStatus: 'valid',
+    limitations: [],
+  });
+
+  const adapter = {
+    providerName: 'test-main-planner',
+    async generatePlan(request: PlannerRequest): Promise<PlannerResponse> {
+      requests.push(request);
+      return { success: true, plan: makePlan(request) };
+    },
+  };
+
+  const reviewer = {
+    async reviewFinancialClaim(_context: { signal: AbortSignal }, input: { claim: string; draftAnswer?: string; sources: readonly unknown[] }) {
+      reviewerCalls += 1;
+      assertEquals(input.sources.length, 0);
+      assertEquals(input.claim, 'Explain whether revenue grew 8% year over year.');
+      return {
+        reviewStatus: 'supported_by_sources',
+        decodedMeaning: 'Year over year compares the period with the same period in the previous year.',
+        assessmentSummary: 'No independent financial evidence was supplied, so the numeric claim cannot be source-verified.',
+        findings: [{
+          statement: 'Revenue grew by 8%.',
+          assessment: 'supports_claim',
+          explanation: 'The draft repeats the claim but no independent source was supplied.',
+          sourceIds: [],
+        }],
+        ambiguities: [{
+          term: 'revenue grew',
+          interpretations: ['Reported nominal revenue', 'Inflation- or currency-adjusted revenue'],
+          clarificationQuestion: 'Which reporting basis and comparable periods apply?',
+        }],
+        questionsForMainAgent: ['Request the filing or source that supports the 8% figure.'],
+        nextStepForMainAgent: 'Do not state that the 8% figure is verified until primary evidence is checked.',
+        confidence: 'moderate',
+      };
+    },
+  };
+
+  const handler = createPlanWorkflowHandler({
+    origins: new Set(),
+    plannerEnvironment: {},
+    createPlannerAdapter: () => adapter,
+    financialReviewer: reviewer,
+    authenticate: async () => ({ userId, context: {} }),
+    loadTask: async () => ({
+      id: taskId,
+      workspaceId: '42000000-0000-4000-8000-000000000001',
+      ownerId: userId,
+      title: 'Revenue review',
+      details: '',
+    }),
+    persistPlan: async (_caller, _task, plan) => {
+      persistedPlan = plan;
+      return plan;
+    },
+  });
+
+  const response = await handler(post(JSON.stringify({
+    taskId,
+    goal: 'Explain whether revenue grew 8% year over year.',
+  })));
+  assertEquals(response.status, 200);
+  assertEquals(requests.length, 2);
+  assertEquals(reviewerCalls, 1);
+  assertEquals(typeof requests[1].reviewerFeedback, 'string');
+  assertEquals(requests[1].reviewerFeedback?.includes('No independent financial evidence'), true);
+
+  const body = await response.json();
+  const plan = body.plan as WorkflowPlan;
+  assertEquals(persistedPlan !== null, true);
+  assertEquals(plan.limitations.some((item) => item.includes('FinNLP review status: insufficient_evidence')), true);
+  assertEquals(plan.limitations.some((item) => item.includes('No independent source snippets were supplied')), true);
+});
+
+Deno.test('financial planning explicitly records when the FinNLP sidecar is not configured', async () => {
+  const handler = createPlanWorkflowHandler({
+    origins: new Set(),
+    plannerEnvironment: {
+      FLOWWORK_PLANNER_PROVIDER: 'mock',
+      FLOWWORK_PLANNER_ALLOW_MOCK: 'true',
+    },
+    authenticate: async () => ({ userId, context: {} }),
+    loadTask: async () => ({
+      id: taskId,
+      workspaceId: '42000000-0000-4000-8000-000000000001',
+      ownerId: userId,
+      title: 'Revenue review',
+      details: '',
+    }),
+    persistPlan: async (_caller, _task, plan) => plan,
+  });
+  const response = await handler(post(JSON.stringify({
+    taskId,
+    goal: 'Explain revenue growth.',
+  })));
+  assertEquals(response.status, 200);
+  const body = await response.json();
+  assertEquals(
+    body.plan.limitations.some((item: string) => item.includes('FinNLP sidecar is not configured')),
+    true,
+  );
 });

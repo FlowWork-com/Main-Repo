@@ -14,6 +14,13 @@ Use it when a task contains a financial statement, financial terminology, an age
 
 The reviewer is a second opinion, not an oracle. Finnhub news is provider-retrieved content, not independently fact-checked truth. Evidence supplied by a user or another agent is labelled unverified. The verifier can help find ambiguity and contradictions; it cannot guarantee financial accuracy.
 
+## Planning-time talk-back loop
+
+When the primary planner proposes a plan for a goal or draft that appears financial, the server can make exactly one bounded call to this reviewer, pass the original goal and a size-limited textual summary of the proposed plan, and then give the resulting handoff back to the primary planner for exactly one refinement. There is no recursive agent loop. The refined plan is revalidated with the canonical tool registry and task/goal checks before being saved.
+
+The planning-time pass intentionally has an empty source list: it can decode a phrase such as "year over year", identify missing accounting bases or periods, ask for primary evidence, and challenge unsupported wording, but it **must not certify the factual figure**. The plan stores the reviewer status, ambiguity/questions, and evidence caveat in its limitations. Source-backed review is available through the registered `finnlp-financial-review` tool when explicit source snippets or the bounded Finnhub ticker/date request are supplied. User-provided snippets remain unverified. If the reviewer is missing, times out, returns malformed output, or the main planner cannot apply the feedback, the original plan is retained with a limitation that clearly says the specialist feedback was not applied or no verification took place.
+
+
 ## Tool contract
 
 Tool ID: `finnlp-financial-review`, version `1.0.0`.

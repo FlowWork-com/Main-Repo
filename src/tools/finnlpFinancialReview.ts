@@ -52,9 +52,13 @@ export interface FinnlpFinancialReviewRequest {
   readonly sources: readonly FinnlpReviewSource[];
 }
 
+export interface FinnlpFinancialReviewContext {
+  readonly signal: AbortSignal;
+}
+
 export interface FinnlpFinancialReviewer {
   reviewFinancialClaim(
-    context: ToolExecutionContext,
+    context: FinnlpFinancialReviewContext,
     request: FinnlpFinancialReviewRequest,
   ): Promise<unknown>;
 }
@@ -85,7 +89,7 @@ interface FinnlpFinancialAmbiguity {
   readonly clarificationQuestion: string;
 }
 
-interface FinnlpFinancialReviewOutput {
+export interface FinnlpFinancialReviewOutput {
   readonly reviewer: 'FinNLP financial verification sidecar';
   readonly role: 'specialist_verifier_not_primary_agent';
   readonly reviewStatus: ReviewStatus;
@@ -280,7 +284,7 @@ export function createFinnlpFinancialReviewTool(
         );
       }
 
-      const output = normalizeReview(rawReview, sources);
+      const output = normalizeFinnlpFinancialReview(rawReview, sources);
       if (!output || !isPersistableJson(output)) {
         return toolFailure(
           'EXECUTION_FAILED',
@@ -308,7 +312,7 @@ export class FinnlpFinancialReviewProviderError extends Error {
   }
 }
 
-function normalizeReview(
+export function normalizeFinnlpFinancialReview(
   value: unknown,
   sources: readonly FinnlpReviewSource[],
 ): FinnlpFinancialReviewOutput | null {

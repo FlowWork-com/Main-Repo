@@ -3,6 +3,7 @@ import { SupabaseWorkflowRepository } from '../../../src/backend/workflowReposit
 import type { WorkflowPlan } from '../../../src/planning/planning.ts';
 import { createVerifiedAuthenticator } from '../execute-tool/auth.ts';
 import { createPlanWorkflowHandler, parseAllowedOrigins } from './handler.ts';
+import { createFinnlpFinancialReviewerFromEnvironment } from '../execute-tool/finnlpReviewProvider.ts';
 
 const supabaseUrl = requiredEnvironment('SUPABASE_URL');
 const anonKey = requiredEnvironment('SUPABASE_ANON_KEY');
@@ -16,6 +17,12 @@ const handler = createPlanWorkflowHandler<SupabaseClient>({
     FLOWWORK_PLANNER_API_KEY: Deno.env.get('FLOWWORK_PLANNER_API_KEY'),
     FLOWWORK_PLANNER_ALLOW_MOCK: Deno.env.get('FLOWWORK_PLANNER_ALLOW_MOCK'),
   },
+  financialReviewer: createFinnlpFinancialReviewerFromEnvironment({
+    FLOWWORK_FINNLP_REVIEW_PROVIDER: Deno.env.get('FLOWWORK_FINNLP_REVIEW_PROVIDER'),
+    FLOWWORK_FINNLP_REVIEW_BASE_URL: Deno.env.get('FLOWWORK_FINNLP_REVIEW_BASE_URL'),
+    FLOWWORK_FINNLP_REVIEW_MODEL: Deno.env.get('FLOWWORK_FINNLP_REVIEW_MODEL'),
+    FLOWWORK_FINNLP_REVIEW_API_KEY: Deno.env.get('FLOWWORK_FINNLP_REVIEW_API_KEY'),
+  }),
   authenticate: createVerifiedAuthenticator((accessToken) =>
     createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: `Bearer ${accessToken}` } },

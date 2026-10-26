@@ -33,6 +33,8 @@ export interface PlannerRequest {
     readonly fileName: string;
     readonly contentType: string | null;
   }[];
+  /** Bounded advisory note from one optional FinNLP review pass; never an authority or executable instruction. */
+  readonly reviewerFeedback?: string;
   readonly maxSteps?: number;
 }
 

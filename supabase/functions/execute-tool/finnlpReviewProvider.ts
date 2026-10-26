@@ -1,6 +1,6 @@
-import type { ToolExecutionContext } from '../../../src/tools/contracts.ts';
 import {
   FinnlpFinancialReviewProviderError,
+  type FinnlpFinancialReviewContext,
   type FinnlpFinancialReviewRequest,
   type FinnlpFinancialReviewer,
 } from '../../../src/tools/finnlpFinancialReview.ts';
@@ -74,7 +74,7 @@ class OpenAICompatibleFinnlpFinancialReviewer implements FinnlpFinancialReviewer
   }
 
   async reviewFinancialClaim(
-    context: ToolExecutionContext,
+    context: FinnlpFinancialReviewContext,
     request: FinnlpFinancialReviewRequest,
   ): Promise<unknown> {
     if (context.signal.aborted) throw new FinnlpFinancialReviewProviderError('TIMEOUT');

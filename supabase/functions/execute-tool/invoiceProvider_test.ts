@@ -38,6 +38,9 @@ Deno.test('invoice provider sends PDF as a file part and returns bounded JSON co
   const result = await extractor(makePdf());
   assertEquals(requestUrl, 'https://provider.example/v1/chat/completions');
   assertEquals(requestBody['model'], 'vision-model');
+  assertEquals(requestBody['temperature'], undefined);
+  assertEquals(requestBody['max_completion_tokens'], 1800);
+  assertEquals(requestBody['max_tokens'], undefined);
   assertEquals(requestBody['response_format'], { type: 'json_object' });
   const messages = requestBody['messages'] as Array<Record<string, unknown>>;
   const user = messages[1] as { content: Array<Record<string, unknown>> };

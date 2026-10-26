@@ -69,9 +69,9 @@ jobs:
           deno test --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/execute-tool/finnlpReviewProvider_test.ts
 
       - name: Set up Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@v3
         with:
-          version: 2.39.2
+          version: 2.121.0
 
       - name: Start local Supabase
         timeout-minutes: 10

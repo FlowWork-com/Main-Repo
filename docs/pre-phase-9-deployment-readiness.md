@@ -74,6 +74,23 @@ Finnhub is connected per workspace/member through the authenticated `finnlp-inte
 
 ## 3. Migration and Edge Function deployment
 
+### Recommended gated GitHub Actions deployment
+
+Use `.github/workflows/deploy-supabase-staging.yml` from the `main` branch only. Before dispatching it:
+
+1. Create a GitHub Actions environment named `staging` and configure required reviewers/environment protection.
+2. Add the environment variable `SUPABASE_STAGING_PROJECT_REF` with the approved staging project's 20-character reference.
+3. Add environment secrets `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD`. Never print or commit their values.
+4. Configure the provider and integration secrets in the **staging Supabase project's secret manager**. At minimum, configure `APP_ORIGINS`, the planner provider/model/base URL/API key, the FinNLP reviewer provider/model/base URL/API key, and the invoice provider/model/base URL/API key. Add the Google OAuth variables only if Google Workspace is in scope.
+5. Confirm a recent recovery point/backup, confirm the project reference identifies staging (not production or Invoice DB), and confirm CI passed for the exact `main` commit.
+6. Run **Actions → Deploy Supabase staging**, keep Google Workspace disabled unless it is in scope, and select `yes` for the explicit deployment confirmation.
+
+The workflow verifies successful `Frontend CI` on the exact commit, displays the migration list and dry-run plan, applies repository migrations without seed data, deploys `plan-workflow`, `execute-tool`, `advance-plan-run`, and `finnlp-integration`, and deploys `google-workspace` only when explicitly selected. It is manual-only, runs against the configured staging environment, excludes the separate Invoice DB reference, and does not set or print provider secret values.
+
+A deployment run is not a successful release by itself: execute the live acceptance tests in section 4 and record the evidence before lifting the Phase 9 hold.
+
+### Manual CLI fallback
+
 Run these commands from a clean checkout after confirming the project reference. Replace the placeholder locally; never commit the project reference if it is sensitive for your deployment process.
 
 ```sh

@@ -1,0 +1,162 @@
+name: Deploy Supabase staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_staging_deploy:
+        description: "Select yes only after confirming the staging target, recovery point, and server-side secrets."
+        type: choice
+        required: true
+        default: "no"
+        options:
+          - "no"
+          - "yes"
+      deploy_google_workspace:
+        description: "Deploy the optional Google Workspace OAuth function."
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: supabase-staging-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy reviewed main to Supabase staging
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out the exact main commit
+        uses: actions/checkout@v4
+
+      - name: Require explicit confirmation and staging-only target
+        env:
+          CONFIRM_STAGING_DEPLOY: ${{ inputs.confirm_staging_deploy }}
+          SUPABASE_STAGING_PROJECT_REF: ${{ vars.SUPABASE_STAGING_PROJECT_REF }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::Deployments are permitted only from main."
+            exit 1
+          fi
+          if [[ "$CONFIRM_STAGING_DEPLOY" != "yes" ]]; then
+            echo "::error::Select yes to authorize a staging migration/function deployment."
+            exit 1
+          fi
+          if [[ ! "$SUPABASE_STAGING_PROJECT_REF" =~ ^[a-z0-9]{20}$ ]]; then
+            echo "::error::Set the staging environment variable SUPABASE_STAGING_PROJECT_REF to the intended Supabase project reference."
+            exit 1
+          fi
+          if [[ "$SUPABASE_STAGING_PROJECT_REF" == "tlhznghnfdwpilhfjyyu" ]]; then
+            echo "::error::Invoice DB is a separate project and is not a valid target for Main-Repo integration."
+            exit 1
+          fi
+          if [[ -z "$SUPABASE_ACCESS_TOKEN" || -z "$SUPABASE_DB_PASSWORD" ]]; then
+            echo "::error::Configure SUPABASE_ACCESS_TOKEN and SUPABASE_DB_PASSWORD as secrets in the GitHub staging environment."
+            exit 1
+          fi
+
+      - name: Require successful CI on this exact commit
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const { data } = await github.rest.actions.listWorkflowRunsForRepo({
+              owner,
+              repo,
+              branch: "main",
+              status: "completed",
+              per_page: 100,
+            });
+            const run = data.workflow_runs.find((candidate) =>
+              candidate.head_sha === context.sha &&
+              candidate.name === "Frontend CI" &&
+              candidate.event === "push" &&
+              candidate.conclusion === "success"
+            );
+            if (!run) {
+              core.setFailed("A successful Frontend CI push run for this exact main commit is required.");
+              return;
+            }
+            const { data: jobData } = await github.rest.actions.listJobsForWorkflowRun({
+              owner,
+              repo,
+              run_id: run.id,
+              per_page: 100,
+            });
+            const requiredJobs = ["validate", "container"];
+            const missing = requiredJobs.filter((name) =>
+              !jobData.jobs.some((job) => job.name === name && job.conclusion === "success")
+            );
+            if (missing.length > 0) {
+              core.setFailed(`Required CI jobs did not succeed: ${missing.join(", ")}`);
+              return;
+            }
+            core.info(`Required CI passed on ${context.sha} (run ${run.id}).`);
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v3
+        with:
+          version: 2.121.0
+
+      - name: Link only the configured staging project
+        env:
+          SUPABASE_STAGING_PROJECT_REF: ${{ vars.SUPABASE_STAGING_PROJECT_REF }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase link --project-ref "$SUPABASE_STAGING_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Review linked migration history
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase migration list --linked
+
+      - name: Preview pending migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase db push --dry-run --linked
+
+      - name: Apply reviewed repository migrations (without seed data)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase db push --linked
+
+      - name: Deploy required runtime functions
+        env:
+          SUPABASE_STAGING_PROJECT_REF: ${{ vars.SUPABASE_STAGING_PROJECT_REF }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for function_name in plan-workflow execute-tool advance-plan-run finnlp-integration; do
+            supabase functions deploy "$function_name" --project-ref "$SUPABASE_STAGING_PROJECT_REF"
+          done
+
+      - name: Deploy optional Google Workspace integration
+        if: ${{ inputs.deploy_google_workspace }}
+        env:
+          SUPABASE_STAGING_PROJECT_REF: ${{ vars.SUPABASE_STAGING_PROJECT_REF }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy google-workspace --project-ref "$SUPABASE_STAGING_PROJECT_REF"
+
+      - name: Record deployed revision
+        env:
+          SUPABASE_STAGING_PROJECT_REF: ${{ vars.SUPABASE_STAGING_PROJECT_REF }}
+        run: |
+          echo "Supabase staging deployment completed for commit $GITHUB_SHA."
+          echo "Target project reference: $SUPABASE_STAGING_PROJECT_REF"

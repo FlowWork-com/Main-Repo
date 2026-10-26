@@ -36,6 +36,8 @@ The output contains a review status, plain-language decoding, a bounded set of f
 
 ## Provider configuration
 
+The recommended initial model assignment is `gpt-6-astra`; see the [AI agent roster](ai-agent-roster.md) for the complete runtime assignment and activation gate. The adapter intentionally omits custom `temperature` so this model can use its supported defaults.
+
 Configure a separate OpenAI-compatible reviewer in the server-side Supabase Edge Function environment:
 
 - `FLOWWORK_FINNLP_REVIEW_PROVIDER=openai-compatible`

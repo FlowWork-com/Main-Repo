@@ -59,6 +59,10 @@ In **Tool execution**, the registered `finnlp-company-news` tool accepts only `t
 
 **Credential limitation:** Finnhub API-key authentication is not OAuth and this integration cannot enforce provider-side fine-grained scope restrictions for the key. Use a dedicated credential, store it only through the workspace integration panel, rotate it when appropriate, and never reuse a key in frontend environment variables or logs. Although the implementation only invokes the read-only company-news GET endpoint, the provider key's privileges are controlled by Finnhub, not by this tool.
 
+### Runtime AI model assignments
+
+The runtime model-role roster and Phase 9+ readiness hold are documented in [AI agent roster and model assignments](docs/ai-agent-roster.md). The runtime planner, FinNLP verifier, and invoice extractor are model-backed roles; the Finnhub news bridge, spreadsheet arithmetic, and workflow authorization/state machine are not separate generative agents.
+
 ### FinNLP financial verification sidecar
 
 FinNLP is a **specialist verifier and financial-language decoder**, not the primary agent. The registered `finnlp-financial-review` tool reviews financial claims and another agent’s draft answers, explains ambiguous terms, separates assumptions from source-backed findings, flags contradictions, asks for missing reporting periods/currency/accounting basis, and returns a `handoffMessage` for the main agent. When a ticker plus an inclusive date range of up to 31 days is supplied, it can retrieve bounded Finnhub news as supporting context. It does not make investment recommendations, place trades, authorize actions, or claim source reports are independently fact-checked. For a detected financial planning request, `plan-workflow` can run one bounded verifier pass and send its structured handoff back to the primary planner for one revision. The planning-time pass deliberately supplies no independent source snippets, so it can clarify terms or surface missing evidence but cannot certify a numerical claim; those caveats are saved with the plan. When the sidecar is not configured or fails, the plan records that no specialist verification took place.

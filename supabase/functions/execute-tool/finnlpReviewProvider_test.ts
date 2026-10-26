@@ -76,7 +76,8 @@ Deno.test('review provider uses only the configured HTTPS chat-completions endpo
   assertEquals(capturedUrl, 'https://review.example.test/v1/chat/completions', 'Endpoint must be fixed from server config');
   assertEquals(capturedInit?.method, 'POST', 'Review uses a bounded POST to the configured model');
   assertEquals((capturedInit?.headers as Record<string, string>).authorization, 'Bearer server-only-review-key', 'Credential stays in server header');
-  const body = JSON.parse(String(capturedInit?.body)) as { messages: Array<{ role: string; content: string }> };
+  const body = JSON.parse(String(capturedInit?.body)) as { messages: Array<{ role: string; content: string }>; temperature?: number };
+  assertEquals(body.temperature, undefined, 'Reviewer leaves temperature at the selected model default');
   assert(body.messages[0].content.includes('not the primary planner'), 'Prompt must establish verifier-only role');
   assert(body.messages[0].content.includes('Never invent a source'), 'Prompt must prohibit invented citations');
   assert(body.messages[1].content.includes('news-1'), 'Only supplied sources are passed');

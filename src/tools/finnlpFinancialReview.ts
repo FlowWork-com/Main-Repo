@@ -381,22 +381,30 @@ function normalizeReview(
 
   const questionsForMainAgent = readTextList(value.questionsForMainAgent, 4, 320);
   const decodedMeaning = safeOutputText(value.decodedMeaning, 1_000);
-  const assessmentSummary = safeOutputText(value.assessmentSummary, 1_000);
+  const assessmentSummaryCandidate = safeOutputText(value.assessmentSummary, 1_000);
   const nextStepForMainAgent = safeOutputText(value.nextStepForMainAgent, 500);
-  if (!decodedMeaning || !assessmentSummary || !nextStepForMainAgent ||
+  if (!decodedMeaning || !assessmentSummaryCandidate || !nextStepForMainAgent ||
     !questionsForMainAgent) return null;
 
   let reviewStatus = value.reviewStatus as ReviewStatus;
-  const hasProviderSource = sources.some((source) => source.sourceKind === 'finnhub_news');
-  const hasLinkedFinding = findings.some((finding) => finding.sourceIds.length > 0);
-  if (reviewStatus !== 'clarification_needed' && (!hasProviderSource || !hasLinkedFinding)) {
+  const providerSourceIds = new Set(
+    sources.filter((source) => source.sourceKind === 'finnhub_news').map((source) => source.id),
+  );
+  const hasProviderSource = providerSourceIds.size > 0;
+  const hasLinkedProviderFinding = findings.some((finding) =>
+    finding.sourceIds.some((id) => providerSourceIds.has(id)));
+  if (reviewStatus !== 'clarification_needed' && (!hasProviderSource || !hasLinkedProviderFinding)) {
     reviewStatus = 'insufficient_evidence';
   }
-  if (!hasProviderSource && findings.length > 0) {
-    for (let index = 0; index < findings.length; index += 1) {
+  for (let index = 0; index < findings.length; index += 1) {
+    const hasProviderCitation = findings[index].sourceIds.some((id) => providerSourceIds.has(id));
+    if (!hasProviderCitation) {
       findings[index] = { ...findings[index], assessment: 'not_verifiable' };
     }
   }
+  const assessmentSummary = hasLinkedProviderFinding
+    ? assessmentSummaryCandidate
+    : `No independently retrieved source is linked to a finding; language decoding only. ${assessmentSummaryCandidate}`.slice(0, 1_000);
 
   const confidence = confidenceLevels.includes(value.confidence as typeof confidenceLevels[number])
     ? value.confidence as typeof confidenceLevels[number]

@@ -1,0 +1,59 @@
+name: Staging authenticated E2E smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_user_id:
+        description: "Expected Supabase Auth user UUID for the dedicated staging tester."
+        type: string
+        required: true
+        default: "f6f90bd4-7c48-4406-88da-043126b8d016"
+      workspace_id:
+        description: "Dedicated synthetic staging workspace UUID."
+        type: string
+        required: true
+        default: "31f8d2fd-ea50-44ab-b269-cf2f72fd1b69"
+      task_id:
+        description: "Dedicated synthetic task UUID. The runner verifies its title, owner, workspace, and Planning status."
+        type: string
+        required: true
+        default: "2b0f97d8-3aaf-432a-ad02-f30cee5bb0f1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flowwork-staging-authenticated-e2e
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Authenticated staging smoke (no tool execution)
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run authenticated staging checks
+        env:
+          STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          STAGING_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+          STAGING_TEST_USER_EMAIL: ${{ secrets.STAGING_TEST_USER_EMAIL }}
+          STAGING_TEST_USER_PASSWORD: ${{ secrets.STAGING_TEST_USER_PASSWORD }}
+          STAGING_EXPECTED_USER_ID: ${{ inputs.expected_user_id }}
+          STAGING_WORKSPACE_ID: ${{ inputs.workspace_id }}
+          STAGING_TASK_ID: ${{ inputs.task_id }}
+        run: node scripts/staging-e2e-smoke.mjs

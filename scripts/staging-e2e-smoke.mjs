@@ -45,7 +45,7 @@ function readSafeMessage(payload) {
     : typeof payload.message === 'string' ? payload.message : null;
   if (!message) return null;
   // This function is intended to print the adapter's fixed, sanitized public message only.
-  return message.replace(/\\s+/g, ' ').slice(0, 300);
+  return message.replace(/\s+/g, ' ').slice(0, 300);
 }
 
 async function postFunction(baseUrl, anonKey, functionName, payload, accessToken) {

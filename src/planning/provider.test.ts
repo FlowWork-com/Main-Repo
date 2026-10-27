@@ -192,6 +192,56 @@ describe('planner provider adapter', () => {
     }
   });
 
+  it('classifies non-429 provider HTTP failures without exposing upstream response bodies', async () => {
+    const request: PlannerRequest = { taskId: 'task', goal: 'Goal', toolCatalog: [] };
+    const scenarios = [
+      {
+        status: 401,
+        message: 'The planner provider rejected authentication (HTTP 401). Check the API key and provider account access.',
+      },
+      {
+        status: 403,
+        message: 'The planner provider rejected authentication (HTTP 403). Check the API key and provider account access.',
+      },
+      {
+        status: 400,
+        message: 'The planner provider rejected the model or request (HTTP 400). Check the configured model ID, endpoint, and JSON response mode.',
+      },
+      {
+        status: 404,
+        message: 'The planner provider rejected the model or request (HTTP 404). Check the configured model ID, endpoint, and JSON response mode.',
+      },
+      {
+        status: 503,
+        message: 'The planner provider returned a server error (HTTP 503). Retry later.',
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      const adapter = createOpenAICompatiblePlannerAdapter({
+        baseUrl: 'https://api.example.test/v1',
+        modelName: 'planner',
+        apiKey: 'server-only',
+        fetcher: async () => Response.json({
+          error: { message: 'private upstream diagnostic must not be returned' },
+        }, { status: scenario.status }),
+      });
+
+      const response = await adapter.generatePlan(request);
+      expect(response).toMatchObject({
+        success: false,
+        error: {
+          code: 'PROVIDER_UNAVAILABLE',
+          message: scenario.message,
+        },
+      });
+      if (!response.success) {
+        expect(response.error.message).not.toContain('private upstream diagnostic');
+        expect(response.error.message).not.toContain('server-only');
+      }
+    }
+  });
+
   it('sanitizes malformed provider output and bounds request time', async () => {
     const malformed = createOpenAICompatiblePlannerAdapter({
       baseUrl: 'https://api.example.test/v1',

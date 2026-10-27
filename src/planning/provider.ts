@@ -101,7 +101,28 @@ export function createOpenAICompatiblePlannerAdapter(config: {
           return failure('RATE_LIMITED', 'The planner is temporarily rate limited. Try again shortly.');
         }
         if (!response.ok) {
-          return failure('PROVIDER_UNAVAILABLE', 'The planner provider is temporarily unavailable.');
+          if (response.status === 401 || response.status === 403) {
+            return failure(
+              'PROVIDER_UNAVAILABLE',
+              `The planner provider rejected authentication (HTTP ${response.status}). Check the API key and provider account access.`,
+            );
+          }
+          if (response.status === 400 || response.status === 404 || response.status === 422) {
+            return failure(
+              'PROVIDER_UNAVAILABLE',
+              `The planner provider rejected the model or request (HTTP ${response.status}). Check the configured model ID, endpoint, and JSON response mode.`,
+            );
+          }
+          if (response.status >= 500) {
+            return failure(
+              'PROVIDER_UNAVAILABLE',
+              `The planner provider returned a server error (HTTP ${response.status}). Retry later.`,
+            );
+          }
+          return failure(
+            'PROVIDER_UNAVAILABLE',
+            `The planner provider returned an unexpected HTTP status (${response.status}). Check provider access and configuration.`,
+          );
         }
 
         let envelope: unknown;
@@ -140,7 +161,10 @@ export function createOpenAICompatiblePlannerAdapter(config: {
         if (controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
           return failure('PROVIDER_TIMEOUT', 'The planner request timed out. Try again.');
         }
-        return failure('PROVIDER_UNAVAILABLE', 'The planner provider is temporarily unavailable.');
+        return failure(
+          'PROVIDER_UNAVAILABLE',
+          'The planner provider could not be reached. Check the configured base URL and network access.',
+        );
       } finally {
         clearTimeout(timeout);
       }

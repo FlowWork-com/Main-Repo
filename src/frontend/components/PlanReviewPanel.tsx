@@ -446,6 +446,7 @@ function plannerMessage(error: unknown): string {
     case 'PLANNER_NOT_CONFIGURED': return 'Plan generation is not configured for this workspace.';
     case 'PROVIDER_TIMEOUT':
     case 'REQUEST_TIMEOUT': return 'Plan generation timed out. You can retry.';
+    case 'PROVIDER_QUOTA_EXCEEDED': return 'The planner API has reached a credit, usage, or spending limit. Check provider billing and limits before retrying.';
     case 'RATE_LIMITED': return 'The planning service is busy. Wait briefly and retry.';
     case 'INVALID_RESPONSE':
     case 'INVALID_PLAN': return 'The planning service returned a plan that could not be validated.';

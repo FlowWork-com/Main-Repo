@@ -17,6 +17,12 @@ Never add a service-role key, provider key, plan-signing key, password, or JWT t
 
 In Supabase → Edge Functions → Secrets, configure the planner, FinNLP reviewer, and invoice roles using the FLOWWORK_* variables documented in docs/ai-agent-roster.md. Configure FLOWWORK_PLAN_SIGNING_KEY there with the same privately generated value as the Vault secret flowwork-plan-signing-key. A valid public key alone is not enough to exercise the live planner.
 
+### Optional Groq staging configuration
+
+For an OpenAI API alternative, the planner and FinNLP review path can use Groq's OpenAI-compatible endpoint. Use the profile in `docs/ai-agent-roster.md` and configure the server-side `FLOWWORK_PLANNER_*` and `FLOWWORK_FINNLP_REVIEW_*` secrets in Supabase → Edge Functions → Secrets. Generate a **new** key if a previous key was pasted into chat or source control; never put a provider key in this document, workflow inputs, GitHub source, or client-side environment variables.
+
+The current invoice extractor is not covered by the Groq staging profile because PDF payload compatibility has not been validated. Do not replace its secrets until a separate image/PDF adapter test passes.
+
 ## What this workflow checks
 
 - Unauthenticated requests are rejected by all four required Edge Functions.

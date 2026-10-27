@@ -330,7 +330,7 @@ select throws_ok(
        jsonb_set(
          (select value from finnlp_plan_payload),
          '{steps,0,input,endDate}',
-         '"2026-10-27"'::jsonb
+         to_jsonb((timezone('utc', now())::date + 1)::text)
        )
      ) $$,
   '22023',

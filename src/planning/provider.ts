@@ -91,6 +91,13 @@ export function createOpenAICompatiblePlannerAdapter(config: {
         });
 
         if (response.status === 429) {
+          const providerErrorCode = await readProviderErrorCode(response);
+          if (providerErrorCode && quotaErrorCodes.has(providerErrorCode)) {
+            return failure(
+              'PROVIDER_QUOTA_EXCEEDED',
+              'The planner API has reached a credit, usage, or spending limit. Check provider billing and limits before retrying.',
+            );
+          }
           return failure('RATE_LIMITED', 'The planner is temporarily rate limited. Try again shortly.');
         }
         if (!response.ok) {
@@ -204,6 +211,34 @@ export function adaptPlannerError(code: PlannerErrorCode, message: string): Plan
 
 function failure(code: PlannerErrorCode, message: string): PlannerResponse {
   return adaptPlannerError(code, message);
+}
+
+const quotaErrorCodes = new Set([
+  'credit_balance_exhausted',
+  'insufficient_quota',
+  'organization_usage_limit_exceeded',
+  'organization_spend_limit_exceeded',
+  'project_spend_limit_exceeded',
+]);
+
+async function readProviderErrorCode(response: Response): Promise<string | null> {
+  try {
+    const payload = await readProviderJson(response);
+    if (!isRecord(payload) || !isRecord(payload.error)) return null;
+
+    const providerError = payload.error;
+    if (typeof providerError.code === 'string') {
+      const code = providerError.code.trim().toLowerCase();
+      if (code) return code;
+    }
+    if (typeof providerError.type === 'string' &&
+      providerError.type.trim().toLowerCase() === 'insufficient_quota') {
+      return 'insufficient_quota';
+    }
+  } catch {
+    // A malformed or oversized provider error must remain a generic rate-limit failure.
+  }
+  return null;
 }
 
 function readCompletionContent(value: unknown): string | null {

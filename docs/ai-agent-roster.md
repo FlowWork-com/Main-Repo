@@ -14,6 +14,28 @@ This is the repository's intended initial model roster. The production model IDs
 
 These are explicit role assignments, not hard-coded fallbacks. Each role still needs its own configured `*_BASE_URL` and server-side `*_API_KEY`. For the OpenAI API, the recommended base URL is `https://api.openai.com/v1`. Use separate server-side secrets per role to support least-privilege operations, attribution, rotation, and usage monitoring. Never put these credentials in `VITE_*` variables, `.env.example`, browser code, or Git history.
 
+### Optional Groq profile for staging (planner + FinNLP only)
+
+The planner and FinNLP reviewer use OpenAI-compatible Chat Completions and JSON mode. Groq documents this compatible endpoint as `https://api.groq.com/openai/v1`. For a staging trial, configure these Edge Function secrets:
+
+```sh
+FLOWWORK_PLANNER_PROVIDER=openai-compatible
+FLOWWORK_PLANNER_BASE_URL=https://api.groq.com/openai/v1
+FLOWWORK_PLANNER_MODEL=openai/gpt-oss-120b
+# FLOWWORK_PLANNER_API_KEY=<fresh Groq API key>
+
+FLOWWORK_FINNLP_REVIEW_PROVIDER=openai-compatible
+FLOWWORK_FINNLP_REVIEW_BASE_URL=https://api.groq.com/openai/v1
+FLOWWORK_FINNLP_REVIEW_MODEL=qwen/qwen3.8-27b
+# FLOWWORK_FINNLP_REVIEW_API_KEY=<fresh Groq API key>
+```
+
+For a quick staging check, the same freshly generated Groq key can populate both role-specific secret names; separately scoped/project-specific keys are preferable where the account supports them. Verify in the Groq Console that the selected models are available on the account's intended tier and check the current free-tier quotas before running the smoke test. Groq also publishes per-token pricing for paid usage, so do not assume every model/tier combination is always free. The staging run calls the planner, reviewer, and planner again; stay within the account's published free limits.
+
+**Do not point the invoice extractor at Groq using this profile.** The current invoice adapter sends PDFs using a Chat Completions `type: "file"` payload, while Groq's published Qwen vision path documents image inputs. The current JPG/PNG payload may be compatible, but PDF behavior has not been validated. Keep the invoice role on its independently tested provider configuration until a dedicated Groq invoice adapter and PDF fixture tests are added. Its existing approval gate must remain enabled.
+
+This profile changes only provider configuration: FinNLP remains a verifier/language decoder, the planner remains the primary planner, and application-owned validation, approval, authorization, persistence, and tool execution remain unchanged. Groq references: [OpenAI compatibility](https://console.groq.com/docs/openai), [supported models](https://console.groq.com/docs/models), [vision support](https://console.groq.com/docs/vision), and [rate limits](https://console.groq.com/docs/rate-limits).
+
 ### Why these choices
 
 - OpenAI's current model catalog describes GPT-6.1 Sol as a strong option for complex professional work with lower cost than GPT-6 Astra, so it is the default choice for the main planner and invoice extraction workload.

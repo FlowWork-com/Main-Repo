@@ -37,6 +37,17 @@ function readCode(payload) {
   return 'UNKNOWN';
 }
 
+function readSafeMessage(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  const error = payload.error && typeof payload.error === 'object' ? payload.error : null;
+  const message = error && typeof error.message === 'string'
+    ? error.message
+    : typeof payload.message === 'string' ? payload.message : null;
+  if (!message) return null;
+  // This function is intended to print the adapter's fixed, sanitized public message only.
+  return message.replace(/\s+/g, ' ').slice(0, 300);
+}
+
 async function postFunction(baseUrl, anonKey, functionName, payload, accessToken) {
   const headers = {
     apikey: anonKey,
@@ -181,12 +192,14 @@ async function main() {
       accessToken,
     );
     const plannerErrorCode = readCode(plannerResult.body);
+    const plannerErrorMessage = readSafeMessage(plannerResult.body);
     assert(plannerResult.response.status === 200 && plannerResult.body &&
       plannerResult.body.plan && typeof plannerResult.body.plan.id === 'string',
     plannerErrorCode === 'PROVIDER_QUOTA_EXCEEDED'
       ? 'Planner API reported a credit, usage, or spending limit. Check API billing and usage limits before retrying.'
       : 'Planner request failed (HTTP ' + plannerResult.response.status +
-        ', code ' + plannerErrorCode + '). Check planner secrets and provider access.');
+        ', code ' + plannerErrorCode + '). ' +
+        (plannerErrorMessage ?? 'No safe provider diagnostic was returned. Check the planner API key, model ID, endpoint, and provider account limits.'));
 
     const plan = plannerResult.body.plan;
     assert(plan.taskId === taskId && plan.goal === goal &&

@@ -180,10 +180,13 @@ async function main() {
       { taskId: taskId, goal: goal },
       accessToken,
     );
+    const plannerErrorCode = readCode(plannerResult.body);
     assert(plannerResult.response.status === 200 && plannerResult.body &&
       plannerResult.body.plan && typeof plannerResult.body.plan.id === 'string',
-    'Planner request failed (HTTP ' + plannerResult.response.status +
-      ', code ' + readCode(plannerResult.body) + '). Check planner secrets, provider access, and plan-signing key alignment.');
+    plannerErrorCode === 'PROVIDER_QUOTA_EXCEEDED'
+      ? 'Planner API reported a credit, usage, or spending limit. Check API billing and usage limits before retrying.'
+      : 'Planner request failed (HTTP ' + plannerResult.response.status +
+        ', code ' + plannerErrorCode + '). Check planner secrets and provider access.');
 
     const plan = plannerResult.body.plan;
     assert(plan.taskId === taskId && plan.goal === goal &&

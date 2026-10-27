@@ -163,6 +163,35 @@ describe('planner provider adapter', () => {
     });
   });
 
+  it('distinguishes provider quota errors from temporary throttling without exposing provider details', async () => {
+    const request: PlannerRequest = { taskId: 'task', goal: 'Goal', toolCatalog: [] };
+    const quotaLimited = createOpenAICompatiblePlannerAdapter({
+      baseUrl: 'https://api.example.test/v1',
+      modelName: 'planner',
+      apiKey: 'server-only',
+      fetcher: async () => Response.json({
+        error: {
+          type: 'insufficient_quota',
+          code: 'project_spend_limit_exceeded',
+          message: 'private provider diagnostics must not be returned to callers',
+        },
+      }, { status: 429 }),
+    });
+
+    const response = await quotaLimited.generatePlan(request);
+    expect(response).toMatchObject({
+      success: false,
+      error: {
+        code: 'PROVIDER_QUOTA_EXCEEDED',
+        message: 'The planner API has reached a credit, usage, or spending limit. Check provider billing and limits before retrying.',
+      },
+    });
+    if (!response.success) {
+      expect(response.error.message).not.toContain('private provider diagnostics');
+      expect(response.error.message).not.toContain('server-only');
+    }
+  });
+
   it('sanitizes malformed provider output and bounds request time', async () => {
     const malformed = createOpenAICompatiblePlannerAdapter({
       baseUrl: 'https://api.example.test/v1',

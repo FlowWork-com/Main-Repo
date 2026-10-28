@@ -100,13 +100,13 @@ describe('planner provider adapter', () => {
   });
 
   it('uses Groq strict JSON Schema outputs and decodes JSON-encoded tool input safely', async () => {
-    let capturedBody: Record<string, unknown> | null = null;
+    const captured: { body?: Record<string, unknown> } = {};
     const adapter = createOpenAICompatiblePlannerAdapter({
       baseUrl: 'https://api.groq.com/openai/v1',
       modelName: 'openai/gpt-oss-120b',
       apiKey: 'server-only',
       fetcher: async (_input, init) => {
-        capturedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        captured.body = JSON.parse(String(init?.body)) as Record<string, unknown>;
         return Response.json({
           choices: [{ message: { content: JSON.stringify({
             summary: 'Transform the text.',
@@ -133,7 +133,7 @@ describe('planner provider adapter', () => {
       toolCatalog: [],
     });
 
-    const responseFormat = capturedBody?.response_format as {
+    const responseFormat = captured.body?.response_format as {
       type: string;
       json_schema: {
         name: string;
@@ -157,7 +157,7 @@ describe('planner provider adapter', () => {
     expect(responseFormat.json_schema.schema.required).toEqual(['summary', 'steps', 'limitations']);
     expect(responseFormat.json_schema.schema.properties.steps.items.required).toContain('expectedOutcome');
     expect(responseFormat.json_schema.schema.properties.steps.items.additionalProperties).toBe(false);
-    const messages = capturedBody?.messages as Array<{ role: string; content: string }>;
+    const messages = captured.body?.messages as Array<{ role: string; content: string }>;
     expect(messages[0]?.content).toContain('JSON-encoded string');
     expect(response.success).toBe(true);
     if (response.success) {

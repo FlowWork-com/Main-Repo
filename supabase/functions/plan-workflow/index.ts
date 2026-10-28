@@ -1,3 +1,4 @@
+import { withRequestObservability } from '../_shared/observability.ts';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseWorkflowRepository } from '../../../src/backend/workflowRepository.ts';
 import type { WorkflowPlan } from '../../../src/planning/planning.ts';
@@ -82,7 +83,7 @@ const handler = createPlanWorkflowHandler<SupabaseClient>({
   logFailure: (code) => console.error('[plan-workflow]', code),
 });
 
-Deno.serve(handler);
+Deno.serve(withRequestObservability('plan-workflow', handler));
 
 function requiredEnvironment(name: string): string {
   const value = Deno.env.get(name);

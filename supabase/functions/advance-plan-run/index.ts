@@ -1,3 +1,4 @@
+import { withRequestObservability } from '../_shared/observability.ts';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseWorkflowRepository } from '../../../src/backend/workflowRepository.ts';
 import { createVerifiedAuthenticator } from '../execute-tool/auth.ts';
@@ -160,7 +161,7 @@ const handler = createAdvancePlanRunHandler<SupabaseClient>({
   logFailure: (code) => console.error('[advance-plan-run]', code),
 });
 
-Deno.serve(handler);
+Deno.serve(withRequestObservability('advance-plan-run', handler));
 
 async function finishWorker(
   runId: string,

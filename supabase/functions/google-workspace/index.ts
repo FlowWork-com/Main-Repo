@@ -1,3 +1,4 @@
+import { withRequestObservability } from '../_shared/observability.ts';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { createVerifiedAuthenticator } from '../execute-tool/auth.ts';
 import {
@@ -134,7 +135,7 @@ const handler = createGoogleWorkspaceHandler<SupabaseClient>({
   logFailure: (code) => console.error('[google-workspace]', code),
 });
 
-Deno.serve(handler);
+Deno.serve(withRequestObservability('google-workspace', handler));
 
 function requiredEnvironment(name: string): string {
   const value = Deno.env.get(name);

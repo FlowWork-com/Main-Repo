@@ -1,3 +1,4 @@
+import { withRequestObservability } from '../_shared/observability.ts';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseWorkflowRepository } from '../../../src/backend/workflowRepository.ts';
 import { createVerifiedAuthenticator } from './auth.ts';
@@ -79,7 +80,7 @@ const handler = createExecuteToolHandler<SupabaseClient>({
   logFailure: (code) => console.error('[execute-tool]', code),
 });
 
-Deno.serve(handler);
+Deno.serve(withRequestObservability('execute-tool', handler));
 
 function requiredEnvironment(name: string): string {
   const value = Deno.env.get(name);

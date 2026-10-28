@@ -1,17 +1,20 @@
 # Authenticated staging smoke test
 
-This is a manually triggered, staging-only GitHub Actions check. Run it from the main branch using Actions → Staging authenticated E2E smoke → Run workflow. The job uses the GitHub Actions environment named staging and is intentionally restricted to the Supabase project reference nhvmeahmwywhaxtnuehr.
+This is a manually triggered, staging-only GitHub Actions check. Run it from the main branch using Actions → Staging authenticated E2E smoke → Run workflow, but only after provisioning a dedicated staging Supabase project.
+
+**Current safety finding (2026-10-28):** the connected Supabase organization currently lists FlowWork Main DB (ref `nhvmeahmwywhaxtnuehr`), which the dashboard labels **PRODUCTION**, and the separate Invoice DB (ref `tlhznghnfdwpilhfjyyu`). Neither is a valid staging target. The workflow and script now intentionally reject both refs. Do not rerun this smoke or deploy migrations until a separate staging project exists and its reference is configured.
 
 ## Required GitHub Actions environment secrets
 
 Set these in Settings → Environments → staging → Environment secrets (repository Actions secrets also work if the environment does not override them):
 
-- STAGING_SUPABASE_URL = https://nhvmeahmwywhaxtnuehr.supabase.co
-- STAGING_SUPABASE_ANON_KEY = the project's public anon/publishable key
+- `STAGING_SUPABASE_PROJECT_REF` = the dedicated staging project's 20-character project reference, configured as an environment variable in Settings → Environments → staging.
+- `STAGING_SUPABASE_URL` = exactly `https://<STAGING_SUPABASE_PROJECT_REF>.supabase.co` for that project.
+- STAGING_SUPABASE_ANON_KEY = the dedicated staging project's public anon/publishable key
 - STAGING_TEST_USER_EMAIL = the dedicated staging test user's email
 - STAGING_TEST_USER_PASSWORD = the dedicated staging test user's password
 
-Never add a service-role key, provider key, plan-signing key, password, or JWT to source control. The runner rejects any Supabase URL other than the exact staging project.
+Never add a service-role key, provider key, plan-signing key, password, or JWT to source control. The workflow and script require the URL to match STAGING_SUPABASE_PROJECT_REF and reject the known Main DB production ref and Invoice DB ref.
 
 ## Required server-side provider configuration
 

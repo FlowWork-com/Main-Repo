@@ -289,24 +289,34 @@ function createFinNlpPlanNotes(
     ambiguitySummary || questionSummary
       ? `FinNLP clarification: ${[ambiguitySummary, questionSummary].filter(Boolean).join(' | ')}`
       : 'FinNLP clarification: no specific ambiguity was returned; verify material financial claims against primary evidence.',
-    `FinNLP next step: ${review.nextStepForMainAgent}. No independent source snippets were supplied during planning review, so this is not factual verification.`,
+    `FinNLP next step: ${review.nextStepForMainAgent}.`,
+    'No independent source snippets were supplied during planning review, so this is not factual verification.',
   ];
 }
 
 function appendPlanLimitations(plan: WorkflowPlan, notes: readonly string[]): WorkflowPlan {
-  const additions = notes
+  const noEvidenceCaveat =
+    'No independent source snippets were supplied during planning review, so this is not factual verification.';
+  const normalizedNotes = notes
     .map((note) => note.replace(/\s+/g, ' ').trim().slice(0, 390))
-    .filter(Boolean)
-    .slice(0, 5);
+    .filter(Boolean);
+  const includesMandatoryCaveat = normalizedNotes.includes(noEvidenceCaveat);
+  const mandatoryNotes = includesMandatoryCaveat ? [noEvidenceCaveat] : [];
+  const additions = normalizedNotes
+    .filter((note) => note !== noEvidenceCaveat)
+    .slice(0, 5 - mandatoryNotes.length);
   let limitations = [...plan.limitations];
-  if (limitations.length + additions.length > 20) {
-    const keep = Math.max(0, 20 - additions.length - 1);
+  if (limitations.length + additions.length + mandatoryNotes.length > 20) {
+    const keep = Math.max(0, 20 - additions.length - mandatoryNotes.length - 1);
     limitations = [
       ...limitations.slice(0, keep),
       'Some original plan limitations were omitted to preserve the bounded FinNLP review handoff.',
     ];
   }
-  return { ...plan, limitations: [...limitations, ...additions].slice(0, 20) };
+  return {
+    ...plan,
+    limitations: [...limitations, ...additions, ...mandatoryNotes].slice(0, 20),
+  };
 }
 
 async function readPayload(request: Request): Promise<PlanWorkflowPayload> {

@@ -21,6 +21,61 @@ const MAX_REQUEST_BYTES = 40_960;
 const MAX_RESPONSE_BYTES = 65_536;
 const DEFAULT_TIMEOUT_MS = 20_000;
 
+const GROQ_FINNLP_REVIEW_RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    reviewStatus: {
+      type: 'string',
+      enum: ['supported_by_sources', 'contradicted_by_sources', 'mixed_evidence', 'insufficient_evidence', 'clarification_needed'],
+    },
+    decodedMeaning: { type: 'string' },
+    assessmentSummary: { type: 'string' },
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          statement: { type: 'string' },
+          assessment: { type: 'string', enum: ['supports_claim', 'contradicts_claim', 'mixed', 'not_verifiable'] },
+          explanation: { type: 'string' },
+          sourceIds: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['statement', 'assessment', 'explanation', 'sourceIds'],
+        additionalProperties: false,
+      },
+    },
+    ambiguities: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          term: { type: 'string' },
+          interpretations: { type: 'array', items: { type: 'string' } },
+          clarificationQuestion: { type: 'string' },
+        },
+        required: ['term', 'interpretations', 'clarificationQuestion'],
+        additionalProperties: false,
+      },
+    },
+    questionsForMainAgent: { type: 'array', items: { type: 'string' } },
+    nextStepForMainAgent: { type: 'string' },
+    confidence: { type: 'string', enum: ['low', 'moderate', 'high'] },
+  },
+  required: [
+    'reviewStatus', 'decodedMeaning', 'assessmentSummary', 'findings',
+    'ambiguities', 'questionsForMainAgent', 'nextStepForMainAgent', 'confidence',
+  ],
+  additionalProperties: false,
+} as const;
+
+function isGroqEndpoint(baseUrl: string): boolean {
+  try {
+    return new URL(baseUrl).hostname.toLowerCase() === 'api.groq.com';
+  } catch {
+    return false;
+  }
+}
+
 export function createFinnlpFinancialReviewerFromEnvironment(
   env: FinnlpReviewProviderEnvironment,
 ): FinnlpFinancialReviewer | undefined {
@@ -113,7 +168,16 @@ class OpenAICompatibleFinnlpFinancialReviewer implements FinnlpFinancialReviewer
       ];
       const body = JSON.stringify({
         model: this.config.modelName,
-        response_format: { type: 'json_object' },
+        response_format: isGroqEndpoint(this.config.baseUrl)
+          ? {
+              type: 'json_schema',
+              json_schema: {
+                name: 'finnlp_financial_review',
+                strict: true,
+                schema: GROQ_FINNLP_REVIEW_RESPONSE_SCHEMA,
+              },
+            }
+          : { type: 'json_object' },
         messages,
       });
       if (new TextEncoder().encode(body).byteLength > MAX_REQUEST_BYTES) {

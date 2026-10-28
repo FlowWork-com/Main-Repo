@@ -85,13 +85,13 @@ Deno.test('review provider uses only the configured HTTPS chat-completions endpo
 });
 
 Deno.test('Groq reviewer uses a strict schema for required FinNLP handoff fields', async () => {
-  let capturedBody: Record<string, unknown> | null = null;
+  const captured: { body?: Record<string, unknown> } = {};
   const reviewer = createOpenAICompatibleFinnlpFinancialReviewer({
     baseUrl: 'https://api.groq.com/openai/v1',
     modelName: 'qwen/qwen3.8-27b',
     apiKey: 'server-only-review-key',
     fetcher: async (_url, init) => {
-      capturedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      captured.body = JSON.parse(String(init?.body)) as Record<string, unknown>;
       return Response.json({
         choices: [{
           message: {
@@ -116,7 +116,7 @@ Deno.test('Groq reviewer uses a strict schema for required FinNLP handoff fields
   });
 
   const result = await reviewer.reviewFinancialClaim(context, input);
-  const responseFormat = capturedBody?.response_format as {
+  const responseFormat = captured.body?.response_format as {
     type: string;
     json_schema: {
       name: string;

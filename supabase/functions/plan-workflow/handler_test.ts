@@ -205,7 +205,7 @@ Deno.test('financial plans get one FinNLP handoff and one main-planner refinemen
           clarificationQuestion: 'Which reporting basis and comparable periods apply?',
         }],
         questionsForMainAgent: ['Request the filing or source that supports the 8% figure.'],
-        nextStepForMainAgent: 'Do not state that the 8% figure is verified until primary evidence is checked. ' + 'Additional primary-source review remains required. '.repeat(16),
+        nextStepForMainAgent: 'Do not state that the 8% figure is verified until primary evidence is checked. ' + 'Additional primary-source review remains required. '.repeat(7),
         confidence: 'moderate',
       };
     },

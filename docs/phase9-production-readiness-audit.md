@@ -9,7 +9,7 @@ This is an evidence-based audit, not a production-readiness certification. A suc
 
 ## Evidence captured
 
-- The authenticated staging E2E smoke passed in [run 40684325233](https://github.com/FlowWork-com/Main-Repo/actions/runs/40684325233) against `cafceffe3171a9e1c7991c631d9f21bcf25763f0`. It verified authenticated user and workspace/task RLS access, the live planner → FinNLP review → planner refinement path, persisted a `proposed` plan, and confirmed no plan acceptance or tool execution occurred.
+- The historical authenticated E2E smoke completed in [run 40684325233](https://github.com/FlowWork-com/Main-Repo/actions/runs/40684325233) against `cafceffe3171a9e1c7991c631d9f21bcf25763f0`, verifying authenticated access, the live planner → FinNLP review → planner refinement path, a persisted `proposed` plan, and no tool execution. However, the configured project reference `nhvmeahmwywhaxtnuehr` is FlowWork Main DB, which the dashboard labels **PRODUCTION**. Treat that run as a primary-project integration check, not evidence of environment isolation or a safe staging deployment. The connected organization currently exposes no separate staging project; a dedicated target is a blocking prerequisite for another smoke run.
 - CI passed on `main` at `80f4dd8e4229e99b875e32c81faa1f50fcefdbae` in [run 40684665434](https://github.com/FlowWork-com/Main-Repo/actions/runs/40684665434), including typecheck, lint, unit tests, offline planner evaluation, build, Edge Function checks, local database/RLS tests, and container scan.
 - PR #65 added request-level Edge Function observability. Its first post-merge CI run failed because Vitest attempted to load a Deno test file with a remote `https:` import. PR #66 fixed the issue by moving the helper test to Deno's `*_test.ts` convention and explicitly running it from Edge Function CI. PR #66 is merged at `0efe418d7047f32a0c2231d191b0b6f17aadd35e`; its validation passed in [run 40727101406](https://github.com/FlowWork-com/Main-Repo/actions/runs/40727101406).
 - Supabase reported the project as `ACTIVE_HEALTHY`, running PostgreSQL 17, with 21 repository migrations applied.
@@ -37,7 +37,7 @@ This is an evidence-based audit, not a production-readiness certification. A suc
 | Invoice extraction live acceptance | **Not verified** | The authenticated smoke intentionally does not process an invoice fixture. Test a synthetic PDF/image through the normal approval gate. Groq has not been enabled for invoice extraction. |
 | Finnhub integration live lifecycle | **Not verified** | The smoke confirmed a correctly scoped “not connected” status, not a real test credential's connect/read/replace/disconnect lifecycle. Test using a dedicated staging workspace and avoid logging the key. |
 | Google OAuth live acceptance | **Not verified** | Verify OAuth callback/state/PKCE, refresh and revoke/disconnect, minimum scopes, and cross-workspace isolation using a dedicated test client. Never put tokens or authorization codes in logs. |
-| Staging deployment / rollback | **Partially passed** | The gated deploy workflow and runbook exist. For each release, record the target project/environment, backup or recovery point, exact deployment SHA, deployed function versions, secret presence (never values), and named rollback owner. |
+| Staging deployment / rollback | **Blocked / no isolated staging target** | The connected organization currently lists FlowWork Main DB (dashboard-labelled PRODUCTION) and the separate Invoice DB, but no dedicated staging project. The prior smoke workflow was pointed at Main DB production. A separate project must be provisioned/identified; deployment and smoke workflows must reject the known production/invoice refs; then deploy and test the exact SHA with a recovery point and named rollback owner. No deployment is being run against either current project. |
 
 ## Operational response checklist
 
@@ -51,7 +51,7 @@ This is an evidence-based audit, not a production-readiness certification. A suc
 
 - **Deferred by decision:** leaked-password protection is unavailable on the current Supabase Free plan. Record explicit risk acceptance for releases where it remains unavailable, and revisit on plan upgrade; do not treat this item as resolved.
 - Review and add the 20 missing foreign-key indexes and fix the two RLS initplan expressions through reviewed, generated migrations.
-- Pass CI on the current observability follow-up and rerun staging smoke against the exact post-fix release commit.
+- Pass CI on the current follow-ups; provision/identify a dedicated staging Supabase project; deploy the reviewed exact release commit there; rerun staging smoke and integration acceptance. Do not point the staging workflows at FlowWork Main DB production or Invoice DB.
 - Capture live invoice extraction acceptance and the Finnhub connection lifecycle; validate Google OAuth if included in the release.
 - Decide and document initial alert thresholds, data-retention policy, and incident owner.
 - Record provider/model/latency and provider-returned usage/cost for each relevant path without claiming unmeasured accuracy.

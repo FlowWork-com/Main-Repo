@@ -464,7 +464,7 @@ Deno.test('Google disconnect database failures return a sanitized retryable resp
   assertEquals(response.status, 503);
   const body = asRecord(await response.json());
   assertEquals(asRecord(body.error).code, 'GOOGLE_DISCONNECT_FAILED');
-  assert(!JSON.stringify(body).includes('database unavailable'));
+  assert(!JSON.stringify(body).includes('database unavailable'), 'database error details must not be returned to the caller');
   assertEquals(harness.connections.has(harness.key()), true);
   assertEquals(harness.secrets.get('c5000000-0000-4000-8000-000000000001'), 'refresh-token');
   assertEquals(harness.loggedFailures, ['GOOGLE_DISCONNECT_FAILED']);

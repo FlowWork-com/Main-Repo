@@ -38,28 +38,28 @@ Set custom values as Supabase Edge Function secrets, or confirm them in the targ
 ### Main planner
 
 - [ ] `FLOWWORK_PLANNER_PROVIDER=openai-compatible`
-- [ ] `FLOWWORK_PLANNER_BASE_URL=https://api.openai.com/v1` (or a separately evaluated trusted HTTPS compatible endpoint)
-- [ ] `FLOWWORK_PLANNER_MODEL=<approved-model-id>`
+- [ ] `FLOWWORK_PLANNER_BASE_URL=https://api.groq.com/openai/v1` (selected staging profile; use only the trusted HTTPS Groq endpoint)
+- [ ] `FLOWWORK_PLANNER_MODEL=openai/gpt-oss-120b`
 - [ ] `FLOWWORK_PLANNER_API_KEY=<server-side-secret>`
 - [ ] Do not enable `FLOWWORK_PLANNER_ALLOW_MOCK=true` in staging acceptance or production.
 
 ### FinNLP reviewer
 
 - [ ] `FLOWWORK_FINNLP_REVIEW_PROVIDER=openai-compatible`
-- [ ] `FLOWWORK_FINNLP_REVIEW_BASE_URL=https://api.openai.com/v1` (or a separately evaluated trusted HTTPS compatible endpoint)
-- [ ] `FLOWWORK_FINNLP_REVIEW_MODEL=<approved-review-model-id>`
+- [ ] `FLOWWORK_FINNLP_REVIEW_BASE_URL=https://api.groq.com/openai/v1` (selected staging profile; use only the trusted HTTPS Groq endpoint)
+- [ ] `FLOWWORK_FINNLP_REVIEW_MODEL=qwen/qwen3.8-27b`
 - [ ] `FLOWWORK_FINNLP_REVIEW_API_KEY=<server-side-secret>`
 
-FinNLP is a verifier/financial-language decoder, not the main planner, not an authorization authority, and not a source of truth without independent evidence. Preserve the one-review/one-revision bound.
+FinNLP is a verifier/financial-language decoder, not the main planner, not an authorization authority, and not a source of truth without independent evidence. Preserve the one-review/one-revision bound. Groq currently lists `qwen/qwen3.8-27b` as a preview model; keep this profile staging-only until a production-listed model passes the same strict-schema contract and evaluation. See [Groq supported models](https://console.groq.com/docs/models) and [Strict Structured Outputs](https://console.groq.com/docs/structured-outputs).
 
 ### Invoice extraction
 
 - [ ] `FLOWWORK_INVOICE_PROVIDER=openai-compatible`
-- [ ] `FLOWWORK_INVOICE_BASE_URL=https://api.openai.com/v1` (or a separately evaluated compatible endpoint supporting the exact PDF and image payloads)
+- [ ] `FLOWWORK_INVOICE_BASE_URL=<separate validated provider endpoint>`
 - [ ] `FLOWWORK_INVOICE_MODEL=<approved-vision-model-id>`
-- [ ] `FLOWWORK_INVOICE_API_KEY=<server-side-secret>`
+- [ ] `FLOWWORK_INVOICE_API_KEY=<separate server-side secret>`
 
-Do not enable Gemini by changing only this base URL. Gemini requires an explicit provider adapter and fixture-based contract tests before it can be activated.
+The selected Groq key configures only the planner and FinNLP reviewer in this staging profile. Do not reuse it for invoice extraction or point the current invoice adapter at Groq until an explicit provider adapter and PDF/image fixture-based contract tests pass. Do not enable Gemini by changing only this base URL; Gemini also requires an explicit provider adapter and fixture-based contract tests.
 
 ### Optional integrations
 

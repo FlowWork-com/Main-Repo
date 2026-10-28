@@ -448,12 +448,12 @@ Deno.test('Google disconnect reports pending secret cleanup without exposing pro
 
   const response = await harness.handler(harness.post({ action: 'disconnect', workspaceId }));
   assertEquals(response.status, 200);
-  assertEquals(await response.json(), { connected: false, credentialCleanupPending: true });
+  const body = await response.json();
+  assertEquals(body, { connected: false, credentialCleanupPending: true });
   assertEquals(harness.connections.has(harness.key()), false);
   assertEquals(harness.secrets.get('c5000000-0000-4000-8000-000000000001'), 'refresh-token');
   assertEquals(harness.loggedFailures, ['GOOGLE_SECRET_CLEANUP_FAILED']);
-  assert(!JSON.stringify(await response.clone().json()).includes('refresh-token'),
-    'the response must never expose the refresh token');
+  assert(!JSON.stringify(body).includes('refresh-token'), 'the response must never expose the refresh token');
 });
 
 Deno.test('Google disconnect database failures return a sanitized retryable response without deleting the secret', async () => {

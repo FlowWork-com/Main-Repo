@@ -84,6 +84,57 @@ Deno.test('review provider uses only the configured HTTPS chat-completions endpo
   assert((result as { reviewStatus: string }).reviewStatus === 'supported_by_sources', 'Review JSON should be parsed');
 });
 
+Deno.test('Groq reviewer uses a strict schema for required FinNLP handoff fields', async () => {
+  const captured: { body?: Record<string, unknown> } = {};
+  const reviewer = createOpenAICompatibleFinnlpFinancialReviewer({
+    baseUrl: 'https://api.groq.com/openai/v1',
+    modelName: 'qwen/qwen3.8-27b',
+    apiKey: 'server-only-review-key',
+    fetcher: async (_url, init) => {
+      captured.body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              reviewStatus: 'insufficient_evidence',
+              decodedMeaning: 'Year over year compares equivalent periods.',
+              assessmentSummary: 'No primary evidence was provided.',
+              findings: [],
+              ambiguities: [{
+                term: 'revenue growth',
+                interpretations: ['Reported revenue growth', 'Organic revenue growth'],
+                clarificationQuestion: 'Which revenue basis should be used?',
+              }],
+              questionsForMainAgent: ['What reporting period is intended?'],
+              nextStepForMainAgent: 'Ask for the reporting basis and primary evidence.',
+              confidence: 'moderate',
+            }),
+          },
+        }],
+      });
+    },
+  });
+
+  const result = await reviewer.reviewFinancialClaim(context, input);
+  const responseFormat = captured.body?.response_format as {
+    type: string;
+    json_schema: {
+      name: string;
+      strict: boolean;
+      schema: { required: string[]; additionalProperties: boolean };
+    };
+  };
+  assertEquals(responseFormat.type, 'json_schema', 'Groq must use structured output, not JSON-object-only mode');
+  assertEquals(responseFormat.json_schema.name, 'finnlp_financial_review', 'Schema name should identify the FinNLP review');
+  assertEquals(responseFormat.json_schema.strict, true, 'Groq strict schema mode should be enabled');
+  assertEquals(responseFormat.json_schema.schema.required, [
+    'reviewStatus', 'decodedMeaning', 'assessmentSummary', 'findings',
+    'ambiguities', 'questionsForMainAgent', 'nextStepForMainAgent', 'confidence',
+  ], 'All fields consumed by the FinNLP normalizer must be required');
+  assertEquals(responseFormat.json_schema.schema.additionalProperties, false, 'Unexpected response fields should be rejected');
+  assert((result as { decodedMeaning: string }).decodedMeaning.includes('equivalent periods'), 'Structured review content should still be parsed');
+});
+
 Deno.test('environment configuration fails closed without all provider settings or with an insecure host', () => {
   assertEquals(createFinnlpFinancialReviewerFromEnvironment({}), undefined, 'Missing settings must not invent a provider');
   assertEquals(createFinnlpFinancialReviewerFromEnvironment({

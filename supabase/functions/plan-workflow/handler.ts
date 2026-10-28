@@ -302,9 +302,13 @@ function appendPlanLimitations(plan: WorkflowPlan, notes: readonly string[]): Wo
     .filter(Boolean);
   const includesMandatoryCaveat = normalizedNotes.includes(noEvidenceCaveat);
   const mandatoryNotes = includesMandatoryCaveat ? [noEvidenceCaveat] : [];
-  const additions = normalizedNotes
-    .filter((note) => note !== noEvidenceCaveat)
-    .slice(0, 5 - mandatoryNotes.length);
+  const reviewerNotes = normalizedNotes.filter((note) => note !== noEvidenceCaveat);
+  const regularNoteLimit = 5 - mandatoryNotes.length;
+  let additions = reviewerNotes.slice(0, regularNoteLimit);
+  const nextStepNote = reviewerNotes.find((note) => note.startsWith('FinNLP next step:'));
+  if (nextStepNote && !additions.includes(nextStepNote)) {
+    additions = [...additions.slice(0, regularNoteLimit - 1), nextStepNote];
+  }
   let limitations = [...plan.limitations];
   if (limitations.length + additions.length + mandatoryNotes.length > 20) {
     const keep = Math.max(0, 20 - additions.length - mandatoryNotes.length - 1);

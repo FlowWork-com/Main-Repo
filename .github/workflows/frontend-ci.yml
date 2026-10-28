@@ -74,19 +74,6 @@ jobs:
         with:
           version: 2.121.0
 
-      # Temporary generator step to obtain the CLI-produced migration timestamp.
-      # This branch-only step is removed after the generated filename is committed.
-      - name: Generate Phase 9 performance migration filename with Supabase CLI
-        if: github.event_name == 'pull_request' && github.head_ref == 'fix/phase9-db-performance'
-        shell: bash
-        run: |
-          supabase migration new phase9_performance_indexes_rls_initplan
-          migration_file="$(find supabase/migrations -maxdepth 1 -type f -name '*_phase9_performance_indexes_rls_initplan.sql' -print -quit)"
-          test -n "$migration_file"
-          cp supabase/phase9-performance-migration.sql "$migration_file"
-          echo "Generated migration filename: $migration_file"
-          echo "Generated migration filename: `$migration_file`" >> "$GITHUB_STEP_SUMMARY"
-
       - name: Start local Supabase
         timeout-minutes: 10
         run: |

@@ -59,8 +59,8 @@ jobs:
             echo "::error::Set the staging environment variable SUPABASE_STAGING_PROJECT_REF to the intended Supabase project reference."
             exit 1
           fi
-          if [[ "$SUPABASE_STAGING_PROJECT_REF" == "tlhznghnfdwpilhfjyyu" ]]; then
-            echo "::error::Invoice DB is a separate project and is not a valid target for Main-Repo integration."
+          if [[ "$SUPABASE_STAGING_PROJECT_REF" == "nhvmeahmwywhaxtnuehr" || "$SUPABASE_STAGING_PROJECT_REF" == "tlhznghnfdwpilhfjyyu" ]]; then
+            echo "::error::FlowWork Main DB (production) and Invoice DB are forbidden targets for staging deployment. Provision a dedicated staging project first."
             exit 1
           fi
           if [[ -z "$SUPABASE_ACCESS_TOKEN" || -z "$SUPABASE_DB_PASSWORD" ]]; then

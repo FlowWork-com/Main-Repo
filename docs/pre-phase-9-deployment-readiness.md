@@ -14,6 +14,12 @@ The repository currently has these relevant server-side paths:
 
 This document is a runbook, **not evidence that a production deployment has occurred**. The repository integration available for this review cannot read Supabase project secrets or prove that a deployed environment is healthy. Record real results from the target staging project before lifting the Phase 9 hold.
 
+## 0. Environment separation — blocking safety requirement
+
+The connected Supabase organization currently lists FlowWork Main DB (`nhvmeahmwywhaxtnuehr`), whose dashboard labels the `main` branch **PRODUCTION**, plus the separate Invoice DB (`tlhznghnfdwpilhfjyyu`). No dedicated staging project is visible in the connected organization. The earlier staging-smoke configuration pointed at the Main DB production project, so its historical result must not be represented as proof of staging isolation.
+
+The staging deploy and smoke workflows now reject both known project references. Provision or identify a dedicated staging project first, configure its reference and URL in the GitHub staging environment, seed a dedicated synthetic user/workspace/task, and configure staging-only secrets. Do not bypass these guards or run the staging workflow against production. Creating or upgrading a Supabase project may incur charges; no project has been created or upgraded by this audit.
+
 ## 1. Preflight: repository and project
 
 - [ ] Confirm the intended commit is on `main`; capture its SHA.

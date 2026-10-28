@@ -44,12 +44,33 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Refuse production and non-staging targets
+        env:
+          STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+          STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$STAGING_SUPABASE_PROJECT_REF" =~ ^[a-z0-9]{20}$ ]]; then
+            echo "::error::Set STAGING_SUPABASE_PROJECT_REF to a dedicated staging project reference."
+            exit 1
+          fi
+          if [[ "$STAGING_SUPABASE_PROJECT_REF" == "nhvmeahmwywhaxtnuehr" || "$STAGING_SUPABASE_PROJECT_REF" == "tlhznghnfdwpilhfjyyu" ]]; then
+            echo "::error::FlowWork Main DB (production) and Invoice DB are forbidden staging targets."
+            exit 1
+          fi
+          if [[ "$STAGING_SUPABASE_URL" != "https://${STAGING_SUPABASE_PROJECT_REF}.supabase.co" ]]; then
+            echo "::error::STAGING_SUPABASE_URL must exactly match STAGING_SUPABASE_PROJECT_REF."
+            exit 1
+          fi
+
       - name: Install dependencies
         run: npm ci
 
       - name: Run authenticated staging checks
         env:
           STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
           STAGING_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
           STAGING_TEST_USER_EMAIL: ${{ secrets.STAGING_TEST_USER_EMAIL }}
           STAGING_TEST_USER_PASSWORD: ${{ secrets.STAGING_TEST_USER_PASSWORD }}

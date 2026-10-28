@@ -1,22 +1,22 @@
 # FlowWork AI agent roster and model assignments
 
-**Decision:** use three model-backed runtime roles, plus deterministic and data-provider components. FinNLP remains a specialist sub-agent; it never becomes the primary planner or an execution authority.
+**Decision:** use three model-backed runtime roles, plus deterministic and data-provider components. For the selected staging profile, Groq is the API provider for the existing **main planner** and **FinNLP financial reviewer**. FinNLP remains a specialist sidecar; it is never the primary planner, authorization authority, or execution authority. Invoice extraction stays on its separately configured provider until Groq PDF/image compatibility is proven by adapter and fixture tests.
 
-This is the repository's intended initial model roster. The production model IDs cannot be inferred from source code because model/provider configuration is loaded from server-side Supabase Edge Function secrets. Do not describe the deployment as using these models until the secret values and a live smoke test have been checked.
+This roster records the selected staging configuration, not proof of active deployment. The actual provider/model values are loaded from server-side Supabase Edge Function Secrets and cannot be inferred from repository source. Do not claim the latest code is live-verified until a fresh authenticated smoke run against the intended commit passes. Keep Phase 9/new-roadmap work on hold until the staged acceptance checks below are recorded.
 
 ## Runtime product agents
 
 | Runtime role | Model ID to configure | Component configuration | Responsibility and boundary |
 |---|---|---|---|
-| **FlowWork main planner** | `gpt-6.1-sol` | `FLOWWORK_PLANNER_PROVIDER=openai-compatible`, `FLOWWORK_PLANNER_MODEL=gpt-6.1-sol` | Turns a user goal into a bounded structured plan. For financial requests, it receives one FinNLP handoff and may revise the plan once. The server validates the final plan and tool inputs. The planner does not itself authorize or execute an action. |
-| **FinNLP financial verifier / language decoder** | `gpt-6-astra` | `FLOWWORK_FINNLP_REVIEW_PROVIDER=openai-compatible`, `FLOWWORK_FINNLP_REVIEW_MODEL=gpt-6-astra` | A higher-capability second opinion for financial terminology, ambiguity, unsupported assumptions, contradictory source snippets, missing accounting basis/period/currency, and handoff questions. It performs one review pass, not an agent loop. It must not issue investment/trading recommendations, mark unsupported claims as verified, approve writes, or execute tools. |
-| **Invoice document extractor** | `gpt-6.1-sol` | `FLOWWORK_INVOICE_PROVIDER=openai-compatible`, `FLOWWORK_INVOICE_MODEL=gpt-6.1-sol` | Reads the approved PDF/image invoice and returns field-level extraction estimates for human review. It only runs through the existing high-risk approval gate; the model's confidence is not a calibrated probability and extracted fields are not automatically trusted. |
+| **FlowWork main planner** | `openai/gpt-oss-120b` (selected Groq staging model) | `FLOWWORK_PLANNER_PROVIDER=openai-compatible`, `FLOWWORK_PLANNER_BASE_URL=https://api.groq.com/openai/v1`, `FLOWWORK_PLANNER_MODEL=openai/gpt-oss-120b` | Turns a user goal into a bounded structured plan. For financial requests, it receives one FinNLP handoff and may revise the plan once. The server validates the final plan and tool inputs. The planner does not itself authorize or execute an action. |
+| **FinNLP financial verifier / language decoder** | `qwen/qwen3.8-27b` (selected Groq staging model; preview model) | `FLOWWORK_FINNLP_REVIEW_PROVIDER=openai-compatible`, `FLOWWORK_FINNLP_REVIEW_BASE_URL=https://api.groq.com/openai/v1`, `FLOWWORK_FINNLP_REVIEW_MODEL=qwen/qwen3.8-27b` | A bounded second opinion for financial terminology, ambiguity, unsupported assumptions, contradictory source snippets, missing accounting basis/period/currency, and handoff questions. It performs one review pass, not an agent loop. It must not issue investment/trading recommendations, mark unsupported claims as verified, approve writes, or execute tools. |
+| **Invoice document extractor** | Separately configured vision model (not assigned to Groq yet) | `FLOWWORK_INVOICE_PROVIDER=openai-compatible`, `FLOWWORK_INVOICE_BASE_URL=<validated-provider-endpoint>`, `FLOWWORK_INVOICE_MODEL=<validated-vision-model-id>` | Reads the approved PDF/image invoice and returns field-level extraction estimates for human review. It only runs through the existing high-risk approval gate; the model's confidence is not a calibrated probability and extracted fields are not automatically trusted. |
 
-These are explicit role assignments, not hard-coded fallbacks. Each role still needs its own configured `*_BASE_URL` and server-side `*_API_KEY`. For the OpenAI API, the recommended base URL is `https://api.openai.com/v1`. Use separate server-side secrets per role to support least-privilege operations, attribution, rotation, and usage monitoring. Never put these credentials in `VITE_*` variables, `.env.example`, browser code, or Git history.
+These are explicit role assignments, not hard-coded fallbacks. The planner and FinNLP reviewer each need their own configured `*_BASE_URL` and server-side `*_API_KEY` secret name even if the same fresh Groq key is temporarily used for staging. Separate keys are preferable for attribution and rotation. Never put credentials in `VITE_*` variables, `.env.example`, browser code, or Git history. The invoice extractor needs independently configured credentials for a provider that supports its exact PDF/image request format; a Groq planner key alone does not configure that role.
 
-### Optional Groq profile for staging (planner + FinNLP only)
+### Selected Groq profile for staging (planner + FinNLP only)
 
-The planner and FinNLP reviewer use OpenAI-compatible Chat Completions and JSON mode. Groq documents this compatible endpoint as `https://api.groq.com/openai/v1`. For a staging trial, configure these Edge Function secrets:
+The planner and FinNLP reviewer use Groq's OpenAI-compatible Chat Completions endpoint at `https://api.groq.com/openai/v1`. The selected model IDs support Groq Strict Structured Outputs (JSON Schema); server-side canonical plan and tool validators remain authoritative. Configure these Edge Function secrets for staging:
 
 ```sh
 FLOWWORK_PLANNER_PROVIDER=openai-compatible
@@ -30,7 +30,7 @@ FLOWWORK_FINNLP_REVIEW_MODEL=qwen/qwen3.8-27b
 # FLOWWORK_FINNLP_REVIEW_API_KEY=<fresh Groq API key>
 ```
 
-For a quick staging check, the same freshly generated Groq key can populate both role-specific secret names; separately scoped/project-specific keys are preferable where the account supports them. Verify in the Groq Console that the selected models are available on the account's intended tier and check the current free-tier quotas before running the smoke test. Groq also publishes per-token pricing for paid usage, so do not assume every model/tier combination is always free. The staging run calls the planner, reviewer, and planner again; stay within the account's published free limits.
+For a quick staging check, the same freshly generated Groq key can populate both role-specific secret names; separately scoped/project-specific keys are preferable where the account supports them. Check the Groq Console for account access and quota before running the smoke test; usage may incur charges. The staging run calls the planner, reviewer, and planner again. **Groq currently lists `qwen/qwen3.8-27b` among its preview models**, so this pairing is for staging evaluation only; do not promote it to production until the model is production-listed or a production-listed alternative passes the same review contract and evaluation. See [Groq supported models](https://console.groq.com/docs/models) and [Strict Structured Outputs](https://console.groq.com/docs/structured-outputs).
 
 **Do not point the invoice extractor at Groq using this profile.** The current invoice adapter sends PDFs using a Chat Completions `type: "file"` payload, while Groq's published Qwen vision path documents image inputs. The current JPG/PNG payload may be compatible, but PDF behavior has not been validated. Keep the invoice role on its independently tested provider configuration until a dedicated Groq invoice adapter and PDF fixture tests are added. Its existing approval gate must remain enabled.
 
@@ -38,12 +38,12 @@ This profile changes only provider configuration: FinNLP remains a verifier/lang
 
 ### Why these choices
 
-- OpenAI's current model catalog describes GPT-6.1 Sol as a strong option for complex professional work with lower cost than GPT-6 Astra, so it is the default choice for the main planner and invoice extraction workload.
-- GPT-6 Astra is reserved for the less frequent finance-review sidecar, where ambiguous financial wording and conflicting evidence merit the strongest available reasoning model.
-- All three GPT-6 request adapters deliberately **omit a custom `temperature` parameter**, because OpenAI documents GPT-6 Astra and GPT-6.1 Sol as not supporting custom temperature/top-p with reasoning effort enabled. The invoice extractor uses `max_completion_tokens` rather than the deprecated `max_tokens`. These adapters call Chat Completions without provider-side tool calls; FlowWork retains ownership of tool dispatch and authorization. See the model-specific [GPT-6 guidance](https://developers.openai.com/api/docs/guides/latest-model) and [Chat Completions parameter reference](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create).
-- These model IDs are starting assignments, not proof of accuracy. Evaluate them on the repository's planner dataset and known invoice fixtures; tune or replace them based on measured accuracy, latency, cost, and provider compatibility.
+- `openai/gpt-oss-120b` is the selected staging planner because Groq's current catalog identifies it as a production model and the strict-schema API supports it.
+- `qwen/qwen3.8-27b` is retained as the selected staging financial-language reviewer because the existing adapter and tests use its strict-schema response contract; Groq currently classifies it as a preview model, so production use is explicitly blocked pending a production-listed alternative or a status change and successful evaluation.
+- Strict Structured Outputs constrain response shape but do not prove financial correctness, source validity, authorization, or tool safety. FlowWork's server-side schema, tool registry, dependency, approval, and workflow checks remain the authority.
+- These are staging assignments, not measured quality claims. Compare model/provider/prompt versions with the offline planner evaluation suite and representative synthetic financial-review cases before changing the roster. Keep invoice extraction separate until Groq PDF payload compatibility has dedicated fixtures and tests.
 
-Official references: [OpenAI API models](https://developers.openai.com/api/docs/models), [model selection guide](https://developers.openai.com/api/docs/guides/model-selection), and [API changelog](https://developers.openai.com/api/docs/changelog).
+Official references: Groq [OpenAI compatibility](https://console.groq.com/docs/openai), [supported models](https://console.groq.com/docs/models), [Strict Structured Outputs](https://console.groq.com/docs/structured-outputs), [vision support](https://console.groq.com/docs/vision), and [rate limits](https://console.groq.com/docs/rate-limits).
 
 ## AI-adjacent components that should **not** receive a generative model
 
@@ -67,19 +67,21 @@ Configure these as server-side Supabase Edge Function secrets; the keys are plac
 
 ```sh
 FLOWWORK_PLANNER_PROVIDER=openai-compatible
-FLOWWORK_PLANNER_BASE_URL=https://api.openai.com/v1
-FLOWWORK_PLANNER_MODEL=gpt-6.1-sol
-# FLOWWORK_PLANNER_API_KEY=<secret>
+FLOWWORK_PLANNER_BASE_URL=https://api.groq.com/openai/v1
+FLOWWORK_PLANNER_MODEL=openai/gpt-oss-120b
+# FLOWWORK_PLANNER_API_KEY=<Groq secret>
 
 FLOWWORK_FINNLP_REVIEW_PROVIDER=openai-compatible
-FLOWWORK_FINNLP_REVIEW_BASE_URL=https://api.openai.com/v1
-FLOWWORK_FINNLP_REVIEW_MODEL=gpt-6-astra
-# FLOWWORK_FINNLP_REVIEW_API_KEY=<secret>
+FLOWWORK_FINNLP_REVIEW_BASE_URL=https://api.groq.com/openai/v1
+FLOWWORK_FINNLP_REVIEW_MODEL=qwen/qwen3.8-27b
+# FLOWWORK_FINNLP_REVIEW_API_KEY=<Groq secret>
 
+# Keep invoice extraction separate until a provider and model are validated
+# for the exact PDF/image payloads used by this adapter.
 FLOWWORK_INVOICE_PROVIDER=openai-compatible
-FLOWWORK_INVOICE_BASE_URL=https://api.openai.com/v1
-FLOWWORK_INVOICE_MODEL=gpt-6.1-sol
-# FLOWWORK_INVOICE_API_KEY=<secret>
+FLOWWORK_INVOICE_BASE_URL=<validated-provider-endpoint>
+FLOWWORK_INVOICE_MODEL=<validated-vision-model-id>
+# FLOWWORK_INVOICE_API_KEY=<separate server-side secret>
 ```
 
 The deployment's secret manager is the source of truth for active configuration. Do not duplicate the model IDs as code fallbacks: a missing provider configuration should fail closed, as it does today.
@@ -107,7 +109,8 @@ This section assigns providers and engineering tools to **specific checkpoints**
 
 | AI/tool | Assign it here | Do not assign it here | Status and gate |
 |---|---|---|---|
-| **OpenAI API** | Existing runtime **main planner** and **FinNLP financial reviewer** only. Keep their current separate environment variables, keys, model IDs, request budgets, and evaluation suites. | Do not give the model authorization, tool-dispatch, approval, workflow-state, or verification-finality authority. Do not use it as a blanket default for every service. | **Existing code path.** `src/planning/provider.ts` and `supabase/functions/execute-tool/finnlpReviewProvider.ts` use an OpenAI-compatible Chat Completions contract. Actual deployment/model IDs still require secret-manager confirmation and staging tests. |
+| **Groq API (selected staging profile)** | Existing runtime **main planner** (`openai/gpt-oss-120b`) and **FinNLP financial reviewer** (`qwen/qwen3.8-27b`) only, through the OpenAI-compatible endpoint. Keep the roles' separate secret names and budgets. | Do not route invoice extraction through this profile yet. Do not give either model authorization, tool-dispatch, approval, workflow-state, or verification-finality authority. | **Code/config profile exists; deployed secret state is not readable from repository source.** The last recorded successful smoke used an earlier workflow-dispatch SHA; rerun against current `main` after these config/roster decisions before claiming latest-commit staging acceptance. Qwen is currently preview-listed. | 
+| **Invoice extraction provider** | Existing invoice extraction role only, using a separately configured vision provider/model with tested PDF/image payload compatibility. | Do not reuse the Groq planner/reviewer key as invoice credentials or swap a base URL without a dedicated adapter and fixtures. | **Existing code path; provider readiness must be checked separately.** Keep the high-risk approval gate and human review. |
 | **ChatGPT** | Human-facing architecture discussion, requirements clarification, trade-off synthesis, and turning ambiguous product requests into a reviewable plan before implementation. | Not a production runtime dependency, not a source of truth for repository state, and not an automatic approver. | **Human-operated checkpoint.** Decisions must be grounded in repository code and captured in an issue/PR before implementation. |
 | **Codex** | Repository implementation on a dedicated branch: bounded code changes, regression tests, type/lint/build fixes, and a PR diff for review. Use it as the implementation tool—not as the final judge of its own work. | No direct production secret access, policy bypass, self-merge, or deployment authority. | **Engineering workflow only.** Existing CI, the repository's Validator/QA/security review checkpoints, and human merge rules remain the acceptance gates. |
 | **Claude** | Independent architecture/security challenge on high-impact diffs: auth/RLS, provider boundaries, prompt-injection handling, financial-review handoffs, and approval/execution paths. Ask for concrete findings tied to changed lines and tests. | Not a second runtime planner and not a replacement for the existing architect or security-reviewer roles. | **Advisory review checkpoint.** A finding must be reproduced or resolved against code/tests; Claude does not override CI, policy, or human review. |
@@ -126,7 +129,7 @@ This section assigns providers and engineering tools to **specific checkpoints**
 
 ### Implementation order
 
-- **Now:** retain OpenAI for the two existing runtime endpoints; use ChatGPT for human-led design synthesis and Codex for bounded repository implementation; use Claude/DeepSeek only as optional independent PR reviewers; use Devin only for isolated PR-producing engineering tasks.
+- **Now:** use the selected Groq profile for staging's existing planner and FinNLP reviewer only. Use ChatGPT for human-led design synthesis and Codex for bounded repository implementation; use Claude/DeepSeek only as optional independent PR reviewers; use Devin only for isolated PR-producing engineering tasks. Keep the invoice role separate until its provider contract is validated.
 - **Later, behind evaluation:** prototype Gemini against the existing invoice-extraction contract using a dedicated adapter. Compare field-level exact match, null/abstention behavior, malformed output, latency, and cost against the current provider on the same fixture set. Do not change the active provider until it passes.
 - **Before any runtime provider expansion:** add explicit provider configuration and adapter tests. A base URL swap is not proof of API compatibility, and a provider being available in an engineering product does not make it a runtime API.
 

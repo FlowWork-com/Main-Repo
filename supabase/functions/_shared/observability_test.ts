@@ -76,13 +76,13 @@ Deno.test('unhandled exceptions produce a fixed error classification without log
       throw new Error('provider said api_key=DO_NOT_LOG_THIS');
     });
 
-    try {
-      await handler(new Request('https://edge.example.test/execute-tool', { method: 'POST' }));
-      throw new Error('Expected the wrapper to report an unhandled request failure.');
-    } catch (error) {
-      assertEquals(error instanceof Error, true);
-      assertEquals((error as Error).message, 'Request handler failed.');
-    }
+    const response = await handler(new Request('https://edge.example.test/execute-tool', { method: 'POST' }));
+    assertEquals(response.status, 500);
+    assertRequestId(response.headers.get('x-request-id'));
+    assertEquals(
+      await response.json(),
+      { error: { code: 'INTERNAL_ERROR', message: 'The request could not be completed.' } },
+    );
   } finally {
     console.error = originalError;
   }

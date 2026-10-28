@@ -2,13 +2,12 @@ const MAX_ERROR_BODY_BYTES = 4_096;
 const SAFE_ERROR_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
 
 type EdgeHandler = (request: Request) => Response | Promise<Response>;
-
 type RequestOutcome = 'success' | 'client_error' | 'server_error' | 'unhandled_error';
 
 /**
- * Adds a server-generated request ID and a bounded, redacted completion event
- * to an Edge Function. Never logs request/response payloads, URL query values,
- * authorization headers, workspace IDs, or exception messages.
+ * Add a server-generated request ID and a bounded, redacted completion event
+ * to an Edge Function. Payloads, URL query strings, auth headers, workspace
+ * identifiers, raw provider responses, and exception messages are never logged.
  */
 export function withRequestObservability(
   functionName: string,
@@ -17,23 +16,41 @@ export function withRequestObservability(
   return async (request: Request): Promise<Response> => {
     const requestId = crypto.randomUUID();
     const startedAt = performance.now();
-    let responseStatus = 500;
-    let outcome: RequestOutcome = 'unhandled_error';
+    let responseStatus: number;
+    let outcome: RequestOutcome;
     let errorCode: string | undefined;
+    let response: Response;
 
     try {
-      const response = await handler(request);
+      response = await handler(request);
       responseStatus = response.status;
       outcome = classifyOutcome(response.status);
-
       if (response.status >= 400) {
         try {
           errorCode = await readSafeErrorCode(response);
         } catch {
-          // Logging must not interfere with the original response.
+          // Observability must never interfere with the original response.
         }
       }
+    } catch {
+      responseStatus = 500;
+      outcome = 'unhandled_error';
+      errorCode = 'UNHANDLED_EXCEPTION';
+      response = new Response(
+        JSON.stringify({
+          error: {
+            code: 'INTERNAL_ERROR',
+            message: 'The request could not be completed.',
+          },
+        }),
+        {
+          status: 500,
+          headers: { 'content-type': 'application/json; charset=utf-8' },
+        },
+      );
+    }
 
+    try {
       const headers = new Headers(response.headers);
       headers.set('x-request-id', requestId);
       headers.set(
@@ -46,12 +63,6 @@ export function withRequestObservability(
         statusText: response.statusText,
         headers,
       });
-    } catch {
-      // Log only a fixed classification; never emit the exception or provider body.
-      responseStatus = 500;
-      outcome = 'unhandled_error';
-      errorCode = 'UNHANDLED_EXCEPTION';
-      throw new Error('Request handler failed.');
     } finally {
       // Preflight traffic is deliberately omitted to keep operational logs useful.
       if (request.method.toUpperCase() !== 'OPTIONS') {

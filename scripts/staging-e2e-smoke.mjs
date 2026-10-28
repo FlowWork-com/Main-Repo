@@ -6,7 +6,10 @@ import { URL } from 'node:url';
 
 /* global fetch, AbortSignal */
 
-const PROJECT_REF = 'nhvmeahmwywhaxtnuehr';
+const FORBIDDEN_STAGING_PROJECT_REFS = new Set([
+  'nhvmeahmwywhaxtnuehr', // FlowWork Main DB — dashboard identifies this as PRODUCTION.
+  'tlhznghnfdwpilhfjyyu', // Invoice DB — separate project, never a Main-Repo staging target.
+]);
 const EXPECTED_TASK_TITLE = 'STAGING E2E: dry-run workflow verification';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UNKNOWN_RUN_ID = '00000000-0000-4000-8000-000000000999';
@@ -74,7 +77,12 @@ async function postFunction(baseUrl, anonKey, functionName, payload, accessToken
 
 async function main() {
   const rawUrl = requiredEnv('STAGING_SUPABASE_URL');
+  const stagingProjectRef = requiredEnv('STAGING_SUPABASE_PROJECT_REF');
   const anonKey = requiredEnv('STAGING_SUPABASE_ANON_KEY');
+  assert(/^[a-z0-9]{20}$/.test(stagingProjectRef),
+    'STAGING_SUPABASE_PROJECT_REF must be a valid 20-character project reference.');
+  assert(!FORBIDDEN_STAGING_PROJECT_REFS.has(stagingProjectRef),
+    'Refusing to run: Main DB production and Invoice DB are forbidden smoke-test targets. Provision a dedicated staging project first.');
   const email = requiredEnv('STAGING_TEST_USER_EMAIL');
   const password = requiredEnv('STAGING_TEST_USER_PASSWORD');
   const expectedUserId = requiredEnv('STAGING_EXPECTED_USER_ID');
@@ -83,10 +91,10 @@ async function main() {
 
   const parsedUrl = new URL(rawUrl);
   assert(parsedUrl.protocol === 'https:' &&
-    parsedUrl.hostname === PROJECT_REF + '.supabase.co' &&
+    parsedUrl.hostname === stagingProjectRef + '.supabase.co' &&
     parsedUrl.pathname === '/' &&
     !parsedUrl.search && !parsedUrl.hash,
-  'Refusing to run: STAGING_SUPABASE_URL must point to the approved FlowWork staging project.');
+  'Refusing to run: STAGING_SUPABASE_URL must exactly match the configured dedicated staging project reference.');
   assert(UUID_PATTERN.test(expectedUserId), 'STAGING_EXPECTED_USER_ID must be a UUID.');
   assert(UUID_PATTERN.test(workspaceId), 'STAGING_WORKSPACE_ID must be a UUID.');
   assert(UUID_PATTERN.test(taskId), 'STAGING_TASK_ID must be a UUID.');

@@ -99,6 +99,73 @@ describe('planner provider adapter', () => {
     if (response.success) expect(response.plan.summary).toBe('Transform the text.');
   });
 
+  it('uses Groq strict JSON Schema outputs and decodes JSON-encoded tool input safely', async () => {
+    let capturedBody: Record<string, unknown> | null = null;
+    const adapter = createOpenAICompatiblePlannerAdapter({
+      baseUrl: 'https://api.groq.com/openai/v1',
+      modelName: 'openai/gpt-oss-120b',
+      apiKey: 'server-only',
+      fetcher: async (_input, init) => {
+        capturedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return Response.json({
+          choices: [{ message: { content: JSON.stringify({
+            summary: 'Transform the text.',
+            steps: [{
+              id: 'step_1',
+              title: 'Transform text',
+              description: 'Apply an uppercase transformation.',
+              toolId: 'text-transform',
+              toolVersion: '1.0.0',
+              input: JSON.stringify({ operation: 'uppercase', text: 'hello' }),
+              dependencies: [],
+              expectedOutcome: 'The result is HELLO.',
+              verificationCriteria: 'The output equals HELLO.',
+            }],
+            limitations: [],
+          }) } }],
+        });
+      },
+    });
+
+    const response = await adapter.generatePlan({
+      taskId: '43000000-0000-4000-8000-000000000001',
+      goal: 'Uppercase hello.',
+      toolCatalog: [],
+    });
+
+    const responseFormat = capturedBody?.response_format as {
+      type: string;
+      json_schema: {
+        name: string;
+        strict: boolean;
+        schema: {
+          required: string[];
+          properties: {
+            steps: {
+              items: {
+                required: string[];
+                additionalProperties: boolean;
+              };
+            };
+          };
+        };
+      };
+    };
+    expect(responseFormat.type).toBe('json_schema');
+    expect(responseFormat.json_schema.name).toBe('flowwork_workflow_proposal');
+    expect(responseFormat.json_schema.strict).toBe(true);
+    expect(responseFormat.json_schema.schema.required).toEqual(['summary', 'steps', 'limitations']);
+    expect(responseFormat.json_schema.schema.properties.steps.items.required).toContain('expectedOutcome');
+    expect(responseFormat.json_schema.schema.properties.steps.items.additionalProperties).toBe(false);
+    const messages = capturedBody?.messages as Array<{ role: string; content: string }>;
+    expect(messages[0]?.content).toContain('JSON-encoded string');
+    expect(response.success).toBe(true);
+    if (response.success) {
+      expect(response.plan.steps[0]?.input).toEqual({ operation: 'uppercase', text: 'hello' });
+      expect(response.plan.steps[0]?.expectedOutcome).toBe('The result is HELLO.');
+    }
+  });
+
   it('passes bounded FinNLP feedback to the primary planner as separate untrusted context', async () => {
     let capturedRequest: RequestInit | undefined;
     const adapter = createOpenAICompatiblePlannerAdapter({

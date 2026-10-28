@@ -205,7 +205,7 @@ Deno.test('financial plans get one FinNLP handoff and one main-planner refinemen
           clarificationQuestion: 'Which reporting basis and comparable periods apply?',
         }],
         questionsForMainAgent: ['Request the filing or source that supports the 8% figure.'],
-        nextStepForMainAgent: 'Do not state that the 8% figure is verified until primary evidence is checked.',
+        nextStepForMainAgent: 'Do not state that the 8% figure is verified until primary evidence is checked. ' + 'Additional primary-source review remains required. '.repeat(16),
         confidence: 'moderate',
       };
     },
@@ -244,7 +244,15 @@ Deno.test('financial plans get one FinNLP handoff and one main-planner refinemen
   const plan = body.plan as WorkflowPlan;
   assertEquals(persistedPlan !== null, true);
   assertEquals(plan.limitations.some((item) => item.includes('FinNLP review status: insufficient_evidence')), true);
-  assertEquals(plan.limitations.some((item) => item.includes('No independent source snippets were supplied')), true);
+  assertEquals(
+    plan.limitations.some((item) =>
+      item === 'No independent source snippets were supplied during planning review, so this is not factual verification.'),
+    true,
+  );
+  assertEquals(
+    plan.limitations.some((item) => item.startsWith('FinNLP next step: Do not state that the 8% figure is verified')),
+    true,
+  );
 });
 
 Deno.test('financial planning explicitly records when the FinNLP sidecar is not configured', async () => {

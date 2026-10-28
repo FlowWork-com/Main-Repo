@@ -44,6 +44,31 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Verify staging smoke refuses production database targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          assert_target_is_blocked() {
+            local project_ref="$1"
+            local output
+            if output="$(env \
+              STAGING_SUPABASE_PROJECT_REF="$project_ref" \
+              STAGING_SUPABASE_URL="https://${project_ref}.supabase.co" \
+              STAGING_SUPABASE_ANON_KEY="dummy-public-key" \
+              STAGING_TEST_USER_EMAIL="tester@example.invalid" \
+              STAGING_TEST_USER_PASSWORD="not-used" \
+              STAGING_EXPECTED_USER_ID="f6f90bd4-7c48-4406-88da-043126b8d016" \
+              STAGING_WORKSPACE_ID="31f8d2fd-ea50-44ab-b269-cf2f72fd1b69" \
+              STAGING_TASK_ID="2b0f97d8-3aaf-432a-ad02-f30cee5bb0f1" \
+              node scripts/staging-e2e-smoke.mjs 2>&1)"; then
+              echo "::error::Staging smoke unexpectedly accepted forbidden project ref ${project_ref}."
+              return 1
+            fi
+            printf '%s\n' "$output" | grep -F "Refusing to run: Main DB production and Invoice DB are forbidden smoke-test targets."
+          }
+          assert_target_is_blocked "nhvmeahmwywhaxtnuehr"
+          assert_target_is_blocked "tlhznghnfdwpilhfjyyu"
+
       - name: Offline planner evaluation
         run: npm run evaluate:planner
 

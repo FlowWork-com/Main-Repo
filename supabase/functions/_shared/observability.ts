@@ -16,8 +16,8 @@ export function withRequestObservability(
   return async (request: Request): Promise<Response> => {
     const requestId = crypto.randomUUID();
     const startedAt = performance.now();
-    let responseStatus = 500;
-    let outcome: RequestOutcome = 'unhandled_error';
+    let responseStatus: number;
+    let outcome: RequestOutcome;
     let errorCode: string | undefined;
     let response: Response;
 

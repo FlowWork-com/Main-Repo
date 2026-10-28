@@ -29,10 +29,13 @@ function createHarness(options: {
   readonly member?: boolean;
   readonly fetcher?: typeof fetch;
   readonly environment?: GoogleWorkspaceEnvironment;
+  readonly deleteSecretFails?: boolean;
+  readonly deleteConnectionFails?: boolean;
 } = {}) {
   const secrets = new Map<string, string>();
   const states = new Map<string, GoogleOAuthState>();
   const connections = new Map<string, GoogleWorkspaceConnection>();
+  const loggedFailures: string[] = [];
   const allowedMembers = new Set(options.member === false ? [] : [userId]);
   let secretCounter = 1;
   let now = Date.parse('2026-10-23T10:00:00.000Z');
@@ -54,7 +57,10 @@ function createHarness(options: {
       return id;
     },
     readSecret: async (id: string) => secrets.get(id) ?? null,
-    deleteSecret: async (id: string) => { secrets.delete(id); },
+    deleteSecret: async (id: string) => {
+      if (options.deleteSecretFails) throw new Error('secret store unavailable');
+      secrets.delete(id);
+    },
     createOAuthState: async (state: Omit<GoogleOAuthState, 'consumed_at'>) => {
       states.set(state.state_hash, { ...state, consumed_at: null });
     },
@@ -68,6 +74,7 @@ function createHarness(options: {
     getConnection: async (id: string, member: string) => connections.get(`${id}:${member}`) ?? null,
     saveConnection: async (value: GoogleWorkspaceConnection) => { connections.set(`${value.workspace_id}:${value.user_id}`, value); },
     deleteConnection: async (id: string, member: string) => {
+      if (options.deleteConnectionFails) throw new Error('database unavailable');
       const key = `${id}:${member}`;
       const value = connections.get(key) ?? null;
       connections.delete(key);
@@ -75,7 +82,7 @@ function createHarness(options: {
     },
     fetcher: options.fetcher ?? (async () => Response.json({})) as typeof fetch,
     now: () => now,
-    logFailure: () => {},
+    logFailure: (code: string) => { loggedFailures.push(code); },
   };
   const handler = createGoogleWorkspaceHandler(dependencies);
   const post = (payload: unknown, token = 'valid-token') => new Request('https://project.example/functions/v1/google-workspace', {
@@ -98,7 +105,7 @@ function createHarness(options: {
       connected_at: new Date(now).toISOString(),
     });
   };
-  return { handler, post, secrets, states, connections, addConnection, setTime, now: () => now, workspaceId, userId, outsiderId, key };
+  return { handler, post, secrets, states, connections, addConnection, setTime, now: () => now, workspaceId, userId, outsiderId, key, loggedFailures };
 }
 
 Deno.test('Google connect requires authenticated workspace access and returns state/PKCE authorization URL', async () => {
@@ -406,4 +413,59 @@ Deno.test('non-members cannot start OAuth and wrong-origin calls are rejected', 
   });
   assertEquals((await harness.handler(wrongOrigin)).status, 403);
   assertEquals(harness.states.size, 0);
+});
+
+
+Deno.test('Google disconnect deletes the current member connection and Vault secret and is idempotent', async () => {
+  const harness = createHarness();
+  await harness.addConnection();
+
+  const disconnected = await harness.handler(harness.post({ action: 'disconnect', workspaceId }));
+  assertEquals(disconnected.status, 200);
+  assertEquals(await disconnected.json(), { connected: false, credentialCleanupPending: false });
+  assertEquals(harness.connections.has(harness.key()), false);
+  assertEquals(harness.secrets.has('c5000000-0000-4000-8000-000000000001'), false);
+
+  const repeated = await harness.handler(harness.post({ action: 'disconnect', workspaceId }));
+  assertEquals(repeated.status, 200);
+  assertEquals(await repeated.json(), { connected: false, credentialCleanupPending: false });
+  assertEquals(harness.connections.size, 0);
+});
+
+Deno.test('Google disconnect rejects non-members before changing connection or secret state', async () => {
+  const harness = createHarness({ member: false });
+  await harness.addConnection();
+
+  const response = await harness.handler(harness.post({ action: 'disconnect', workspaceId }));
+  assertEquals(response.status, 403);
+  assertEquals(harness.connections.has(harness.key()), true);
+  assertEquals(harness.secrets.get('c5000000-0000-4000-8000-000000000001'), 'refresh-token');
+});
+
+Deno.test('Google disconnect reports pending secret cleanup without exposing provider secret details', async () => {
+  const harness = createHarness({ deleteSecretFails: true });
+  await harness.addConnection();
+
+  const response = await harness.handler(harness.post({ action: 'disconnect', workspaceId }));
+  assertEquals(response.status, 200);
+  const body = await response.json();
+  assertEquals(body, { connected: false, credentialCleanupPending: true });
+  assertEquals(harness.connections.has(harness.key()), false);
+  assertEquals(harness.secrets.get('c5000000-0000-4000-8000-000000000001'), 'refresh-token');
+  assertEquals(harness.loggedFailures, ['GOOGLE_SECRET_CLEANUP_FAILED']);
+  assert(!JSON.stringify(body).includes('refresh-token'), 'the response must never expose the refresh token');
+});
+
+Deno.test('Google disconnect database failures return a sanitized retryable response without deleting the secret', async () => {
+  const harness = createHarness({ deleteConnectionFails: true });
+  await harness.addConnection();
+
+  const response = await harness.handler(harness.post({ action: 'disconnect', workspaceId }));
+  assertEquals(response.status, 503);
+  const body = asRecord(await response.json());
+  assertEquals(asRecord(body.error).code, 'GOOGLE_DISCONNECT_FAILED');
+  assert(!JSON.stringify(body).includes('database unavailable'), 'database error details must not be returned to the caller');
+  assertEquals(harness.connections.has(harness.key()), true);
+  assertEquals(harness.secrets.get('c5000000-0000-4000-8000-000000000001'), 'refresh-token');
+  assertEquals(harness.loggedFailures, ['GOOGLE_DISCONNECT_FAILED']);
 });

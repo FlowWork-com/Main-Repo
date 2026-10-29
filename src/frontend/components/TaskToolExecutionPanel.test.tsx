@@ -282,10 +282,11 @@ describe('TaskToolExecutionPanel', () => {
     }]);
     render(<PanelHarness client={client} initialStatus="Verifying" />);
 
-    const input = await screen.findByRole('textbox', { name: 'Invoice number' });
+    const saveReviewButton = await screen.findByRole('button', { name: 'Save field review' });
+    const input = screen.getByRole('textbox', { name: 'Invoice number' });
     expect(input).toHaveValue('INV-1');
     fireEvent.change(input, { target: { value: 'INV-1-CORRECTED' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save field review' }));
+    fireEvent.click(saveReviewButton);
 
     await waitFor(() => expect(rpc).toHaveBeenCalledWith(
       'record_invoice_extraction_feedback',

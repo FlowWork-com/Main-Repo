@@ -131,7 +131,7 @@ In a second terminal, the execution endpoint remains separate and unused by plan
 npx supabase functions serve execute-tool --env-file supabase/functions/.env
 ```
 
-The browser app continues to use the local URL and anon key in `.env.local`; the local function env file is server-only and must not be committed. Configure `APP_ORIGINS` to the exact origin(s) used by the browser. For hosted deployment, set `FLOWWORK_PLANNER_*`, `FLOWWORK_PLAN_SIGNING_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `APP_ORIGINS` as Edge Function secrets. Store the same random signing key in Vault under `flowwork-plan-signing-key` using the Supabase SQL editor or an administrator connection:
+The browser app continues to use the local URL and anon key in `.env.local`; the local function env file is server-only and must not be committed. Configure `APP_ORIGINS` to the exact origin(s) used by the browser. For hosted deployment, set `FLOWWORK_PLANNER_*`, `FLOWWORK_FINNLP_REVIEW_*`, `FLOWWORK_INVOICE_*`, `FLOWWORK_PLAN_SIGNING_KEY`, and `APP_ORIGINS` as Edge Function secrets. Supabase injects its platform runtime variables (including `SUPABASE_URL` and the available legacy key aliases); do not add custom secrets beginning with `SUPABASE_`, because that prefix is reserved. Store the same random signing key in Vault under `flowwork-plan-signing-key` using the Supabase SQL editor or an administrator connection:
 
 ```sql
 select vault.create_secret('<same-random-signing-key>', 'flowwork-plan-signing-key');

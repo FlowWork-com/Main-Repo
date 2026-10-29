@@ -39,7 +39,7 @@ Set custom values as Supabase Edge Function secrets, or confirm them in the targ
 | Variable | Required for | Deployment rule |
 |---|---|---|
 | `APP_ORIGINS` | All browser-facing Edge Functions using the shared origin parser | Comma-separated exact HTTPS origins for the deployed frontend; no paths or wildcard origins. |
-| `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | Edge Functions that use Supabase clients | Confirm the platform-provided values are present and belong to the intended project. The service-role key is server-only and must never be exposed to the browser. |
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | Supabase-injected Edge Function runtime variables (legacy key aliases where available) | Verify the runtime exposes the values for the intended project. Do **not** add custom secrets with the `SUPABASE_` prefix; Supabase reserves it. Any service-role/secret key is server-only and must never be exposed to the browser. |
 
 ### Main planner
 

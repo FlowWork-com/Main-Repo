@@ -1,7 +1,7 @@
 import {
   applyWorkflowCommand,
   type WorkflowAggregate,
-} from '../workflow/workflow';
+} from '../workflow/workflow.ts';
 import {
   isCredentialLikeString,
   isPersistableJson,
@@ -10,14 +10,14 @@ import {
   type ToolDefinition,
   type ToolExecutionContext,
   type ToolExecutionResult,
-} from '../tools/contracts';
-import { ToolExecutor } from '../tools/toolExecutor';
-import { ToolRegistry } from '../tools/toolRegistry';
-import type { WorkflowRepository } from './workflowRepository';
+} from '../tools/contracts.ts';
+import { ToolExecutor } from '../tools/toolExecutor.ts';
+import { ToolRegistry } from '../tools/toolRegistry.ts';
+import type { WorkflowRepository } from './workflowRepository.ts';
 import type {
   StoredToolExecution,
   ToolExecutionRepository,
-} from './toolExecutionRepository';
+} from './toolExecutionRepository.ts';
 
 export interface ToolExecutionRequest {
   readonly userId: string;

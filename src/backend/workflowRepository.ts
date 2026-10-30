@@ -3,7 +3,7 @@ import type {
   WorkflowAggregate,
   WorkflowEvent,
   WorkflowStatus,
-} from '../workflow/workflow';
+} from '../workflow/workflow.ts';
 
 export interface WorkspaceRecord {
   readonly id: string;

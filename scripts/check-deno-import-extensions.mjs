@@ -10,7 +10,7 @@ const entrypoints = [
   'supabase/functions/finnlp-integration/index.ts',
 ];
 
-const importPattern = /\b(?:from\s*|import\s*(?:\(\s*)?)['"]((?:\.{1,2})\/[^'"]+)['"]/g;
+const importPattern = /\b(?:from\s*|import\s*(?:\(\s*)?)['"]([^'"]+)['"]/g;
 const sourceExtensions = ['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs'];
 const queue = entrypoints.map((entrypoint) => resolve(entrypoint));
 const visited = new Set();
@@ -37,6 +37,11 @@ while (queue.length > 0) {
 
   for (const match of source.matchAll(importPattern)) {
     const specifier = match[1];
+    if (/^https?:\/\//i.test(specifier)) {
+      violations.push(file + ': remote URL import "' + specifier + '" is not allowed in deployable Edge Function graphs; use a pinned npm: or jsr: dependency');
+      continue;
+    }
+    if (!specifier.startsWith('./') && !specifier.startsWith('../')) continue;
     const resolved = resolveImport(file, specifier);
     if (!resolved.explicitExtension) {
       violations.push(file + ': relative import "' + specifier + '" must include its file extension');

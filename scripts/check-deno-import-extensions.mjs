@@ -1,5 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { error, log } from 'node:console';
+import process from 'node:process';
 
 const entrypoints = [
   'supabase/functions/plan-workflow/index.ts',
@@ -46,9 +48,9 @@ while (queue.length > 0) {
 }
 
 if (violations.length > 0) {
-  console.error('Supabase Edge Function dependency graphs contain non-Deno-compatible relative imports:');
-  for (const violation of violations) console.error(' - ' + violation);
+  error('Supabase Edge Function dependency graphs contain non-Deno-compatible relative imports:');
+  for (const violation of violations) error(' - ' + violation);
   process.exitCode = 1;
 } else {
-  console.log('Verified explicit relative import extensions across ' + visited.size + ' modules reachable from ' + entrypoints.length + ' deployed Edge Function entrypoints.');
+  log('Verified explicit relative import extensions across ' + visited.size + ' modules reachable from ' + entrypoints.length + ' deployed Edge Function entrypoints.');
 }

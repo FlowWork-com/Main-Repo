@@ -3,13 +3,13 @@ import {
   isPersistableJson,
   toolFailure,
   type ToolDefinition,
-} from './contracts';
+} from './contracts.ts';
 import {
   FinnlpNewsProviderError,
   type FinnlpCompanyNewsInput,
   type FinnlpCompanyNewsProvider,
   type FinnlpNewsArticle,
-} from './finnlpCompanyNews';
+} from './finnlpCompanyNews.ts';
 
 export const FINNLP_FINANCIAL_REVIEW_TOOL_ID = 'finnlp-financial-review';
 export const FINNLP_FINANCIAL_REVIEW_TOOL_VERSION = '1.0.0';

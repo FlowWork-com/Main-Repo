@@ -94,6 +94,15 @@ jobs:
           deno test --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/execute-tool/finnlpReviewProvider_test.ts
           deno test --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/_shared/observability_test.ts
 
+      # The deployment workflow uses Supabase's API bundler, which rejects sloppy extensionless imports.
+      # Check the deployable function entry points without --unstable-sloppy-imports so CI mirrors that constraint.
+      - name: Verify strict Deno module resolution for deployable Edge Functions
+        run: |
+          deno check --allow-import=cdn.sheetjs.com:443 --node-modules-dir=auto supabase/functions/execute-tool/index.ts
+          deno check --node-modules-dir=auto supabase/functions/plan-workflow/index.ts
+          deno check --allow-import=cdn.sheetjs.com:443 --node-modules-dir=auto supabase/functions/advance-plan-run/index.ts
+          deno check --node-modules-dir=auto supabase/functions/finnlp-integration/index.ts
+
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v3
         with:

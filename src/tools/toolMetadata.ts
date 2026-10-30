@@ -1,4 +1,4 @@
-import type { JsonValue } from './contracts';
+import type { JsonValue } from './contracts.ts';
 
 interface ToolUiMetadata {
   readonly id: string;

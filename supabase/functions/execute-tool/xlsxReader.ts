@@ -1,5 +1,5 @@
-import * as XLSX from 'https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs';
-import * as cptable from 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/cpexcel.full.mjs';
+import * as XLSX from '@sheetjs/xlsx';
+import * as cptable from '@sheetjs/cptable';
 import type { SpreadsheetWorkbookData, SpreadsheetWorkbookReader } from '../../../src/tools/mvpTools.ts';
 
 XLSX.set_cptable(cptable);

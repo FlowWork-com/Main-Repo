@@ -68,26 +68,37 @@ jobs:
             exit 1
           fi
 
-      - name: Require successful CI on this exact commit
+      - name: Wait for successful CI on this exact commit
         uses: actions/github-script@v7
         with:
           script: |
             const { owner, repo } = context.repo;
-            const { data } = await github.rest.actions.listWorkflowRunsForRepo({
-              owner,
-              repo,
-              branch: "main",
-              status: "completed",
-              per_page: 100,
-            });
-            const run = data.workflow_runs.find((candidate) =>
-              candidate.head_sha === context.sha &&
-              candidate.name === "Frontend CI" &&
-              candidate.event === "push" &&
-              candidate.conclusion === "success"
-            );
+            const deadline = Date.now() + 20 * 60 * 1000;
+            let run = null;
+            while (Date.now() < deadline) {
+              const { data } = await github.rest.actions.listWorkflowRunsForRepo({
+                owner,
+                repo,
+                branch: "main",
+                per_page: 100,
+              });
+              run = data.workflow_runs
+                .filter((candidate) => candidate.head_sha === context.sha && candidate.name === "Frontend CI" && candidate.event === "push")
+                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] || null;
+              if (run && run.status === "completed") break;
+              core.info(run ? "Matching Frontend CI is still running; waiting." : "Matching Frontend CI has not appeared yet; waiting.");
+              await new Promise((resolve) => setTimeout(resolve, 15000));
+            }
             if (!run) {
-              core.setFailed("A successful Frontend CI push run for this exact main commit is required.");
+              core.setFailed("No Frontend CI run appeared for this commit within 20 minutes.");
+              return;
+            }
+            if (run.status !== "completed") {
+              core.setFailed("Frontend CI did not complete within 20 minutes.");
+              return;
+            }
+            if (run.conclusion !== "success") {
+              core.setFailed("Frontend CI failed for the current main commit.");
               return;
             }
             const { data: jobData } = await github.rest.actions.listJobsForWorkflowRun({
@@ -97,14 +108,12 @@ jobs:
               per_page: 100,
             });
             const requiredJobs = ["validate", "container"];
-            const missing = requiredJobs.filter((name) =>
-              !jobData.jobs.some((job) => job.name === name && job.conclusion === "success")
-            );
+            const missing = requiredJobs.filter((name) => !jobData.jobs.some((job) => job.name === name && job.conclusion === "success"));
             if (missing.length > 0) {
-              core.setFailed(`Required CI jobs did not succeed: ${missing.join(", ")}`);
+              core.setFailed("Required CI jobs did not succeed: " + missing.join(", "));
               return;
             }
-            core.info(`Required CI passed on ${context.sha} (run ${run.id}).`);
+            core.info("Required CI passed for the current commit on main.");
 
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v3

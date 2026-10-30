@@ -7,7 +7,7 @@ import {
   type ToolExecutionContext,
   type ToolExecutionResult,
   type ToolEvidence,
-} from './contracts';
+} from './contracts.ts';
 
 export class ToolExecutor {
   constructor(private readonly timeoutMs = 5_000) {

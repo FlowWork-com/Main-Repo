@@ -78,7 +78,7 @@ jobs:
       - name: Check and test the Edge Function
         run: |
           deno check --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/execute-tool/index.ts
-          deno test --allow-import=cdn.sheetjs.com:443 --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/execute-tool/handler_test.ts
+          deno test --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/execute-tool/handler_test.ts
           deno test --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/execute-tool/invoiceProvider_test.ts
           deno run --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/execute-tool/xlsxReader_smoke.ts
           deno check --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/plan-workflow/index.ts
@@ -98,9 +98,9 @@ jobs:
       # Check the deployable function entry points without --unstable-sloppy-imports so CI mirrors that constraint.
       - name: Verify strict Deno module resolution for deployable Edge Functions
         run: |
-          deno check --allow-import=cdn.sheetjs.com:443 --node-modules-dir=auto supabase/functions/execute-tool/index.ts
+          deno check --node-modules-dir=auto supabase/functions/execute-tool/index.ts
           deno check --node-modules-dir=auto supabase/functions/plan-workflow/index.ts
-          deno check --allow-import=cdn.sheetjs.com:443 --node-modules-dir=auto supabase/functions/advance-plan-run/index.ts
+          deno check --node-modules-dir=auto supabase/functions/advance-plan-run/index.ts
           deno check --node-modules-dir=auto supabase/functions/finnlp-integration/index.ts
 
       - name: Enforce explicit extensions in deployed Edge Function import graphs

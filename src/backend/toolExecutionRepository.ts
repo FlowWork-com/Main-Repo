@@ -5,14 +5,14 @@ import type {
   ToolExecutionContext,
   ToolExecutionError,
   ToolExecutionResult,
-} from '../tools/contracts';
-import { isPersistableJson } from '../tools/contracts';
+} from '../tools/contracts.ts';
+import { isPersistableJson } from '../tools/contracts.ts';
 import type {
   TaskFileContent,
   TaskFileContentSource,
   TaskFileMetadata,
   TaskFileMetadataSource,
-} from '../tools/mvpTools';
+} from '../tools/mvpTools.ts';
 
 export type StoredExecutionStatus = 'running' | 'succeeded' | 'failed';
 

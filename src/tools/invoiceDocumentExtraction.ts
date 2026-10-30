@@ -3,9 +3,9 @@ import {
   type JsonValue,
   type ToolDefinition,
   type ToolExecutionContext,
-} from './contracts';
-import type { TaskFileContent, TaskFileContentSource } from './mvpTools';
-import { MVP_TOOL_UI_METADATA } from './toolMetadata';
+} from './contracts.ts';
+import type { TaskFileContent, TaskFileContentSource } from './mvpTools.ts';
+import { MVP_TOOL_UI_METADATA } from './toolMetadata.ts';
 
 const metadata = (() => {
   const selected = MVP_TOOL_UI_METADATA.find((tool) => tool.id === 'invoice-document-extract');

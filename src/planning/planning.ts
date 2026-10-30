@@ -3,8 +3,8 @@ import {
   isPersistableJson,
   type JsonValue,
   type ToolMetadata,
-} from '../tools/contracts';
-import type { ToolRegistry } from '../tools/toolRegistry';
+} from '../tools/contracts.ts';
+import type { ToolRegistry } from '../tools/toolRegistry.ts';
 
 export const MAX_PLAN_STEPS = 10;
 export const MAX_STRING_LENGTH = 4000;

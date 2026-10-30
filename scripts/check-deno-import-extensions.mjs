@@ -37,6 +37,11 @@ while (queue.length > 0) {
 
   for (const match of source.matchAll(importPattern)) {
     const specifier = match[1];
+    if (/^https?:\/\//i.test(specifier)) {
+      violations.push(file + ': remote URL import "' + specifier + '" is not allowed in deployable Edge Function graphs; use a pinned npm: or jsr: dependency');
+      continue;
+    }
+    if (!specifier.startsWith('./') && !specifier.startsWith('../')) continue;
     const resolved = resolveImport(file, specifier);
     if (!resolved.explicitExtension) {
       violations.push(file + ': relative import "' + specifier + '" must include its file extension');

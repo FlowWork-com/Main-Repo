@@ -5,7 +5,7 @@ import {
   type ToolDefinition,
   type ToolExecutionContext,
   type ToolExecutionResult,
-} from './contracts';
+} from './contracts.ts';
 
 export const FINNLP_COMPANY_NEWS_TOOL_ID = 'finnlp-company-news';
 export const FINNLP_COMPANY_NEWS_TOOL_VERSION = '1.0.0';

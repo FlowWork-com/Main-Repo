@@ -1,4 +1,4 @@
-import * as XLSX from 'https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs';
+import * as XLSX from '@sheetjs/xlsx';
 import { readSpreadsheetWorkbook } from './xlsxReader.ts';
 
 function assert(condition: unknown, message: string): asserts condition {

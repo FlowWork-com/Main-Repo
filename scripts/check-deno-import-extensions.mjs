@@ -10,7 +10,7 @@ const entrypoints = [
   'supabase/functions/finnlp-integration/index.ts',
 ];
 
-const importPattern = /\b(?:from\s*|import\s*(?:\(\s*)?)['"]((?:\.{1,2})\/[^'"]+)['"]/g;
+const importPattern = /\b(?:from\s*|import\s*(?:\(\s*)?)['"]([^'"]+)['"]/g;
 const sourceExtensions = ['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs'];
 const queue = entrypoints.map((entrypoint) => resolve(entrypoint));
 const visited = new Set();

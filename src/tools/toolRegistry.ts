@@ -2,7 +2,7 @@ import {
   toToolMetadata,
   type ToolDefinition,
   type ToolMetadata,
-} from './contracts';
+} from './contracts.ts';
 
 function versionKey(id: string, version: string): string {
   return `${id}\u0000${version}`;

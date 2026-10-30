@@ -4,8 +4,8 @@ import {
   type PlannerRequest,
   type PlannerResponse,
   type WorkflowPlan,
-} from './planning';
-import type { ToolMetadata } from '../tools/contracts';
+} from './planning.ts';
+import type { ToolMetadata } from '../tools/contracts.ts';
 
 export interface PlannerEnvironment {
   readonly FLOWWORK_PLANNER_PROVIDER?: string;

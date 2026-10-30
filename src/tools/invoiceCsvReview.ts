@@ -1,6 +1,6 @@
-import { toolFailure, type JsonValue, type ToolDefinition, type ToolExecutionContext } from './contracts';
-import type { SpreadsheetWorkbookData, SpreadsheetWorkbookReader, TaskFileContentSource } from './mvpTools';
-import { MVP_TOOL_UI_METADATA } from './toolMetadata';
+import { toolFailure, type JsonValue, type ToolDefinition, type ToolExecutionContext } from './contracts.ts';
+import type { SpreadsheetWorkbookData, SpreadsheetWorkbookReader, TaskFileContentSource } from './mvpTools.ts';
+import { MVP_TOOL_UI_METADATA } from './toolMetadata.ts';
 
 const metadata = (() => {
   const selected = MVP_TOOL_UI_METADATA.find((tool) => tool.id === 'invoice-csv-review');

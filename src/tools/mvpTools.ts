@@ -4,12 +4,12 @@ import {
   type JsonValue,
   type ToolDefinition,
   type ToolExecutionContext,
-} from './contracts';
-import { createInvoiceCsvReviewTool } from './invoiceCsvReview';
-import { createInvoiceDocumentExtractionTool, type InvoiceDocumentExtractor } from './invoiceDocumentExtraction';
-import { MVP_PLANNER_TOOL_UI_METADATA } from './toolMetadata';
-import { createFinnlpCompanyNewsTool, type FinnlpCompanyNewsProvider } from './finnlpCompanyNews';
-import { createFinnlpFinancialReviewTool, type FinnlpFinancialReviewer } from './finnlpFinancialReview';
+} from './contracts.ts';
+import { createInvoiceCsvReviewTool } from './invoiceCsvReview.ts';
+import { createInvoiceDocumentExtractionTool, type InvoiceDocumentExtractor } from './invoiceDocumentExtraction.ts';
+import { MVP_PLANNER_TOOL_UI_METADATA } from './toolMetadata.ts';
+import { createFinnlpCompanyNewsTool, type FinnlpCompanyNewsProvider } from './finnlpCompanyNews.ts';
+import { createFinnlpFinancialReviewTool, type FinnlpFinancialReviewer } from './finnlpFinancialReview.ts';
 
 export interface TaskFileMetadata {
   readonly id: string;

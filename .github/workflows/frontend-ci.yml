@@ -77,16 +77,16 @@ jobs:
 
       - name: Check and test the Edge Function
         run: |
-          deno check --allow-import=cdn.sheetjs.com:443 --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/execute-tool/index.ts
+          deno check --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/execute-tool/index.ts
           deno test --allow-import=cdn.sheetjs.com:443 --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/execute-tool/handler_test.ts
           deno test --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/execute-tool/invoiceProvider_test.ts
-          deno run --allow-import=cdn.sheetjs.com --allow-net=cdn.sheetjs.com --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/execute-tool/xlsxReader_smoke.ts
+          deno run --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/execute-tool/xlsxReader_smoke.ts
           deno check --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/plan-workflow/index.ts
           deno test --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/plan-workflow/handler_test.ts
           deno check --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/google-workspace/index.ts
           deno test --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/google-workspace/provider_test.ts
           deno test --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/google-workspace/handler_test.ts
-          deno check --allow-import=cdn.sheetjs.com:443 --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/advance-plan-run/index.ts
+          deno check --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/advance-plan-run/index.ts
           deno test --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/advance-plan-run/handler_test.ts
           deno check --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/finnlp-integration/index.ts
           deno test --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/finnlp-integration/handler_test.ts

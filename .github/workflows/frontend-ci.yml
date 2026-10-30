@@ -103,6 +103,9 @@ jobs:
           deno check --allow-import=cdn.sheetjs.com:443 --node-modules-dir=auto supabase/functions/advance-plan-run/index.ts
           deno check --node-modules-dir=auto supabase/functions/finnlp-integration/index.ts
 
+      - name: Enforce explicit extensions in deployed Edge Function import graphs
+        run: node scripts/check-deno-import-extensions.mjs
+
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v3
         with:

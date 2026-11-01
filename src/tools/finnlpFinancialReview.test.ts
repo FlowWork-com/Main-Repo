@@ -63,7 +63,7 @@ describe('FinNLP financial review sidecar', () => {
     expect(isFinnlpFinancialReviewInput({
       claim: 'Is the report clear?',
       ticker: 'AAPL',
-      startDate: '2026-10-01',
+      startDate: '2026-09-30',
       endDate: '2026-10-31',
     })).toBe(false);
     expect(isFinnlpFinancialReviewInput({

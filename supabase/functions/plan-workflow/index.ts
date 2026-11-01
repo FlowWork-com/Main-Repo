@@ -66,6 +66,7 @@ const handler = createPlanWorkflowHandler<SupabaseClient>({
   persistPlan: async (caller, task, plan) => {
     const signingKey = Deno.env.get('FLOWWORK_PLAN_SIGNING_KEY')?.trim();
     if (!signingKey || signingKey.length < 32) {
+      console.error('[plan-workflow] PLAN_SIGNING_KEY_UNAVAILABLE');
       throw new Error('Plan signing configuration is unavailable.');
     }
     const planJson = JSON.stringify(plan);
@@ -75,7 +76,12 @@ const handler = createPlanWorkflowHandler<SupabaseClient>({
       p_plan_json: planJson,
       p_signature: signature,
     });
-    if (error || !isRecord(data) || !isRecord(data.plan)) {
+    if (error) {
+      console.error('[plan-workflow] PLAN_RPC_REJECTED ' + classifyPlanRpcError(error));
+      throw new Error('Unable to persist plan proposal.');
+    }
+    if (!isRecord(data) || !isRecord(data.plan)) {
+      console.error('[plan-workflow] PLAN_RPC_INVALID_RESPONSE');
       throw new Error('Unable to persist plan proposal.');
     }
     return data.plan as unknown as WorkflowPlan;
@@ -93,6 +99,42 @@ function requiredEnvironment(name: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/**
+ * Logs only a SQLSTATE and a fixed diagnostic category. Never log database
+ * messages, request bodies, plan JSON, signatures, or signing-key material.
+ */
+function classifyPlanRpcError(error: unknown): string {
+  if (!isRecord(error)) return 'UNKNOWN:UNCLASSIFIED';
+  const code = typeof error.code === 'string' && /^[A-Z0-9]{3,12}$/.test(error.code)
+    ? error.code
+    : 'UNKNOWN';
+  const message = typeof error.message === 'string' ? error.message : '';
+
+  let category = 'UNCLASSIFIED';
+  if (message.includes('Plan proposal signature is invalid')) {
+    category = 'SIGNATURE_MISMATCH';
+  } else if (message.includes('Authentication is required')) {
+    category = 'AUTHENTICATION_CONTEXT';
+  } else if (message.includes('Task access is required')) {
+    category = 'TASK_ACCESS';
+  } else if (message.includes('Plans can only be proposed')) {
+    category = 'TASK_NOT_PLANNING';
+  } else if (message.includes('Invalid plan proposal')) {
+    category = 'PLAN_SHAPE';
+  } else if (message.includes('Invalid plan step')) {
+    category = 'PLAN_STEP_SHAPE';
+  } else if (message.includes('unsupported tool')) {
+    category = 'UNSUPPORTED_TOOL';
+  } else if (message.includes('invalid') && message.includes('input')) {
+    category = 'TOOL_INPUT';
+  } else if (message.toLowerCase().includes('permission denied')) {
+    category = 'DATABASE_PERMISSION';
+  } else if (message.toLowerCase().includes('vault')) {
+    category = 'VAULT_ACCESS';
+  }
+  return `${code}:${category}`;
 }
 
 async function signPlan(planJson: string, signingKey: string): Promise<string> {

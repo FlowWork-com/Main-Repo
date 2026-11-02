@@ -35,6 +35,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Report exact advisory paths before deciding which findings should gate CI.
+      # This stays non-blocking until the current lockfile findings are triaged.
+      - name: Report npm dependency audit findings
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          npm audit --json > "$RUNNER_TEMP/npm-audit-report.json"
+          audit_status=$?
+          set -e
+          node scripts/summarize-npm-audit.mjs "$RUNNER_TEMP/npm-audit-report.json" "$audit_status"
+
       - name: Typecheck
         run: npm run typecheck
 

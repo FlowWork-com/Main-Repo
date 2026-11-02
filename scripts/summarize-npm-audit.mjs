@@ -56,13 +56,17 @@ if (!reportPath) {
         const nodes = Array.isArray(vulnerability.nodes) ? vulnerability.nodes : [];
         for (const node of nodes.slice(0, 20)) {
           if (typeof node !== 'string') continue;
-          log(`[npm-audit]   installed path: ${node.replace(/[\\r\\n]/g, ' ').slice(0, 240)}`);
+          log(`[npm-audit]   installed path: ${node.replace(/[\r\n]/g, ' ').slice(0, 240)}`);
         }
 
         const advisories = Array.isArray(vulnerability.via) ? vulnerability.via : [];
         for (const advisory of advisories) {
+          if (typeof advisory === 'string') {
+            log(`[npm-audit]   via dependency: ${advisory.replace(/[\r\n]/g, ' ').slice(0, 160)}`);
+            continue;
+          }
           if (!advisory || typeof advisory !== 'object') continue;
-          const title = String(advisory.title ?? 'transitive dependency path')
+          const title = String(advisory.title ?? 'dependency advisory')
             .replace(/[\r\n]/g, ' ').slice(0, 180);
           const url = typeof advisory.url === 'string' && /^https:\/\//.test(advisory.url)
             ? advisory.url.slice(0, 300)

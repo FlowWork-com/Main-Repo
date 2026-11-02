@@ -47,6 +47,25 @@ jobs:
           set -e
           node scripts/summarize-npm-audit.mjs "$RUNNER_TEMP/npm-audit-report.json" "$audit_status"
 
+      # Preview only semver-compatible fixes; restore the checkout lockfile afterwards.
+      # This never uses --force and cannot change the PR's committed dependencies.
+      - name: Preview non-major npm audit lockfile fixes
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp package-lock.json "$RUNNER_TEMP/npm-audit-lock-before.json"
+          restore_lock() {
+            cp "$RUNNER_TEMP/npm-audit-lock-before.json" package-lock.json
+          }
+          trap restore_lock EXIT
+          set +e
+          npm audit fix --package-lock-only --ignore-scripts --no-fund
+          fix_status=$?
+          set -e
+          echo "npm audit fix (no --force, package-lock-only) exit code: $fix_status"
+          node scripts/summarize-package-lock-diff.mjs "$RUNNER_TEMP/npm-audit-lock-before.json" package-lock.json
+
       - name: Typecheck
         run: npm run typecheck
 

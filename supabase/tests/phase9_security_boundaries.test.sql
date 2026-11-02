@@ -1,6 +1,6 @@
 begin;
 
-select plan(10);
+select plan(11);
 
 select ok(
   not exists (
@@ -111,6 +111,23 @@ select ok(
   and has_function_privilege('authenticated', 'public.pause_workflow_plan_run(uuid)', 'execute')
   and has_function_privilege('authenticated', 'public.resume_workflow_plan_run(uuid)', 'execute'),
   'the authenticated workflow RPC surface remains available behind its in-function authorization checks'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_constraint c
+    where c.conrelid = 'public.task_approvals'::regclass
+      and c.conname = 'task_approvals_no_self_approval'
+      and c.convalidated
+  )
+  and not exists (
+    select 1
+    from public.task_approvals a
+    where a.decision = 'approved'
+      and a.requested_by = a.approver_id
+  ),
+  'the no-self-approval constraint is validated and no approved row was self-approved'
 );
 
 select * from finish();

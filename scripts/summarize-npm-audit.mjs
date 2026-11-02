@@ -39,14 +39,25 @@ if (!reportPath) {
         const severity = String(vulnerability.severity ?? 'unknown').toUpperCase();
         const direct = vulnerability.isDirect === true ? 'direct' : 'transitive';
         const range = String(vulnerability.range ?? 'unknown').replace(/[\r\n]/g, ' ').slice(0, 160);
-        const fix = vulnerability.fixAvailable === true
-          ? 'available'
-          : vulnerability.fixAvailable === false
-            ? 'not available'
-            : vulnerability.fixAvailable && typeof vulnerability.fixAvailable === 'object'
-              ? 'available with version change'
-              : 'unknown';
+        const fixAvailable = vulnerability.fixAvailable;
+        let fix = 'unknown';
+        if (fixAvailable === true) {
+          fix = 'available within the current dependency range';
+        } else if (fixAvailable === false) {
+          fix = 'no automatic fix available';
+        } else if (fixAvailable && typeof fixAvailable === 'object') {
+          const fixName = typeof fixAvailable.name === 'string' ? fixAvailable.name : name;
+          const fixVersion = typeof fixAvailable.version === 'string' ? fixAvailable.version : 'unspecified';
+          const major = fixAvailable.isSemVerMajor === true ? '; semver-major update required' : '';
+          fix = `${fixName}@${fixVersion}${major}`;
+        }
         log(`[npm-audit] ${name}: ${severity}; ${direct}; affected range: ${range}; fix: ${fix}`);
+
+        const nodes = Array.isArray(vulnerability.nodes) ? vulnerability.nodes : [];
+        for (const node of nodes.slice(0, 20)) {
+          if (typeof node !== 'string') continue;
+          log(`[npm-audit]   installed path: ${node.replace(/[\\r\\n]/g, ' ').slice(0, 240)}`);
+        }
 
         const advisories = Array.isArray(vulnerability.via) ? vulnerability.via : [];
         for (const advisory of advisories) {

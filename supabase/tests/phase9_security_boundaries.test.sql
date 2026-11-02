@@ -1,6 +1,6 @@
 begin;
 
-select plan(10);
+select plan(15);
 
 select ok(
   not exists (
@@ -111,6 +111,103 @@ select ok(
   and has_function_privilege('authenticated', 'public.pause_workflow_plan_run(uuid)', 'execute')
   and has_function_privilege('authenticated', 'public.resume_workflow_plan_run(uuid)', 'execute'),
   'the authenticated workflow RPC surface remains available behind its in-function authorization checks'
+);
+
+-- Keep the authenticated SECURITY DEFINER surface explicit. Adding an RPC to
+-- this list requires a separate authorization review rather than silently
+-- inheriting the default function EXECUTE grant.
+select ok(
+  (
+    select array_agg(
+      p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'
+      order by p.proname
+    )
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.prosecdef
+      and has_function_privilege('authenticated', p.oid, 'execute')
+  ) = array[
+    'archive_workspace_prompt_template(p_workspace_id uuid, p_template_id uuid, p_expected_version integer)',
+    'cancel_workflow_plan_run(p_run_id uuid)',
+    'create_workflow_plan(p_task_id uuid, p_plan_json text, p_signature text)',
+    'create_workflow_task(p_task_id uuid, p_workspace_id uuid, p_title text, p_details text, p_initial_event jsonb)',
+    'create_workspace(p_name text)',
+    'decide_workflow_plan(p_plan_id uuid, p_decision text)',
+    'is_workspace_member(p_workspace_id uuid)',
+    'pause_workflow_plan_run(p_run_id uuid)',
+    'persist_workflow_events(p_task_id uuid, p_expected_sequence integer, p_status text, p_attempt integer, p_events jsonb)',
+    'record_invoice_extraction_feedback(p_task_id uuid, p_execution_id uuid, p_file_id uuid, p_submission_id uuid, p_reviewed_values jsonb)',
+    'register_task_file(p_workspace_id uuid, p_task_id uuid, p_file_name text, p_storage_path text, p_content_type text)',
+    'resume_workflow_plan_run(p_run_id uuid)',
+    'save_workspace_prompt_template(p_workspace_id uuid, p_template_id uuid, p_expected_version integer, p_name text, p_category text, p_prompt_text text)',
+    'start_workflow_plan_run(p_plan_id uuid)'
+  ]::text[],
+  'the authenticated SECURITY DEFINER RPC inventory is explicit and reviewed'
+);
+
+select ok(
+  not exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.prosecdef
+      and has_function_privilege('authenticated', p.oid, 'execute')
+      and position('auth.uid()' in p.prosrc) = 0
+  ),
+  'every authenticated SECURITY DEFINER RPC derives the caller from auth.uid()'
+);
+
+select ok(
+  not exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.prosecdef
+      and has_function_privilege('authenticated', p.oid, 'execute')
+      and p.proname <> 'create_workspace'
+      and position('is_workspace_member' in p.prosrc) = 0
+      and position('public.workspace_members' in p.prosrc) = 0
+  ),
+  'every authenticated SECURITY DEFINER RPC except workspace creation checks membership or directly joins workspace_members'
+);
+
+select ok(
+  not exists (
+    select 1
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relkind in ('r', 'p')
+      and (
+        has_table_privilege('anon', c.oid, 'insert')
+        or has_table_privilege('anon', c.oid, 'update')
+        or has_table_privilege('anon', c.oid, 'delete')
+        or has_table_privilege('authenticated', c.oid, 'insert')
+        or has_table_privilege('authenticated', c.oid, 'update')
+        or (c.relname <> 'task_files' and has_table_privilege('authenticated', c.oid, 'delete'))
+      )
+  )
+  and has_table_privilege('authenticated', 'public.task_files', 'delete'),
+  'clients have no direct table writes except uploader-scoped task_files metadata deletion'
+);
+
+select ok(
+  not exists (
+    select 1
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relkind = 'v'
+      and c.relname in (
+        'invoice_extraction_confidence_summary',
+        'invoice_extraction_feedback_summary'
+      )
+      and not coalesce(c.reloptions, array[]::text[]) @> array['security_invoker=true']::text[]
+  ),
+  'invoice feedback summary views execute with caller privileges and preserve underlying RLS'
 );
 
 select * from finish();

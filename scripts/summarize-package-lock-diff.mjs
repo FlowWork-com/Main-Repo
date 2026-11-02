@@ -35,6 +35,9 @@ if (!beforePath || !afterPath) {
       if (previous.resolved !== next.resolved && typeof next.resolved === 'string') {
         log(`[npm-audit-preview]   resolved: ${next.resolved.slice(0, 300)}`);
       }
+      if (previous.integrity !== next.integrity && typeof next.integrity === 'string') {
+        log(`[npm-audit-preview]   integrity: ${next.integrity.slice(0, 200)}`);
+      }
       changes += 1;
     }
 

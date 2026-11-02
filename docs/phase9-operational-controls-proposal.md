@@ -84,9 +84,9 @@ Before calling Phase 9 complete, fill in:
 - **SLO/alert thresholds approved on:** pending
 - **Retention schedule and deletion behavior approved on:** pending
 - **Live invoice extraction run:** pending
-- **Live Finnhub lifecycle run:** pending
-- **Live Google OAuth run:** pending (or explicitly excluded from the release)
-- **Post-merge staging smoke run and exact SHA:** pending
+- **Live Finnhub lifecycle run:** not verified — the smoke returned a scoped `not connected` status; no real credential lifecycle or news retrieval was run.
+- **Live Google OAuth run:** not verified — optional Google Workspace deployment was skipped in the staging deployment; decide explicitly whether it is excluded from the release.
+- **Post-merge staging smoke run and exact SHA:** PASS — [run 41440975402](https://github.com/FlowWork-com/Main-Repo/actions/runs/41440975402), commit `01ee69894894c8e8c246138bcb2ab4d1f4e41b8d`. The live planner + one FinNLP review/refinement pass persisted plan `088861d6-8492-48f4-94d1-ac47ad8bcaf0` (valid, proposed); no run or tool execution was created. The planner Edge Function completed in 8,334 ms. Provider model ID and provider-returned usage/cost were not captured.
 - **Known risk acceptance for Free-plan leaked-password protection:** must remain explicit until the control is enabled or an approved mitigation replaces it
 
 No alerting, retention behavior, provider credentials, or production database settings are changed by this proposal.

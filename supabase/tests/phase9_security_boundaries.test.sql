@@ -1,6 +1,6 @@
 begin;
 
-select plan(15);
+select plan(16);
 
 select ok(
   not exists (
@@ -208,6 +208,23 @@ select ok(
       and not coalesce(c.reloptions, array[]::text[]) @> array['security_invoker=true']::text[]
   ),
   'invoice feedback summary views execute with caller privileges and preserve underlying RLS'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_constraint c
+    where c.conrelid = 'public.task_approvals'::regclass
+      and c.conname = 'task_approvals_no_self_approval'
+      and c.convalidated
+  )
+  and not exists (
+    select 1
+    from public.task_approvals a
+    where a.decision = 'approved'
+      and a.requested_by = a.approver_id
+  ),
+  'the no-self-approval constraint is validated and no approved row was self-approved'
 );
 
 select * from finish();

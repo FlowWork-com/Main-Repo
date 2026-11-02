@@ -59,3 +59,70 @@ This is an evidence-based audit, not a production-readiness certification. A suc
 - Record provider/model/latency and provider-returned usage/cost for each relevant path without claiming unmeasured accuracy.
 
 **Phase 9 is not complete while the remaining verification and performance work is open.** Leaked-password protection is deferred due to the current plan limitation and remains an explicit security risk, not a passed control. No live database schema, Auth setting, or provider secret was changed by this audit.
+
+
+---
+
+## 2026-11-02 staging follow-up audit
+
+**Environment:** dedicated FlowWork Staging project `flfwtsxuvzyuotltfrbt` (`eu-west-1`).  
+**Release commit:** `01ee69894894c8e8c246138bcb2ab4d1f4e41b8d`.  
+**Scope:** read-only catalog, privilege, policy, migration, Edge Function inventory and runtime smoke review. No production database, Auth setting, or schema was modified by this follow-up.
+
+This section supersedes the 2026-10-28 audit's *staging target blocked* statement for the dedicated staging environment only. The earlier FlowWork Main DB observations remain a historical production snapshot; this follow-up did not repeat a production audit or deploy to production.
+
+### Staging release evidence
+
+- [Main CI #41310646015](https://github.com/FlowWork-com/Main-Repo/actions/runs/41310646015) passed for the release commit.
+- [Staging deployment #41311253544](https://github.com/FlowWork-com/Main-Repo/actions/runs/41311253544) succeeded for the same commit. It passed the staging target guard, exact-commit CI gate, migration review/dry-run/application, four required Edge Function deployments, and deployed revision recording. The optional Google Workspace deploy input was false/skipped.
+- [Authenticated staging smoke #41440975402](https://github.com/FlowWork-com/Main-Repo/actions/runs/41440975402) passed on the same commit. The live planner → one FinNLP reviewer handoff → one planner revision saved a valid proposed plan. The run was not accepted; no worker run or tool execution was created. The task remained in Planning.
+- The smoke job explicitly passed unauthenticated rejection for all four required functions, test-user identity, workspace/RLS access, scoped FinNLP status, plan persistence, refusal to start a run before human acceptance, and rejection of a missing/unowned worker run. Its FinNLP integration-status check reported **not connected**; this validates the status endpoint, not a live Finnhub credential lifecycle.
+- The dedicated staging database reports 22 applied repository migrations. The four required functions are ACTIVE: `plan-workflow` v8, `execute-tool` v6, `advance-plan-run` v6, and `finnlp-integration` v6. No production deployment is inferred from this evidence.
+
+### Staging security review
+
+| Control | 2026-11-02 staging result | Evidence / interpretation |
+|---|---|---|
+| Public-schema table RLS | **Passed** | All 18 base/partitioned tables in `public` have RLS enabled. |
+| Client access to OAuth/FinNLP secret metadata | **Passed** | `google_workspace_oauth_states` and `workspace_finnlp_connections` have RLS enabled, no policies, and no direct table privileges for `anon` or `authenticated`; the trusted service role retains required access. The two “RLS enabled, no policy” advisor findings are expected for these server-only tables, not a reason to grant client access. |
+| Public `SECURITY DEFINER` ACL and search paths | **Passed for reviewed invariants** | 29 public SECURITY DEFINER functions were inventoried; none are executable by `anon`, none have an unpinned `search_path`, and 14 are executable by `authenticated`. |
+| Authenticated callable RPC authorization | **Reviewed; CI coverage being strengthened** | All 14 authenticated-callable SECURITY DEFINER functions derive caller identity from `auth.uid()`. Thirteen also call `is_workspace_member` or directly inspect `workspace_members`; `create_workspace` is the deliberate exception because it creates a new workspace for the authenticated caller and inserts that caller as owner. The reviewed bodies validate the task, plan, run, file, template, or workspace resource before changing it. No cross-workspace bypass was identified in this read-only review. A new pgTAP assertion pins the exact allowed RPC inventory and these caller/membership guard patterns. |
+| Secret-management RPCs | **Passed** | Finnhub/Google secret read, write, connect, disconnect, and delete RPCs remain unavailable to `anon` and `authenticated`; their required execution grants are restricted to `service_role`. |
+| Direct client table writes | **Passed for current grants** | No `anon` direct table insert/update/delete grants. `authenticated` has no direct insert/update grants and only the `task_files` metadata delete grant; its RLS predicate requires both `uploaded_by = auth.uid()` and current workspace membership. A pgTAP assertion now preserves this narrow exception. |
+| Invoice summary views | **Passed** | `invoice_extraction_confidence_summary` and `invoice_extraction_feedback_summary` use `security_invoker=true`, so their queries execute with caller privileges and underlying RLS remains applicable. |
+| Self-approval protection | **Passed in repository tests; not altered here** | The existing approval check constraint and workflow RLS tests reject requester self-approval. No approval was created or accepted by the staging smoke. |
+| SECURITY DEFINER adviser warnings | **Reviewed, not blanket-revoked** | Supabase reports 14 authenticated-callable SECURITY DEFINER functions. These are the intended authenticated workflow RPC surface; blanket revocation would break supported flows. Keep the explicit inventory, internal caller/resource checks, and negative tests. |
+| Leaked-password protection | **Deferred / still open** | The staging project reports the Auth leaked-password-protection warning. The account's current Supabase Free-plan limitation remains unresolved; do not bypass it or describe the control as passed. |
+| RLS initplan optimization | **Passed in staging** | The two reviewed policies now use scalar-subquery `(select auth.uid())`; the current security adviser no longer reports the earlier initplan warnings. |
+| Foreign-key support indexes | **Passed in staging** | A catalog check comparing every public foreign-key column sequence with valid, non-partial index leading columns returned zero uncovered public foreign keys. The 20-index migration is applied. |
+| Unused indexes | **No removal justified** | The performance adviser currently reports 33 unused indexes. This is a new/low-traffic staging environment; usage counters are not sufficient evidence to drop them. No index was removed. |
+
+### Updated Phase 9 status after staging recheck
+
+| Category | Current status | Remaining evidence/work |
+|---|---|---|
+| Planner and FinNLP reviewer path | **Passed in staging** | Smoke #41440975402 proves live planning/reviewer/refinement and persisted proposal. Capture provider/model IDs, latency and provider-returned usage from a supported source before claiming durable cost/quality metrics. |
+| CI, migrations, RLS tests and container scan | **Passed for release commit** | Main CI #41310646015 passed; deployment #41311253544 passed its exact-commit gate and reviewed migrations. New RPC inventory tests are in the follow-up PR and still require CI. |
+| Request observability | **Deployed to staging; verification in progress** | The diagnostic logging fixed the signing-key configuration finding; the successful smoke proves the planner endpoint works. Review the exact current log envelope/request correlation and ensure no secrets or provider payloads are emitted before marking the log-redaction audit fully passed. |
+| Database/RLS/SECURITY DEFINER review | **Passed for inspected staging scope; regression tests being strengthened** | The catalog and function-body checks above found no identified cross-workspace bypass. The new pgTAP coverage must pass local/CI validation and remain part of future DB tests. This is not a production database re-audit. |
+| Recovery runbook | **Documented; live recovery acceptance not verified** | Run the documented stuck-run/expired-lease/ambiguous external-effect cases on synthetic staging data. Do not fabricate success or auto-replay ambiguous non-idempotent work. |
+| Invoice extraction live acceptance | **Not verified** | The smoke deliberately does not upload/process an invoice. A synthetic PDF/image must pass through the existing persisted high-risk approval gate with the separately validated provider. Groq planner/reviewer configuration does not imply invoice-provider readiness. |
+| Finnhub live connection lifecycle | **Not verified** | Staging status reports not connected. Still required: dedicated test credential connect/validate/read/replace/disconnect and secret cleanup, with no key in logs. |
+| Google OAuth live lifecycle | **Not verified / optional release scope** | Google Workspace deploy was skipped in this release workflow. If included in release scope, use a dedicated test OAuth client/account to verify callback state, PKCE, minimal scopes, refresh, revoke/disconnect and cross-workspace denial. |
+| Alerts/SLOs | **Proposal only; approval/implementation pending** | No alert provider or paging path was configured by the proposal. Release/on-call owner must approve thresholds, implement and test the path. |
+| Retention/privacy | **Proposal only; approval/implementation pending** | Candidate durations are not configured policies. Data owner and privacy/legal review must approve schedules and deletion behavior before implementation. |
+| Production operational ownership | **Not verified** | Name release, on-call and rollback owners; record recovery point, rollback/forward-fix procedure and production risk acceptance before any production deployment. |
+| Leaked-password protection | **Open plan-gated risk** | Keep explicitly recorded in release risk acceptance until enabled or replaced by a formally approved control. |
+
+### Current remaining blockers
+
+1. Complete regression CI for the expanded SECURITY DEFINER/RLS grant tests.
+2. Run synthetic staging recovery tests for stale tool execution, expired leases, user pause/cancel and ambiguous external effects.
+3. Complete invoice extraction acceptance with a synthetic PDF/image and the persisted approval gate; do not reuse the Groq planner/reviewer key or assume PDF compatibility.
+4. Complete Finnhub connection lifecycle acceptance with a dedicated staging key; status endpoint alone is insufficient.
+5. Decide whether Google OAuth is in the release scope; if yes, complete the dedicated OAuth lifecycle test.
+6. Approve/implement alerting, on-call ownership and the privacy/retention policy.
+7. Record actual provider/model identity, latency and usage/cost where returned; do not invent costs or accuracy metrics.
+8. Keep leaked-password protection as an explicit open risk under the current plan limitation.
+
+**Phase 9 remains incomplete.** The staging planner/reviewer vertical slice and core access-control checks are now evidenced, but live invoice/Finnhub/OAuth acceptance, recovery exercises, operational sign-off, alerting, retention and the leaked-password control remain open. This staging follow-up does not authorize production deployment.

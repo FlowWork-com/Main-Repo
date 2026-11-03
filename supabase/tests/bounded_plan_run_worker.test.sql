@@ -1,6 +1,6 @@
 begin;
 
-select plan(13);
+select plan(16);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -9,6 +9,10 @@ insert into auth.users (
   '71000000-0000-4000-8000-000000000001',
   '00000000-0000-0000-0000-000000000000',
   'authenticated', 'authenticated', 'phase6-owner@example.test', '', now(), now(), now()
+), (
+  '71000000-0000-4000-8000-000000000002',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated', 'phase6-outsider@example.test', '', now(), now(), now()
 )
 on conflict (id) do nothing;
 
@@ -74,6 +78,15 @@ set local role authenticated;
 insert into phase6_test_run
 select (public.start_workflow_plan_run('74000000-0000-4000-8000-000000000001')->>'id')::uuid;
 
+select set_config('request.jwt.claim.sub', '71000000-0000-4000-8000-000000000002', true);
+select throws_ok(
+  $$ select public.pause_workflow_plan_run((select id from phase6_test_run)) $$,
+  '42501',
+  'Plan run access is required.',
+  'a non-member cannot pause a known run in another workspace'
+);
+select set_config('request.jwt.claim.sub', '71000000-0000-4000-8000-000000000001', true);
+
 select is(
   (select status from public.workflow_plan_runs where id = (select id from phase6_test_run)),
   'running',
@@ -117,6 +130,14 @@ select is(
 
 reset role;
 set local role authenticated;
+select set_config('request.jwt.claim.sub', '71000000-0000-4000-8000-000000000002', true);
+select throws_ok(
+  $$ select public.resume_workflow_plan_run((select id from phase6_test_run)) $$,
+  '42501',
+  'Plan run access is required.',
+  'a non-member cannot resume a known paused run in another workspace'
+);
+select set_config('request.jwt.claim.sub', '71000000-0000-4000-8000-000000000001', true);
 select is(
   public.resume_workflow_plan_run((select id from phase6_test_run))->>'status',
   'running',
@@ -211,6 +232,14 @@ select is(
 
 reset role;
 set local role authenticated;
+select set_config('request.jwt.claim.sub', '71000000-0000-4000-8000-000000000002', true);
+select throws_ok(
+  $$ select public.cancel_workflow_plan_run((select id from phase6_test_run2)) $$,
+  '42501',
+  'Plan run access is required.',
+  'a non-member cannot cancel a known run in another workspace'
+);
+select set_config('request.jwt.claim.sub', '71000000-0000-4000-8000-000000000001', true);
 select is(
   public.cancel_workflow_plan_run((select id from phase6_test_run2))->>'status',
   'running',

@@ -1,6 +1,6 @@
 begin;
 
-select plan(26);
+select plan(29);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -132,6 +132,10 @@ insert into public.task_files (
 select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', true);
 set local role authenticated;
 
+select ok(
+  public.is_workspace_member('20000000-0000-4000-8000-000000000001'),
+  'the authenticated membership helper recognizes a current workspace member'
+);
 select is((select count(*) from public.workspaces), 1::bigint, 'members can read their workspace');
 select is((select count(*) from public.workspace_members), 2::bigint, 'members can read their workspace membership');
 select is((select count(*) from public.tasks), 1::bigint, 'members can read their tasks');
@@ -142,6 +146,11 @@ select is((select count(*) from public.task_files), 1::bigint, 'members can read
 
 select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000002', true);
 
+select is(
+  public.is_workspace_member('20000000-0000-4000-8000-000000000001'),
+  false,
+  'the authenticated membership helper rejects a non-member caller'
+);
 select is((select count(*) from public.workspaces), 0::bigint, 'non-members cannot read workspaces');
 select is((select count(*) from public.workspace_members), 0::bigint, 'non-members cannot read membership records');
 select is((select count(*) from public.tasks), 0::bigint, 'non-members cannot read tasks');
@@ -174,6 +183,18 @@ select throws_ok(
   '42501',
   'Task access is required.',
   'non-members cannot write task events through the persistence RPC'
+);
+select throws_ok(
+  $$ select public.create_workflow_task(
+       '30000000-0000-4000-8000-000000000005',
+       '20000000-0000-4000-8000-000000000001',
+       'Outsider task',
+       '',
+       '{}'::jsonb
+     ) $$,
+  '42501',
+  'Workspace access is required.',
+  'non-members cannot create tasks in a workspace by supplying its ID'
 );
 
 select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', true);

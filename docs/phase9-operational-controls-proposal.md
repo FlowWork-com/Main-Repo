@@ -10,6 +10,8 @@ Use the structured edge_request_finished events added by the request observabili
 
 These thresholds are initial candidates for a low-volume staging deployment. They should be tuned against real traffic before they become production SLOs; when traffic is too low, use consecutive failures and absolute stuck-work counts rather than percentage-only alerts.
 
+**Implementation preparation checked 2026-11-04:** PR #90 proposes durable, payload-free provider-call records that can supply provider/stage/outcome/latency and returned usage where available. It is still open and not deployed. No alert backend, query, notification destination, schedule, or threshold has been configured or activated. After owner approval, choose the alert backend and validate its signals in staging before enabling notifications.
+
 | Signal | Proposed trigger | Response |
 |---|---|---|
 | Edge Function server errors | At least 20 requests and more than 5% 5xx over 5 minutes; page/escalate if above 10% for 10 minutes | Group by function, outcome and bounded error code; investigate provider outage vs application fault |
@@ -44,6 +46,8 @@ The following are candidate defaults for review, not current settings. The relea
 | Database backups and provider-side logs | Governed by configured Supabase/provider settings and contractual terms | Record the actual configured retention separately; an application purge does not guarantee backup/provider-log deletion |
 
 Do not implement these candidates in a migration until the data owner approves them. Where retention applies to financial records, contractual evidence or statutory records, the approved schedule may differ.
+
+**Implementation preparation checked 2026-11-04:** no TTL, scheduled purge, or retention migration has been added. The proposed provider-call metric table is pending PR #90 and currently has only relational cleanup when its task is deleted; that behavior is not a retention schedule. After approval, specify retention and backup treatment, implement an auditable staging-only deletion path, and test it before production use.
 
 ## 3. Live acceptance evidence required before production
 
@@ -88,5 +92,7 @@ Before calling Phase 9 complete, fill in:
 - **Live Google OAuth run:** not verified — optional Google Workspace deployment was skipped in the staging deployment; decide explicitly whether it is excluded from the release.
 - **Post-merge staging smoke run and exact SHA:** PASS — [run 41440975402](https://github.com/FlowWork-com/Main-Repo/actions/runs/41440975402), commit `01ee69894894c8e8c246138bcb2ab4d1f4e41b8d`. The live planner + one FinNLP review/refinement pass persisted plan `088861d6-8492-48f4-94d1-ac47ad8bcaf0` (valid, proposed); no run or tool execution was created. The planner Edge Function completed in 8,334 ms. Provider model ID and provider-returned usage/cost were not captured.
 - **Known risk acceptance for Free-plan leaked-password protection:** must remain explicit until the control is enabled or an approved mitigation replaces it
+
+Repository regression PRs #88 and #89 are merged, but their tests do not satisfy these live acceptance or owner-signoff fields. Provider metrics PR #90, revoked-member PR #91, and cross-run step-isolation PR #92 remain under review as of 2026-11-04.
 
 No alerting, retention behavior, provider credentials, or production database settings are changed by this proposal.

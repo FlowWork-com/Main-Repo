@@ -47,6 +47,7 @@ function clientWithKey(key: string | null, error: unknown = null) {
 
 Deno.test('provider calls only the fixed HTTPS company-news endpoint and normalizes response data', async () => {
   const observedRequests: Array<{ url: string; method: string }> = [];
+  const metrics: unknown[] = [];
   const fakeFetch: typeof fetch = async (input, init) => {
     observedRequests.push({ url: String(input), method: String(init?.method) });
     return Response.json([{
@@ -60,7 +61,9 @@ Deno.test('provider calls only the fixed HTTPS company-news endpoint and normali
   };
   const { client, calls } = clientWithKey('server-only-api-key');
   const provider = new SupabaseFinnlpCompanyNewsProvider(client, { fetcher: fakeFetch });
-  const articles = await provider.fetchCompanyNews(context(), {
+  const articles = await provider.fetchCompanyNews(context({
+    recordProviderCall: async (observation) => { metrics.push(observation); },
+  }), {
     ticker: 'AAPL',
     startDate: '2026-10-01',
     endDate: '2026-10-03',
@@ -77,6 +80,16 @@ Deno.test('provider calls only the fixed HTTPS company-news endpoint and normali
     name: 'read_finnlp_api_key',
     args: { p_workspace_id: workspaceId, p_user_id: userId },
   }, 'Secret is selected using the verified actor/workspace pair');
+  assertEquals(metrics.length, 1, 'External provider call emits one metric');
+  const metric = metrics[0] as Record<string, unknown>;
+  assertEquals(metric.stage, 'company_news', 'The call uses the company-news stage');
+  assertEquals(metric.providerId, 'finnhub.io', 'The provider host is recorded');
+  assertEquals(metric.outcome, 'succeeded', 'The result status is recorded');
+  assertEquals(metric.retryCount, 0, 'No retries are recorded when none occurred');
+  assertEquals('modelId' in metric, false, 'A non-model provider has no invented model ID');
+  assertEquals('inputTokens' in metric, false, 'A non-model provider has no invented token usage');
+  assertEquals(JSON.stringify(metrics).includes('server-only-api-key'), false, 'Provider key is not part of metrics');
+  assertEquals(JSON.stringify(metrics).includes('Headline'), false, 'Provider content is not part of metrics');
 });
 
 Deno.test('provider requires a stored workspace key and fails closed on secret lookup errors', async () => {

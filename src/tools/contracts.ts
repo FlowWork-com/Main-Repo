@@ -8,6 +8,49 @@ export type JsonValue =
 
 export type ToolRiskLevel = 'low' | 'medium' | 'high' | 'destructive';
 
+export type ProviderCallStage =
+  | 'planning'
+  | 'planning_refinement'
+  | 'financial_review'
+  | 'invoice_extraction'
+  | 'company_news';
+
+export type ProviderFailureCategory =
+  | 'configuration'
+  | 'timeout'
+  | 'rate_limited'
+  | 'quota'
+  | 'unauthorized'
+  | 'unavailable'
+  | 'invalid_response'
+  | 'unknown';
+
+export interface ProviderCallObservation {
+  readonly stage: ProviderCallStage;
+  readonly providerId: string;
+  readonly modelId?: string;
+  readonly outcome: 'succeeded' | 'failed';
+  readonly durationMs: number;
+  readonly retryCount: number;
+  readonly inputTokens?: number;
+  readonly outputTokens?: number;
+  readonly totalTokens?: number;
+  readonly providerReportedCost?: number;
+  readonly providerReportedCostCurrency?: string;
+  readonly failureCategory?: ProviderFailureCategory;
+}
+
+export interface ProviderCallMetric extends ProviderCallObservation {
+  readonly workspaceId: string;
+  readonly taskId: string;
+  readonly edgeRequestId: string;
+  readonly planId?: string;
+  readonly runId?: string;
+  readonly stepId?: string;
+  readonly executionRequestId?: string;
+  readonly executionId?: string;
+}
+
 export type ToolExecutionErrorCode =
   | 'TOOL_NOT_FOUND'
   | 'INVALID_TOOL_INPUT'
@@ -52,6 +95,10 @@ export interface ToolExecutionContext {
   readonly toolVersion: string;
   readonly requestId: string;
   readonly signal: AbortSignal;
+  readonly edgeRequestId?: string;
+  readonly planRunId?: string;
+  readonly stepId?: string;
+  readonly recordProviderCall?: (observation: ProviderCallObservation) => Promise<void>;
 }
 
 export interface ToolDefinition {

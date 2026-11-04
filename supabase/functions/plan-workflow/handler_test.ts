@@ -1,6 +1,8 @@
 import { assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts';
 import { createPlanWorkflowHandler } from './handler.ts';
 import type { PlannerRequest, PlannerResponse, WorkflowPlan } from '../../../src/planning/planning.ts';
+import type { ProviderCallMetric } from '../../../src/tools/contracts.ts';
+import { withRequestObservability } from '../_shared/observability.ts';
 
 const taskId = '43000000-0000-4000-8000-000000000001';
 const userId = '41000000-0000-4000-8000-000000000001';
@@ -282,4 +284,61 @@ Deno.test('financial planning explicitly records when the FinNLP sidecar is not 
     body.plan.limitations.some((item: string) => item.includes('FinNLP sidecar is not configured')),
     true,
   );
+});
+
+Deno.test('provider metrics persist with the server request ID and saved plan ID', async () => {
+  const recorded: ProviderCallMetric[] = [];
+  const plan: WorkflowPlan = {
+    id: '66000000-0000-4000-8000-000000000001',
+    taskId,
+    goal: 'Summarize this task safely.',
+    summary: 'No external action is required.',
+    steps: [],
+    dependencies: [],
+    createdAt: '2026-11-04T00:00:00.000Z',
+    version: 1,
+    validationStatus: 'valid',
+    limitations: ['No registered tool is required for this request.'],
+  };
+  const handler = createPlanWorkflowHandler({
+    origins: new Set(),
+    createPlannerAdapter: () => ({
+      providerName: 'test-provider',
+      async generatePlan(request: PlannerRequest): Promise<PlannerResponse> {
+        await request.observeProviderCall?.({
+          stage: request.providerCallStage ?? 'planning',
+          providerId: 'provider.example.test',
+          modelId: 'test-model',
+          outcome: 'succeeded',
+          durationMs: 42,
+          retryCount: 0,
+        });
+        return { success: true, plan };
+      },
+    }),
+    authenticate: async () => ({ userId, context: {} }),
+    loadTask: async () => ({
+      id: taskId,
+      workspaceId: '42000000-0000-4000-8000-000000000001',
+      ownerId: userId,
+      title: 'Metric correlation',
+      details: '',
+    }),
+    persistPlan: async (_caller, _task, proposedPlan) => proposedPlan,
+    recordProviderCalls: async (metrics) => { recorded.push(...metrics); },
+  });
+  const response = await withRequestObservability('plan-workflow', handler)(post(
+    JSON.stringify({ taskId, goal: plan.goal }),
+    { 'x-flowwork-request-id': 'spoofed-request-id' },
+  ));
+
+  assertEquals(response.status, 200);
+  assertEquals(recorded.length, 1);
+  assertEquals(recorded[0].workspaceId, '42000000-0000-4000-8000-000000000001');
+  assertEquals(recorded[0].taskId, taskId);
+  assertEquals(recorded[0].planId, plan.id);
+  assertEquals(recorded[0].edgeRequestId, response.headers.get('x-request-id'));
+  assertEquals(recorded[0].edgeRequestId === 'spoofed-request-id', false);
+  assertEquals(recorded[0].providerId, 'provider.example.test');
+  assertEquals('goal' in recorded[0], false);
 });

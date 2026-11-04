@@ -2,6 +2,7 @@ import {
   isCredentialLikeString,
   isPersistableJson,
   toolFailure,
+  type ProviderCallObservation,
   type ToolDefinition,
 } from './contracts.ts';
 import {
@@ -53,6 +54,7 @@ export interface FinnlpFinancialReviewRequest {
 
 export interface FinnlpFinancialReviewContext {
   readonly signal: AbortSignal;
+  readonly observeProviderCall?: (observation: ProviderCallObservation) => void | Promise<void>;
 }
 
 export interface FinnlpFinancialReviewer {
@@ -267,7 +269,10 @@ export function createFinnlpFinancialReviewTool(
 
       let rawReview: unknown;
       try {
-        rawReview = await reviewer.reviewFinancialClaim(context, {
+        rawReview = await reviewer.reviewFinancialClaim({
+          signal: context.signal,
+          observeProviderCall: context.recordProviderCall,
+        }, {
           claim: input.claim.trim(),
           ...(input.draftAnswer ? { draftAnswer: input.draftAnswer.trim() } : {}),
           sources,

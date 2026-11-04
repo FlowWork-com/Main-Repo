@@ -7,6 +7,8 @@ import {
   isPersistableJson,
   toolFailure,
   type JsonValue,
+  type ProviderCallMetric,
+  type ProviderCallObservation,
   type ToolDefinition,
   type ToolExecutionContext,
   type ToolExecutionResult,
@@ -27,6 +29,7 @@ export interface ToolExecutionRequest {
   readonly stepId?: string;
   readonly executionId: string;
   readonly requestId: string;
+  readonly edgeRequestId?: string;
   readonly toolId: string;
   readonly toolVersion: string;
   readonly input: unknown;
@@ -43,6 +46,7 @@ export class ToolExecutionService {
     private readonly executor: ToolExecutor,
     private readonly executionRepository: ToolExecutionRepository,
     private readonly workflowRepository: WorkflowRepository,
+    private readonly recordProviderCall?: (metric: ProviderCallMetric) => Promise<void>,
   ) {}
 
   async execute(
@@ -64,7 +68,7 @@ export class ToolExecutionService {
       );
     }
 
-    const context = createContext(request, aggregate);
+    let context = createContext(request, aggregate);
     if (!context) {
       return unchanged(
         aggregate,
@@ -73,6 +77,25 @@ export class ToolExecutionService {
           'Execution identity does not match the task and registered tool.',
         ),
       );
+    }
+    if (this.recordProviderCall && request.edgeRequestId && isUuid(request.edgeRequestId)) {
+      context = {
+        ...context,
+        edgeRequestId: request.edgeRequestId,
+        ...(request.planRunId ? { planRunId: request.planRunId } : {}),
+        ...(request.stepId ? { stepId: request.stepId } : {}),
+        recordProviderCall: (observation: ProviderCallObservation) =>
+          this.recordProviderCall?.({
+            ...observation,
+            workspaceId: request.workspaceId,
+            taskId: request.taskId,
+            edgeRequestId: request.edgeRequestId!,
+            ...(request.planRunId ? { runId: request.planRunId } : {}),
+            ...(request.stepId ? { stepId: request.stepId } : {}),
+            executionRequestId: request.requestId,
+            executionId: request.executionId,
+          }) ?? Promise.resolve(),
+      };
     }
     const validInput = isValidToolInput(tool, request.input);
     if (!validInput) {

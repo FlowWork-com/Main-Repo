@@ -63,6 +63,7 @@ function request(
     readonly stepId: string;
     readonly executionId: string;
     readonly requestId: string;
+    readonly edgeRequestId: string;
     readonly toolId: string;
     readonly toolVersion: string;
     readonly input: unknown;
@@ -161,12 +162,14 @@ function createService(
   workflowStore: WorkflowRepository,
   registry = createRegistry(store),
   timeoutMs = 100,
+  recordProviderCall?: (record: unknown) => Promise<void>,
 ): ToolExecutionService {
   return new ToolExecutionService(
     registry,
     new ToolExecutor(timeoutMs),
     store,
     workflowStore,
+    recordProviderCall as never,
   );
 }
 
@@ -188,6 +191,61 @@ describe('ToolExecutionService', () => {
     expect(executions.claimExecution).toHaveBeenCalledOnce();
     expect(executions.completeExecution).toHaveBeenCalledOnce();
     expect(workflows.persistEvents).toHaveBeenCalledTimes(2);
+  });
+
+  it('binds provider observations to the server request and persisted execution identity', async () => {
+    const executions = new MemoryExecutionRepository();
+    const workflows = workflowRepository();
+    const records: unknown[] = [];
+    const metricTool: ToolDefinition = {
+      id: 'metric-tool',
+      name: 'Metric tool',
+      description: 'Emits provider metrics without storing provider payloads.',
+      version: '1.0.0',
+      riskLevel: 'low',
+      requiresApproval: false,
+      inputSchema: {},
+      validateInput: () => true,
+      async execute(context) {
+        await context.recordProviderCall?.({
+          stage: 'financial_review',
+          providerId: 'review.example.test',
+          modelId: 'review-model',
+          outcome: 'succeeded',
+          durationMs: 25,
+          retryCount: 0,
+          inputTokens: 10,
+        });
+        return { success: true, output: { safe: true } };
+      },
+    };
+    const registry = createRegistry(executions, metricTool);
+    const service = createService(
+      executions,
+      workflows,
+      registry,
+      100,
+      async (record) => { records.push(record); },
+    );
+
+    await service.execute(request({ toolId: 'metric-tool', edgeRequestId: '77000000-0000-4000-8000-000000000001' }), workflow());
+
+    expect(records).toEqual([{
+      stage: 'financial_review',
+      providerId: 'review.example.test',
+      modelId: 'review-model',
+      outcome: 'succeeded',
+      durationMs: 25,
+      retryCount: 0,
+      inputTokens: 10,
+      workspaceId: identity.tenantId,
+      taskId: identity.id,
+      edgeRequestId: '77000000-0000-4000-8000-000000000001',
+      runId: '45000000-0000-4000-8000-000000000001',
+      stepId: 'step_1',
+      executionRequestId: 'request-1',
+      executionId,
+    }]);
   });
 
   it('keeps the workflow Running until every plan step has succeeded', async () => {

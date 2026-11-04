@@ -5,9 +5,14 @@ import type { WorkflowPlan } from '../../../src/planning/planning.ts';
 import { createVerifiedAuthenticator } from '../execute-tool/auth.ts';
 import { createPlanWorkflowHandler, parseAllowedOrigins } from './handler.ts';
 import { createFinnlpFinancialReviewerFromEnvironment } from '../execute-tool/finnlpReviewProvider.ts';
+import { persistProviderCallMetrics } from '../_shared/providerMetrics.ts';
 
 const supabaseUrl = requiredEnvironment('SUPABASE_URL');
 const anonKey = requiredEnvironment('SUPABASE_ANON_KEY');
+const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')?.trim();
+const metricsClient = serviceRoleKey
+  ? createClient(supabaseUrl, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } })
+  : null;
 
 const handler = createPlanWorkflowHandler<SupabaseClient>({
   origins: parseAllowedOrigins(Deno.env.get('APP_ORIGINS')),
@@ -85,6 +90,10 @@ const handler = createPlanWorkflowHandler<SupabaseClient>({
       throw new Error('Unable to persist plan proposal.');
     }
     return data.plan as unknown as WorkflowPlan;
+  },
+  recordProviderCalls: async (metrics) => {
+    if (!metricsClient) throw new Error('Provider metrics persistence is unavailable.');
+    await persistProviderCallMetrics(metricsClient, metrics);
   },
   logFailure: (code) => console.error('[plan-workflow]', code),
 });

@@ -9,6 +9,7 @@ import { readSpreadsheetWorkbook } from './xlsxReader.ts';
 import { createInvoiceDocumentExtractorFromEnvironment } from './invoiceProvider.ts';
 import { SupabaseFinnlpCompanyNewsProvider } from './finnlpProvider.ts';
 import { createFinnlpFinancialReviewerFromEnvironment } from './finnlpReviewProvider.ts';
+import { persistProviderCallMetrics } from '../_shared/providerMetrics.ts';
 
 export function createServerToolExecutionService(
   privilegedClient: SupabaseClient,
@@ -42,5 +43,12 @@ export function createServerToolExecutionService(
     new ToolExecutor(timeoutMs),
     executionRepository,
     workflowRepository,
+    async (metric) => {
+      try {
+        await persistProviderCallMetrics(privilegedClient, [metric]);
+      } catch {
+        console.error('[provider-metrics] PERSISTENCE_FAILED');
+      }
+    },
   );
 }

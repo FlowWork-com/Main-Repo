@@ -148,6 +148,28 @@ commit;
 psql(setupSql);
 const sessions = [];
 
+const wrongRunStepClaim = psql(`
+  begin;
+  set local role service_role;
+  select set_config('request.jwt.claim.sub', '${ids.user}', true);
+  select public.claim_workflow_plan_step('${ids.run1}', '${stepId}', '${ids.execution}', '${ids.user}');
+`, { expectFailure: true });
+assert.match(wrongRunStepClaim, /Plan step was not found/);
+assert.equal(
+  psql(`select status || ':' || attempt from public.workflow_plan_step_runs where run_id = '${ids.run1}' and step_id = 'step_1';`),
+  'pending:0',
+);
+
+const wrongRunStepFinish = psql(`
+  begin;
+  set local role service_role;
+  select set_config('request.jwt.claim.sub', '${ids.user}', true);
+  select public.finish_workflow_plan_step(
+    '${ids.run1}', '${stepId}', '${ids.execution}', '{"forged":true}'::jsonb, null, '${ids.user}'
+  );
+`, { expectFailure: true });
+assert.match(wrongRunStepFinish, /Step execution identity does not match/);
+
 try {
   const first = startPsql(`
     begin;
@@ -200,7 +222,7 @@ try {
     'true',
   );
 
-  writeSync(1, 'PASS: overlapping PostgreSQL worker claims serialize to one lease; stale completion is rejected; ambiguous execution pauses without replay or fabricated output.\n');
+  writeSync(1, 'PASS: cross-run step claims/finalization are rejected; concurrent run claims serialize; stale completion is rejected; ambiguous execution pauses without replay or fabricated output.\n');
 } finally {
   for (const session of sessions) {
     if (session.child.exitCode === null) session.child.kill('SIGTERM');

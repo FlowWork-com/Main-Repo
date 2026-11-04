@@ -8,17 +8,25 @@ function assertRequestId(value: string | null): asserts value is string {
 }
 
 Deno.test('observability adds an exposed request ID and preserves the response body', async () => {
-  const handler = withRequestObservability('test-function', () =>
-    new Response(JSON.stringify({ ok: true }), {
+  let handlerRequestId: string | null = null;
+  const handler = withRequestObservability('test-function', (request) => {
+    handlerRequestId = request.headers.get('x-flowwork-request-id');
+    return new Response(JSON.stringify({ ok: true }), {
       status: 200,
       headers: {
         'content-type': 'application/json',
         'access-control-expose-headers': 'x-existing-header',
       },
-    }));
+    });
+  });
 
-  const response = await handler(new Request('https://edge.example.test/test', { method: 'POST' }));
+  const response = await handler(new Request('https://edge.example.test/test', {
+    method: 'POST',
+    headers: { 'x-flowwork-request-id': 'spoofed-request-id' },
+  }));
   assertRequestId(response.headers.get('x-request-id'));
+  assertEquals(handlerRequestId, response.headers.get('x-request-id'));
+  assertEquals(handlerRequestId === 'spoofed-request-id', false);
   const exposed = response.headers.get('access-control-expose-headers')?.toLowerCase() ?? '';
   assertEquals(exposed.includes('x-existing-header'), true);
   assertEquals(exposed.includes('x-request-id'), true);

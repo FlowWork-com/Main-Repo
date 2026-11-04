@@ -4,6 +4,7 @@ import {
   type FinnlpFinancialReviewRequest,
   type FinnlpFinancialReviewer,
 } from '../../../src/tools/finnlpFinancialReview.ts';
+import { isCredentialLikeString, type ProviderCallObservation } from '../../../src/tools/contracts.ts';
 
 export interface FinnlpReviewProviderEnvironment {
   readonly FLOWWORK_FINNLP_REVIEW_PROVIDER?: string;
@@ -133,6 +134,10 @@ class OpenAICompatibleFinnlpFinancialReviewer implements FinnlpFinancialReviewer
     request: FinnlpFinancialReviewRequest,
   ): Promise<unknown> {
     if (context.signal.aborted) throw new FinnlpFinancialReviewProviderError('TIMEOUT');
+    const startedAt = performance.now();
+    let outcome: ProviderCallObservation['outcome'] = 'failed';
+    let failureCategory: ProviderCallObservation['failureCategory'] = 'unknown';
+    let usage: ReturnType<typeof readProviderUsage> = {};
     const controller = new AbortController();
     const abortForExecution = () => controller.abort();
     context.signal.addEventListener('abort', abortForExecution, { once: true });
@@ -195,28 +200,44 @@ class OpenAICompatibleFinnlpFinancialReviewer implements FinnlpFinancialReviewer
         signal: controller.signal,
       });
       if (response.status === 401 || response.status === 403) {
+        failureCategory = 'unauthorized';
         await response.body?.cancel();
         throw new FinnlpFinancialReviewProviderError('UNAUTHORIZED');
       }
       if (response.status === 429) {
+        failureCategory = 'rate_limited';
         await response.body?.cancel();
         throw new FinnlpFinancialReviewProviderError('RATE_LIMITED');
       }
       if (!response.ok) {
+        failureCategory = 'unavailable';
         await response.body?.cancel();
         throw new FinnlpFinancialReviewProviderError('UNAVAILABLE');
       }
       const envelope = await readBoundedJson(response, MAX_RESPONSE_BYTES);
+      usage = readProviderUsage(envelope);
       const content = readCompletionContent(envelope);
-      if (!content) throw new FinnlpFinancialReviewProviderError('INVALID_RESPONSE');
+      if (!content) {
+        failureCategory = 'invalid_response';
+        throw new FinnlpFinancialReviewProviderError('INVALID_RESPONSE');
+      }
       let parsed: unknown;
       try {
         parsed = JSON.parse(content);
       } catch {
+        failureCategory = 'invalid_response';
         throw new FinnlpFinancialReviewProviderError('INVALID_RESPONSE');
       }
+      outcome = 'succeeded';
       return parsed;
     } catch (error) {
+      if (error instanceof FinnlpFinancialReviewProviderError) {
+        failureCategory = mapFailureCategory(error.kind);
+      } else if (controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
+        failureCategory = 'timeout';
+      } else {
+        failureCategory = 'unavailable';
+      }
       if (error instanceof FinnlpFinancialReviewProviderError) throw error;
       if (controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
         throw new FinnlpFinancialReviewProviderError('TIMEOUT');
@@ -225,6 +246,22 @@ class OpenAICompatibleFinnlpFinancialReviewer implements FinnlpFinancialReviewer
     } finally {
       clearTimeout(timer);
       context.signal.removeEventListener('abort', abortForExecution);
+      if (context.observeProviderCall) {
+        try {
+          await context.observeProviderCall({
+            stage: 'financial_review',
+            providerId: new URL(this.config.baseUrl).hostname,
+            ...(safeModelId(this.config.modelName) ? { modelId: safeModelId(this.config.modelName) } : {}),
+            outcome,
+            durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+            retryCount: 0,
+            ...usage,
+            ...(outcome === 'failed' ? { failureCategory } : {}),
+          });
+        } catch {
+          // Metric collection must not alter provider results or user-facing errors.
+        }
+      }
     }
   }
 }
@@ -273,6 +310,61 @@ function readCompletionContent(value: unknown): string | null {
     return null;
   }
   return choice.message.content;
+}
+
+function readProviderUsage(value: unknown): Partial<Pick<
+  ProviderCallObservation,
+  'inputTokens' | 'outputTokens' | 'totalTokens' | 'providerReportedCost' | 'providerReportedCostCurrency'
+>> {
+  if (!isRecord(value)) return {};
+  const usage = isRecord(value.usage) ? value.usage : {};
+  const inputTokens = readNonNegativeInteger(usage.prompt_tokens ?? usage.input_tokens);
+  const outputTokens = readNonNegativeInteger(usage.completion_tokens ?? usage.output_tokens);
+  const totalTokens = readNonNegativeInteger(usage.total_tokens);
+  const cost = readFiniteNonNegativeNumber(usage.cost ?? value.cost);
+  const currencyValue = usage.cost_currency ?? usage.currency ?? value.cost_currency;
+  const currency = typeof currencyValue === 'string' && /^[A-Z]{3}$/.test(currencyValue)
+    ? currencyValue
+    : undefined;
+  return {
+    ...(inputTokens === undefined ? {} : { inputTokens }),
+    ...(outputTokens === undefined ? {} : { outputTokens }),
+    ...(totalTokens === undefined ? {} : { totalTokens }),
+    ...(cost === undefined ? {} : { providerReportedCost: cost }),
+    ...(currency === undefined ? {} : { providerReportedCostCurrency: currency }),
+  };
+}
+
+function readNonNegativeInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+function readFiniteNonNegativeNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+function mapFailureCategory(
+  kind: FinnlpFinancialReviewProviderError['kind'],
+): ProviderCallObservation['failureCategory'] {
+  switch (kind) {
+    case 'NOT_CONFIGURED': return 'configuration';
+    case 'UNAUTHORIZED': return 'unauthorized';
+    case 'RATE_LIMITED': return 'rate_limited';
+    case 'TIMEOUT': return 'timeout';
+    case 'INVALID_RESPONSE': return 'invalid_response';
+    case 'UNAVAILABLE': return 'unavailable';
+  }
+}
+
+function safeModelId(value: string): string | undefined {
+  const modelId = value.trim();
+  return modelId.length > 0 && modelId.length <= 200 && !isCredentialLikeString(modelId)
+    ? modelId
+    : undefined;
 }
 
 function isAllowedBaseUrl(value: string): boolean {

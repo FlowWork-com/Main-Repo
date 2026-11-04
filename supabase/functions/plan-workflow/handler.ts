@@ -2,6 +2,7 @@ import { buildToolCatalogForPlanner, createPlannerError, validatePlan, type Plan
 import { createPlannerAdapterFromEnvironment, type PlannerEnvironment } from '../../../src/planning/provider.ts';
 import { isCredentialLikeString } from '../../../src/tools/contracts.ts';
 import { normalizeFinnlpFinancialReview, type FinnlpFinancialReviewer } from '../../../src/tools/finnlpFinancialReview.ts';
+import type { ProviderCallMetric, ProviderCallObservation } from '../../../src/tools/contracts.ts';
 import { createMvpTools } from '../../../src/tools/mvpTools.ts';
 import { ToolRegistry } from '../../../src/tools/toolRegistry.ts';
 
@@ -46,6 +47,7 @@ export interface PlanWorkflowDependencies<Context> {
     task: { readonly id: string; readonly workspaceId: string },
     plan: WorkflowPlan,
   ) => Promise<WorkflowPlan>;
+  readonly recordProviderCalls?: (metrics: readonly ProviderCallMetric[]) => Promise<void>;
   readonly logFailure?: (code: string) => void;
 }
 
@@ -144,12 +146,21 @@ export function createPlanWorkflowHandler<Context>(
       return errorResponse(503, 'PLANNER_NOT_CONFIGURED', 'The planner is not configured.', corsHeaders);
     }
 
+    const edgeRequestId = request.headers.get('x-flowwork-request-id');
+    const providerObservations: ProviderCallObservation[] = [];
     const requestBody: PlannerRequest = {
       taskId: task.id,
       goal: payload.goal,
       toolCatalog: buildToolCatalogForPlanner(registry),
       availableAttachments: task.availableAttachments ?? [],
+      ...(isUuid(edgeRequestId) ? {
+        providerCallStage: 'planning' as const,
+        observeProviderCall: (observation: ProviderCallObservation) => {
+          providerObservations.push(observation);
+        },
+      } : {}),
     };
+    let metricPlanId: string | undefined;
 
     try {
       const providerResponse = await plannerAdapter.generatePlan(requestBody);
@@ -180,6 +191,7 @@ export function createPlanWorkflowHandler<Context>(
         dependencies.logFailure?.('PLAN_PERSISTENCE_FAILED');
         return errorResponse(503, 'PLAN_PERSISTENCE_FAILED', 'Unable to save the proposed plan. Try again.', corsHeaders);
       }
+      metricPlanId = persistedPlan.id;
       return jsonResponse(200, { plan: persistedPlan }, corsHeaders);
     } catch (error) {
       if (error instanceof Error && error.name === 'PlannerError') {
@@ -188,6 +200,20 @@ export function createPlanWorkflowHandler<Context>(
       }
       dependencies.logFailure?.('PLAN_PROVIDER_UNAVAILABLE');
       return errorResponse(503, 'PROVIDER_UNAVAILABLE', 'The planner provider is temporarily unavailable.', corsHeaders);
+    } finally {
+      if (isUuid(edgeRequestId) && providerObservations.length && dependencies.recordProviderCalls) {
+        try {
+          await dependencies.recordProviderCalls(providerObservations.map((observation) => ({
+            ...observation,
+            workspaceId: task.workspaceId,
+            taskId: task.id,
+            edgeRequestId,
+            ...(metricPlanId ? { planId: metricPlanId } : {}),
+          })));
+        } catch {
+          dependencies.logFailure?.('PROVIDER_METRICS_PERSISTENCE_FAILED');
+        }
+      }
     }
   };
 }
@@ -231,7 +257,10 @@ async function applyFinnlpReviewAndRefinePlan<Context>(
   let review: ReturnType<typeof normalizeFinnlpFinancialReview>;
   try {
     const rawReview = await dependencies.financialReviewer.reviewFinancialClaim(
-      { signal: new AbortController().signal },
+      {
+        signal: new AbortController().signal,
+        observeProviderCall: requestBody.observeProviderCall,
+      },
       { claim: goal, draftAnswer, sources: [] },
     );
     review = normalizeFinnlpFinancialReview(rawReview, []);
@@ -252,6 +281,7 @@ async function applyFinnlpReviewAndRefinePlan<Context>(
   try {
     const refinedResponse = await plannerAdapter.generatePlan({
       ...requestBody,
+      providerCallStage: 'planning_refinement',
       reviewerFeedback: review.handoffMessage,
     });
     if (!refinedResponse.success) {

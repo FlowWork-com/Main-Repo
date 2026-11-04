@@ -42,6 +42,7 @@ const input = {
 Deno.test('review provider uses only the configured HTTPS chat-completions endpoint and returns structured content', async () => {
   let capturedUrl = '';
   let capturedInit: RequestInit | undefined;
+  const observations: unknown[] = [];
   const reviewer = createOpenAICompatibleFinnlpFinancialReviewer({
     baseUrl: 'https://review.example.test/v1/',
     modelName: 'configured-reviewer',
@@ -69,10 +70,18 @@ Deno.test('review provider uses only the configured HTTPS chat-completions endpo
             }),
           },
         }],
+        usage: {
+          prompt_tokens: 31,
+          completion_tokens: 14,
+          total_tokens: 45,
+        },
       });
     },
   });
-  const result = await reviewer.reviewFinancialClaim(context, input);
+  const result = await reviewer.reviewFinancialClaim({
+    signal: context.signal,
+    observeProviderCall: (observation) => { observations.push(observation); },
+  }, input);
   assertEquals(capturedUrl, 'https://review.example.test/v1/chat/completions', 'Endpoint must be fixed from server config');
   assertEquals(capturedInit?.method, 'POST', 'Review uses a bounded POST to the configured model');
   assertEquals((capturedInit?.headers as Record<string, string>).authorization, 'Bearer server-only-review-key', 'Credential stays in server header');
@@ -82,6 +91,18 @@ Deno.test('review provider uses only the configured HTTPS chat-completions endpo
   assert(body.messages[0].content.includes('Never invent a source'), 'Prompt must prohibit invented citations');
   assert(body.messages[1].content.includes('news-1'), 'Only supplied sources are passed');
   assert((result as { reviewStatus: string }).reviewStatus === 'supported_by_sources', 'Review JSON should be parsed');
+  assertEquals(observations.length, 1, 'Provider call observation should be emitted');
+  const observation = observations[0] as Record<string, unknown>;
+  assertEquals(observation.stage, 'financial_review', 'Stage is recorded');
+  assertEquals(observation.providerId, 'review.example.test', 'Provider host is recorded');
+  assertEquals(observation.modelId, 'configured-reviewer', 'Configured model is recorded');
+  assertEquals(observation.outcome, 'succeeded', 'Provider outcome is recorded');
+  assertEquals(observation.retryCount, 0, 'No retries are recorded when none occurred');
+  assertEquals(observation.inputTokens, 31, 'Provider-returned prompt tokens are recorded');
+  assertEquals(observation.outputTokens, 14, 'Provider-returned completion tokens are recorded');
+  assertEquals(observation.totalTokens, 45, 'Provider-returned total tokens are recorded');
+  assertEquals(JSON.stringify(observations).includes(input.claim), false, 'Claim text is not part of metrics');
+  assertEquals(JSON.stringify(observations).includes('server-only-review-key'), false, 'Credential is not part of metrics');
 });
 
 Deno.test('Groq reviewer uses a strict schema for required FinNLP handoff fields', async () => {

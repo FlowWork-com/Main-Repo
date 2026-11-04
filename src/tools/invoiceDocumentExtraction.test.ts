@@ -138,18 +138,19 @@ describe('createInvoiceDocumentExtractionTool', () => {
     const file = pdfFile();
     const source = sourceFor(file);
     const extractor = vi.fn(async () => extraction());
+    const recordProviderCall = vi.fn(async () => undefined);
     const tool = createInvoiceDocumentExtractionTool(source, extractor);
     expect(tool.riskLevel).toBe('high');
     expect(tool.requiresApproval).toBe(true);
 
-    const result = await tool.execute(context, { fileId: file.id });
+    const result = await tool.execute({ ...context, recordProviderCall }, { fileId: file.id });
     expect(result).toMatchObject({
       success: true,
       output: { reviewRequired: true, validationStatus: 'needs_review' },
       evidence: { type: 'invoice-document-extraction', reference: file.id },
     });
-    expect(source.getTaskFileContent).toHaveBeenCalledWith(context, file.id);
-    expect(extractor).toHaveBeenCalledWith(file, context.signal);
+    expect(source.getTaskFileContent).toHaveBeenCalledWith({ ...context, recordProviderCall }, file.id);
+    expect(extractor).toHaveBeenCalledWith(file, context.signal, recordProviderCall);
   });
 
   it('rejects invalid bytes before provider calls', async () => {

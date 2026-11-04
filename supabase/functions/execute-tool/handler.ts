@@ -32,6 +32,7 @@ interface ExecuteToolPayload {
   readonly toolId: string;
   readonly toolVersion: string;
   readonly input: unknown;
+  readonly edgeRequestId?: string;
 }
 
 export interface AuthenticatedCaller<Context> {
@@ -141,7 +142,15 @@ export function createExecuteToolHandler<Context>(
     }
 
     try {
-      const outcome = await dependencies.execute(caller, payload, request.signal);
+      const edgeRequestId = request.headers.get('x-flowwork-request-id');
+      const outcome = await dependencies.execute(
+        caller,
+        {
+          ...payload,
+          ...(isUuid(edgeRequestId) ? { edgeRequestId } : {}),
+        },
+        request.signal,
+      );
       return jsonResponse(
         200,
         {

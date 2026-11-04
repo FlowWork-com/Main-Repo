@@ -2,6 +2,8 @@ import {
   isCredentialLikeString,
   isPersistableJson,
   type JsonValue,
+  type ProviderCallObservation,
+  type ProviderCallStage,
   type ToolMetadata,
 } from '../tools/contracts.ts';
 import type { ToolRegistry } from '../tools/toolRegistry.ts';
@@ -37,6 +39,8 @@ export interface PlannerRequest {
   /** Bounded advisory note from one optional FinNLP review pass; never an authority or executable instruction. */
   readonly reviewerFeedback?: string;
   readonly maxSteps?: number;
+  readonly providerCallStage?: ProviderCallStage;
+  readonly observeProviderCall?: (observation: ProviderCallObservation) => void | Promise<void>;
 }
 
 export interface PlannerProvider {

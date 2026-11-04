@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ProviderCallObservation } from '../../../src/tools/contracts.ts';
 import {
   FinnlpNewsProviderError,
   type FinnlpCompanyNewsInput,
@@ -50,25 +51,62 @@ export class SupabaseFinnlpCompanyNewsProvider implements FinnlpCompanyNewsProvi
     }
 
     const url = companyNewsUrl(apiKey, input);
-    const result = await fetchJson(url, this.fetcher, this.timeoutMs, MAX_PROVIDER_RESPONSE_BYTES);
-    throwForProviderStatus(result.status);
-    if (!Array.isArray(result.payload)) {
-      throw new FinnlpNewsProviderError('INVALID_RESPONSE');
-    }
+    const startedAt = performance.now();
+    let outcome: ProviderCallObservation['outcome'] = 'failed';
+    let failureCategory: ProviderCallObservation['failureCategory'] = 'unknown';
+    try {
+      const result = await fetchJson(url, this.fetcher, this.timeoutMs, MAX_PROVIDER_RESPONSE_BYTES);
+      try {
+        throwForProviderStatus(result.status);
+      } catch (error) {
+        if (error instanceof FinnlpNewsProviderError) {
+          failureCategory = mapFailureCategory(error.kind);
+        }
+        throw error;
+      }
+      if (!Array.isArray(result.payload)) {
+        failureCategory = 'invalid_response';
+        throw new FinnlpNewsProviderError('INVALID_RESPONSE');
+      }
 
-    return result.payload
-      .filter(isRecord)
-      .slice(0, 100)
-      .map((row) => ({
-        id: typeof row.id === 'number' || typeof row.id === 'string' ? String(row.id).slice(0, 100) : null,
-        headline: typeof row.headline === 'string' ? row.headline : '',
-        summary: typeof row.summary === 'string' ? row.summary : '',
-        source: typeof row.source === 'string' ? row.source : 'Unknown source',
-        url: typeof row.url === 'string' ? row.url : null,
-        publishedAt: typeof row.datetime === 'number' && Number.isFinite(row.datetime) && row.datetime > 0
-          ? new Date(row.datetime * 1000).toISOString()
-          : null,
-      }));
+      const articles = result.payload
+        .filter(isRecord)
+        .slice(0, 100)
+        .map((row) => ({
+          id: typeof row.id === 'number' || typeof row.id === 'string' ? String(row.id).slice(0, 100) : null,
+          headline: typeof row.headline === 'string' ? row.headline : '',
+          summary: typeof row.summary === 'string' ? row.summary : '',
+          source: typeof row.source === 'string' ? row.source : 'Unknown source',
+          url: typeof row.url === 'string' ? row.url : null,
+          publishedAt: typeof row.datetime === 'number' && Number.isFinite(row.datetime) && row.datetime > 0
+            ? new Date(row.datetime * 1000).toISOString()
+            : null,
+        }));
+      outcome = 'succeeded';
+      return articles;
+    } catch (error) {
+      if (error instanceof FinnlpNewsProviderError) {
+        failureCategory = mapFailureCategory(error.kind);
+      } else {
+        failureCategory = 'unavailable';
+      }
+      throw error;
+    } finally {
+      if (context.recordProviderCall) {
+        try {
+          await context.recordProviderCall({
+            stage: 'company_news',
+            providerId: 'finnhub.io',
+            outcome,
+            durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+            retryCount: 0,
+            ...(outcome === 'failed' ? { failureCategory } : {}),
+          });
+        } catch {
+          // Metric collection must not alter provider results or user-facing errors.
+        }
+      }
+    }
   }
 }
 
@@ -203,4 +241,17 @@ function hasControlCharacters(value: string): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function mapFailureCategory(
+  kind: FinnlpNewsProviderError['kind'],
+): ProviderCallObservation['failureCategory'] {
+  switch (kind) {
+    case 'NOT_CONNECTED': return 'configuration';
+    case 'UNAUTHORIZED': return 'unauthorized';
+    case 'RATE_LIMITED': return 'rate_limited';
+    case 'TIMEOUT': return 'timeout';
+    case 'INVALID_RESPONSE': return 'invalid_response';
+    case 'UNAVAILABLE': return 'unavailable';
+  }
 }

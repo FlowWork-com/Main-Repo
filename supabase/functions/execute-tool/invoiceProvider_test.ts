@@ -21,6 +21,7 @@ function makePdf(): TaskFileContent {
 Deno.test('invoice provider sends PDF as a file part and returns bounded JSON content', async () => {
   let requestUrl = '';
   let requestBody: Record<string, unknown> = {};
+  const observations: unknown[] = [];
   const extractor = createOpenAICompatibleInvoiceExtractor({
     baseUrl: 'https://provider.example/v1',
     modelName: 'vision-model',
@@ -32,10 +33,11 @@ Deno.test('invoice provider sends PDF as a file part and returns bounded JSON co
         choices: [{ message: { content: JSON.stringify({
           invoiceNumber: { value: 'INV-1', confidence: 0.9 },
         }) } }],
+        usage: { prompt_tokens: 50, completion_tokens: 12, total_tokens: 62 },
       });
     },
   });
-  const result = await extractor(makePdf());
+  const result = await extractor(makePdf(), undefined, (observation) => { observations.push(observation); });
   assertEquals(requestUrl, 'https://provider.example/v1/chat/completions');
   assertEquals(requestBody['model'], 'vision-model');
   assertEquals(requestBody['temperature'], undefined);
@@ -49,6 +51,18 @@ Deno.test('invoice provider sends PDF as a file part and returns bounded JSON co
   assertEquals(filePart.file.filename, 'invoice.pdf');
   assertEquals(filePart.file.file_data, 'data:application/pdf;base64,JVBERi0xLjc=');
   assertEquals((result as Record<string, unknown>)['invoiceNumber'], { value: 'INV-1', confidence: 0.9 });
+  assertEquals(observations.length, 1);
+  const observation = observations[0] as Record<string, unknown>;
+  assertEquals(observation.stage, 'invoice_extraction');
+  assertEquals(observation.providerId, 'provider.example');
+  assertEquals(observation.modelId, 'vision-model');
+  assertEquals(observation.outcome, 'succeeded');
+  assertEquals(observation.retryCount, 0);
+  assertEquals(observation.inputTokens, 50);
+  assertEquals(observation.outputTokens, 12);
+  assertEquals(observation.totalTokens, 62);
+  assertEquals(JSON.stringify(observations).includes('invoice bytes'), false);
+  assertEquals(JSON.stringify(observations).includes('server-only-key'), false);
 });
 
 Deno.test('invoice provider sends JPEG as an image URL part', async () => {

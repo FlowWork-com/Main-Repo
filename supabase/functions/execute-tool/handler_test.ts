@@ -10,6 +10,7 @@ import type {
 } from '../../../src/backend/toolExecutionRepository.ts';
 import type { WorkflowRepository } from '../../../src/backend/workflowRepository.ts';
 import type {
+  ProviderCallMetric,
   ToolDefinition,
   ToolExecutionContext,
   ToolExecutionResult,
@@ -23,6 +24,7 @@ import {
   type AuthenticatedCaller,
 } from './handler.ts';
 import { createVerifiedAuthenticator } from './auth.ts';
+import { withRequestObservability } from '../_shared/observability.ts';
 
 const ownerId = '41000000-0000-4000-8000-000000000001';
 const reviewerId = '41000000-0000-4000-8000-000000000002';
@@ -36,6 +38,7 @@ interface TestContext {
   readonly tasks: Map<string, WorkflowAggregate>;
   readonly members: Set<string>;
   readonly repository: MemoryExecutionRepository;
+  readonly providerMetrics: ProviderCallMetric[];
   readonly handler: (request: Request) => Promise<Response>;
   readonly executeCount: () => number;
 }
@@ -204,6 +207,7 @@ function setup(options: {
     new Set([`${workspaceId}:${taskId}`]),
   );
   const workflowRepository = new TestWorkflowRepository();
+  const providerMetrics: ProviderCallMetric[] = [];
   const registry = new ToolRegistry();
   for (const tool of createMvpTools(repository)) registry.register(tool);
   let toolCalls = 0;
@@ -258,6 +262,18 @@ function setup(options: {
   registry.register(timeoutTool);
   registry.register(cancellableTool);
   registry.register(gatedTool);
+  registry.register(customTool('provider-observation', async (context) => {
+    await context.recordProviderCall?.({
+      stage: 'financial_review',
+      providerId: 'review.example.test',
+      modelId: 'review-model',
+      outcome: 'succeeded',
+      durationMs: 21,
+      retryCount: 0,
+      inputTokens: 10,
+    });
+    return { success: true, output: { safe: true } };
+  }));
 
   const authenticate = async (token: string) => {
     if (token === 'valid-owner') {
@@ -286,6 +302,7 @@ function setup(options: {
           new ToolExecutor(options.timeoutMs ?? 100),
           repository,
           workflowRepository,
+          async (metric) => { providerMetrics.push(metric); },
         ).execute({
           ...request,
           userId: caller.userId,
@@ -298,6 +315,7 @@ function setup(options: {
         new ToolExecutor(options.timeoutMs ?? 100),
         repository,
         workflowRepository,
+        async (metric) => { providerMetrics.push(metric); },
       );
       const outcome = await service.execute({
         ...request,
@@ -312,6 +330,7 @@ function setup(options: {
     tasks,
     members,
     repository,
+    providerMetrics,
     handler,
     executeCount: () => toolCalls,
   };
@@ -460,6 +479,32 @@ Deno.test('Edge handler runs the canonical tool and returns the workflow state',
     recordCount(context) !== 1
   ) {
     throw new Error('A valid request must execute and enter Verifying.');
+  }
+});
+
+Deno.test('Edge request ID is correlated with the execution and provider metric', async () => {
+  const context = setup();
+  const observedHandler = withRequestObservability('execute-tool', context.handler);
+  const response = await post(
+    (request) => Promise.resolve(observedHandler(request)),
+    requestBody({ toolId: 'provider-observation' }),
+    'valid-owner',
+    { 'x-flowwork-request-id': 'spoofed-request-id' },
+  );
+
+  const metric = context.providerMetrics[0];
+  if (
+    response.status !== 200 ||
+    context.providerMetrics.length !== 1 ||
+    metric.edgeRequestId !== response.headers.get('x-request-id') ||
+    metric.edgeRequestId === 'spoofed-request-id' ||
+    metric.taskId !== taskId ||
+    metric.runId !== '45000000-0000-4000-8000-000000000001' ||
+    metric.stepId !== 'step_1' ||
+    metric.executionRequestId !== 'request-1' ||
+    metric.executionId !== executionId
+  ) {
+    throw new Error('The server request ID and durable execution identifiers must be correlated.');
   }
 });
 

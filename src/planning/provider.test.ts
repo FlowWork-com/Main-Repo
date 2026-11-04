@@ -46,6 +46,7 @@ describe('planner provider adapter', () => {
   it('uses structured JSON mode and returns a model-generated plan', async () => {
     let capturedUrl = '';
     let capturedRequest: RequestInit | undefined;
+    const observations: unknown[] = [];
     const adapter = createOpenAICompatiblePlannerAdapter({
       baseUrl: 'https://api.example.test/v1/',
       modelName: 'configured-model',
@@ -69,6 +70,13 @@ describe('planner provider adapter', () => {
             }],
             limitations: [],
           }) } }],
+          usage: {
+            prompt_tokens: 12,
+            completion_tokens: 6,
+            total_tokens: 18,
+          },
+          cost: 0.00042,
+          cost_currency: 'USD',
         });
       },
     });
@@ -81,6 +89,8 @@ describe('planner provider adapter', () => {
         fileName: 'invoices.csv',
         contentType: 'text/csv',
       }],
+      providerCallStage: 'planning_refinement',
+      observeProviderCall: (observation) => { observations.push(observation); },
     });
     expect(capturedUrl).toBe('https://api.example.test/v1/chat/completions');
     const sentBody = JSON.parse(String(capturedRequest?.body)) as {
@@ -97,6 +107,21 @@ describe('planner provider adapter', () => {
     expect(capturedRequest?.headers).toMatchObject({ authorization: 'Bearer server-only-key' });
     expect(response.success).toBe(true);
     if (response.success) expect(response.plan.summary).toBe('Transform the text.');
+    expect(observations).toHaveLength(1);
+    expect(observations[0]).toMatchObject({
+      stage: 'planning_refinement',
+      providerId: 'api.example.test',
+      modelId: 'configured-model',
+      outcome: 'succeeded',
+      retryCount: 0,
+      inputTokens: 12,
+      outputTokens: 6,
+      totalTokens: 18,
+      providerReportedCost: 0.00042,
+      providerReportedCostCurrency: 'USD',
+    });
+    expect(JSON.stringify(observations)).not.toContain('Uppercase hello.');
+    expect(JSON.stringify(observations)).not.toContain('server-only-key');
   });
 
   it('uses Groq strict JSON Schema outputs and decodes JSON-encoded tool input safely', async () => {

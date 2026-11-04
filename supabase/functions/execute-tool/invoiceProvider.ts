@@ -1,3 +1,4 @@
+import { isCredentialLikeString, type ProviderCallObservation } from '../../../src/tools/contracts.ts';
 import type { TaskFileContent } from '../../../src/tools/mvpTools.ts';
 import type { InvoiceDocumentExtractor } from '../../../src/tools/invoiceDocumentExtraction.ts';
 
@@ -48,7 +49,11 @@ export function createOpenAICompatibleInvoiceExtractor(
   const endpoint = `${config.baseUrl.replace(/\/+$/, '')}/chat/completions`;
   const fetcher = config.fetcher ?? fetch;
 
-  return async (file: TaskFileContent, externalSignal?: AbortSignal): Promise<unknown> => {
+  return async (
+    file: TaskFileContent,
+    externalSignal?: AbortSignal,
+    observeProviderCall?: (observation: ProviderCallObservation) => void | Promise<void>,
+  ): Promise<unknown> => {
     const base64Data = bytesToBase64(file.bytes);
     const documentPart = file.contentType === 'application/pdf'
       ? {
@@ -70,6 +75,10 @@ export function createOpenAICompatibleInvoiceExtractor(
     if (externalSignal?.aborted) controller.abort();
     else externalSignal?.addEventListener('abort', onExternalAbort, { once: true });
     const timeout = setTimeout(() => controller.abort(), config.timeoutMs ?? 45_000);
+    const startedAt = performance.now();
+    let outcome: ProviderCallObservation['outcome'] = 'failed';
+    let failureCategory: ProviderCallObservation['failureCategory'] = 'unknown';
+    let usage: ReturnType<typeof readProviderUsage> = {};
     try {
       const response = await fetcher(endpoint, {
         method: 'POST',
@@ -113,23 +122,59 @@ export function createOpenAICompatibleInvoiceExtractor(
       });
 
       if (!response.ok) {
-        if (response.status === 429) throw new Error('Invoice provider is rate limited.');
+        if (response.status === 429) {
+          failureCategory = 'rate_limited';
+          throw new Error('Invoice provider is rate limited.');
+        }
+        failureCategory = response.status === 401 || response.status === 403
+          ? 'unauthorized'
+          : 'unavailable';
         throw new Error('Invoice provider request failed.');
       }
       const envelope = await readBoundedJson(response, 65_536);
+      usage = readProviderUsage(envelope);
       const content = readCompletionContent(envelope);
-      if (!content) throw new Error('Invoice provider returned no structured content.');
+      if (!content) {
+        failureCategory = 'invalid_response';
+        throw new Error('Invoice provider returned no structured content.');
+      }
       let parsed: unknown;
       try {
         parsed = JSON.parse(content);
       } catch {
+        failureCategory = 'invalid_response';
         throw new Error('Invoice provider returned invalid structured content.');
       }
-      if (!isRecord(parsed)) throw new Error('Invoice provider returned invalid structured content.');
+      if (!isRecord(parsed)) {
+        failureCategory = 'invalid_response';
+        throw new Error('Invoice provider returned invalid structured content.');
+      }
+      outcome = 'succeeded';
       return parsed;
+    } catch (error) {
+      if (controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
+        failureCategory = 'timeout';
+      }
+      throw error;
     } finally {
       clearTimeout(timeout);
       externalSignal?.removeEventListener('abort', onExternalAbort);
+      if (observeProviderCall) {
+        try {
+          await observeProviderCall({
+            stage: 'invoice_extraction',
+            providerId: new URL(config.baseUrl).hostname,
+            ...(safeModelId(config.modelName) ? { modelId: safeModelId(config.modelName) } : {}),
+            outcome,
+            durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+            retryCount: 0,
+            ...usage,
+            ...(outcome === 'failed' ? { failureCategory } : {}),
+          });
+        } catch {
+          // Metric collection must not alter provider results or user-facing errors.
+        }
+      }
     }
   };
 }
@@ -178,6 +223,48 @@ function readCompletionContent(value: unknown): string | null {
   if (!isRecord(first) || !isRecord(first.message)) return null;
   const content = first.message.content;
   return typeof content === 'string' && content.length <= 60_000 ? content : null;
+}
+
+function readProviderUsage(value: unknown): Partial<Pick<
+  ProviderCallObservation,
+  'inputTokens' | 'outputTokens' | 'totalTokens' | 'providerReportedCost' | 'providerReportedCostCurrency'
+>> {
+  if (!isRecord(value)) return {};
+  const usage = isRecord(value.usage) ? value.usage : {};
+  const inputTokens = readNonNegativeInteger(usage.prompt_tokens ?? usage.input_tokens);
+  const outputTokens = readNonNegativeInteger(usage.completion_tokens ?? usage.output_tokens);
+  const totalTokens = readNonNegativeInteger(usage.total_tokens);
+  const cost = readFiniteNonNegativeNumber(usage.cost ?? value.cost);
+  const currencyValue = usage.cost_currency ?? usage.currency ?? value.cost_currency;
+  const currency = typeof currencyValue === 'string' && /^[A-Z]{3}$/.test(currencyValue)
+    ? currencyValue
+    : undefined;
+  return {
+    ...(inputTokens === undefined ? {} : { inputTokens }),
+    ...(outputTokens === undefined ? {} : { outputTokens }),
+    ...(totalTokens === undefined ? {} : { totalTokens }),
+    ...(cost === undefined ? {} : { providerReportedCost: cost }),
+    ...(currency === undefined ? {} : { providerReportedCostCurrency: currency }),
+  };
+}
+
+function readNonNegativeInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+function readFiniteNonNegativeNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+function safeModelId(value: string): string | undefined {
+  const modelId = value.trim();
+  return modelId.length > 0 && modelId.length <= 200 && !isCredentialLikeString(modelId)
+    ? modelId
+    : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

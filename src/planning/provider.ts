@@ -5,7 +5,7 @@ import {
   type PlannerResponse,
   type WorkflowPlan,
 } from './planning.ts';
-import type { ToolMetadata } from '../tools/contracts.ts';
+import { isCredentialLikeString, type ProviderCallObservation, type ToolMetadata } from '../tools/contracts.ts';
 
 export interface PlannerEnvironment {
   readonly FLOWWORK_PLANNER_PROVIDER?: string;
@@ -107,6 +107,10 @@ export function createOpenAICompatiblePlannerAdapter(config: {
     async generatePlan(request: PlannerRequest): Promise<PlannerResponse> {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), config.timeoutMs ?? 20_000);
+      const startedAt = performance.now();
+      let outcome: ProviderCallObservation['outcome'] = 'failed';
+      let failureCategory: ProviderCallObservation['failureCategory'] = 'unknown';
+      let usage: ReturnType<typeof readProviderUsage> = {};
       try {
         const response = await fetcher(endpoint, {
           method: 'POST',
@@ -163,32 +167,38 @@ export function createOpenAICompatiblePlannerAdapter(config: {
         if (response.status === 429) {
           const providerErrorCode = await readProviderErrorCode(response);
           if (providerErrorCode && quotaErrorCodes.has(providerErrorCode)) {
+            failureCategory = 'quota';
             return failure(
               'PROVIDER_QUOTA_EXCEEDED',
               'The planner API has reached a credit, usage, or spending limit. Check provider billing and limits before retrying.',
             );
           }
+          failureCategory = 'rate_limited';
           return failure('RATE_LIMITED', 'The planner is temporarily rate limited. Try again shortly.');
         }
         if (!response.ok) {
           if (response.status === 401 || response.status === 403) {
+            failureCategory = 'unauthorized';
             return failure(
               'PROVIDER_UNAVAILABLE',
               `The planner provider rejected authentication (HTTP ${response.status}). Check the API key and provider account access.`,
             );
           }
           if (response.status === 400 || response.status === 404 || response.status === 422) {
+            failureCategory = 'invalid_response';
             return failure(
               'PROVIDER_UNAVAILABLE',
               `The planner provider rejected the model or request (HTTP ${response.status}). Check the configured model ID, endpoint, and JSON response mode.`,
             );
           }
           if (response.status >= 500) {
+            failureCategory = 'unavailable';
             return failure(
               'PROVIDER_UNAVAILABLE',
               `The planner provider returned a server error (HTTP ${response.status}). Retry later.`,
             );
           }
+          failureCategory = 'unavailable';
           return failure(
             'PROVIDER_UNAVAILABLE',
             `The planner provider returned an unexpected HTTP status (${response.status}). Check provider access and configuration.`,
@@ -199,28 +209,37 @@ export function createOpenAICompatiblePlannerAdapter(config: {
         try {
           envelope = await readProviderJson(response);
         } catch {
+          failureCategory = 'invalid_response';
           return failure('INVALID_RESPONSE', 'The planner returned an invalid response.');
         }
+        usage = readProviderUsage(envelope);
         const content = readCompletionContent(envelope);
-        if (!content) return failure('INVALID_RESPONSE', 'The planner returned an invalid response.');
+        if (!content) {
+          failureCategory = 'invalid_response';
+          return failure('INVALID_RESPONSE', 'The planner returned an invalid response.');
+        }
 
         let generated: unknown;
         try {
           generated = JSON.parse(content);
         } catch {
+          failureCategory = 'invalid_response';
           return failure('INVALID_RESPONSE', 'The planner returned an invalid response.');
         }
         if (!isRecord(generated)) {
+          failureCategory = 'invalid_response';
           return failure('INVALID_RESPONSE', 'The planner returned an invalid response.');
         }
         if (useGroqStructuredOutputs) {
           try {
             generated = decodeGroqPlannerInputs(generated);
           } catch {
+            failureCategory = 'invalid_response';
             return failure('INVALID_RESPONSE', 'The planner returned invalid structured tool input.');
           }
         }
         if (!isRecord(generated)) {
+          failureCategory = 'invalid_response';
           return failure('INVALID_RESPONSE', 'The planner returned an invalid response.');
         }
 
@@ -236,17 +255,37 @@ export function createOpenAICompatiblePlannerAdapter(config: {
           validationStatus: 'invalid',
           limitations: Array.isArray(generated.limitations) ? generated.limitations as string[] : [],
         };
+        outcome = 'succeeded';
+        failureCategory = undefined;
         return { success: true, plan };
       } catch (error) {
         if (controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
+          failureCategory = 'timeout';
           return failure('PROVIDER_TIMEOUT', 'The planner request timed out. Try again.');
         }
+        failureCategory = 'unavailable';
         return failure(
           'PROVIDER_UNAVAILABLE',
           'The planner provider could not be reached. Check the configured base URL and network access.',
         );
       } finally {
         clearTimeout(timeout);
+        if (request.observeProviderCall) {
+          try {
+            await request.observeProviderCall({
+              stage: request.providerCallStage ?? 'planning',
+              providerId: new URL(config.baseUrl).hostname,
+              ...(safeModelId(config.modelName) ? { modelId: safeModelId(config.modelName) } : {}),
+              outcome,
+              durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+              retryCount: 0,
+              ...usage,
+              ...(outcome === 'failed' ? { failureCategory } : {}),
+            });
+          } catch {
+            // Metric collection must not alter provider results or user-facing errors.
+          }
+        }
       }
     },
   };
@@ -350,6 +389,48 @@ function readCompletionContent(value: unknown): string | null {
   const first = value.choices[0];
   if (!isRecord(first) || !isRecord(first.message) || typeof first.message.content !== 'string') return null;
   return first.message.content;
+}
+
+function readProviderUsage(value: unknown): Partial<Pick<
+  ProviderCallObservation,
+  'inputTokens' | 'outputTokens' | 'totalTokens' | 'providerReportedCost' | 'providerReportedCostCurrency'
+>> {
+  if (!isRecord(value)) return {};
+  const usage = isRecord(value.usage) ? value.usage : {};
+  const inputTokens = readNonNegativeInteger(usage.prompt_tokens ?? usage.input_tokens);
+  const outputTokens = readNonNegativeInteger(usage.completion_tokens ?? usage.output_tokens);
+  const totalTokens = readNonNegativeInteger(usage.total_tokens);
+  const cost = readFiniteNonNegativeNumber(usage.cost ?? value.cost);
+  const currencyValue = usage.cost_currency ?? usage.currency ?? value.cost_currency;
+  const currency = typeof currencyValue === 'string' && /^[A-Z]{3}$/.test(currencyValue)
+    ? currencyValue
+    : undefined;
+  return {
+    ...(inputTokens === undefined ? {} : { inputTokens }),
+    ...(outputTokens === undefined ? {} : { outputTokens }),
+    ...(totalTokens === undefined ? {} : { totalTokens }),
+    ...(cost === undefined ? {} : { providerReportedCost: cost }),
+    ...(currency === undefined ? {} : { providerReportedCostCurrency: currency }),
+  };
+}
+
+function readNonNegativeInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+function readFiniteNonNegativeNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+function safeModelId(value: string): string | undefined {
+  const modelId = value.trim();
+  return modelId.length > 0 && modelId.length <= 200 && !isCredentialLikeString(modelId)
+    ? modelId
+    : undefined;
 }
 
 async function readProviderJson(response: Response): Promise<unknown> {

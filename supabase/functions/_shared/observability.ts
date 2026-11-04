@@ -20,9 +20,12 @@ export function withRequestObservability(
     let outcome: RequestOutcome;
     let errorCode: string | undefined;
     let response: Response;
+    const handlerHeaders = new Headers(request.headers);
+    handlerHeaders.set('x-flowwork-request-id', requestId);
+    const observedRequest = new Request(request, { headers: handlerHeaders });
 
     try {
-      response = await handler(request);
+      response = await handler(observedRequest);
       responseStatus = response.status;
       outcome = classifyOutcome(response.status);
       if (response.status >= 400) {

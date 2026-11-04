@@ -1,6 +1,7 @@
 import {
   toolFailure,
   type JsonValue,
+  type ProviderCallObservation,
   type ToolDefinition,
   type ToolExecutionContext,
 } from './contracts.ts';
@@ -43,7 +44,11 @@ export interface InvoiceDocumentExtractionReport {
   readonly interpretationNotes: readonly string[];
 }
 
-export type InvoiceDocumentExtractor = (file: TaskFileContent, signal?: AbortSignal) => Promise<unknown>;
+export type InvoiceDocumentExtractor = (
+  file: TaskFileContent,
+  signal?: AbortSignal,
+  observeProviderCall?: (observation: ProviderCallObservation) => void | Promise<void>,
+) => Promise<unknown>;
 
 type FieldKind = 'string' | 'number';
 
@@ -108,7 +113,7 @@ export function createInvoiceDocumentExtractionTool(
 
       let extracted: unknown;
       try {
-        extracted = await extractor(file, context.signal);
+        extracted = await extractor(file, context.signal, context.recordProviderCall);
       } catch {
         return toolFailure(
           'EXECUTOR_UNAVAILABLE',

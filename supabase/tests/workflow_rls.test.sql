@@ -1,6 +1,6 @@
 begin;
 
-select plan(29);
+select plan(32);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -453,6 +453,36 @@ select is(
   (select payload->'result'->>'evidenceReference' from public.task_events where task_id = '30000000-0000-4000-8000-000000000002' and event_type = 'verification.recorded'),
   'receipt://rpc-test/evidence',
   'verification evidence is persisted in the event history'
+);
+
+reset role;
+delete from public.workspace_members
+where workspace_id = '20000000-0000-0000-0000-000000000001'
+  and user_id = '10000000-0000-0000-0000-000000000003';
+select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000003', true);
+set local role authenticated;
+
+select is(
+  public.is_workspace_member('20000000-0000-0000-0000-000000000001'),
+  false,
+  'a removed workspace member immediately fails the membership helper'
+);
+select is(
+  (select count(*) from public.tasks where id = '30000000-0000-0000-0000-000000000002'),
+  0::bigint,
+  'a removed workspace member immediately loses task RLS visibility'
+);
+select throws_ok(
+  $$ select public.create_workflow_task(
+       '30000000-0000-0000-0000-000000000006',
+       '20000000-0000-0000-0000-000000000001',
+       'Removed member task',
+       '',
+       '{}'::jsonb
+     ) $$,
+  '42501',
+  'Workspace access is required.',
+  'a removed workspace member cannot invoke an authenticated task-creation RPC'
 );
 
 select * from finish();

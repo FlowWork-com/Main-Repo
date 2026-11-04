@@ -1,6 +1,6 @@
 begin;
 
-select plan(20);
+select plan(21);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -157,6 +157,18 @@ select is(
   (select count(*) from storage.objects where bucket_id = 'workflow-files'),
   0::bigint,
   'non-members cannot read private task attachments'
+);
+select throws_ok(
+  $$ select public.register_task_file(
+       '82000000-0000-4000-8000-000000000001',
+       '83000000-0000-4000-8000-000000000001',
+       'evidence.txt',
+       '82000000-0000-4000-8000-000000000001/83000000-0000-4000-8000-000000000001/84000000-0000-4000-8000-000000000001/evidence.txt',
+       'text/plain'
+     ) $$,
+  '42501',
+  'Task access is required.',
+  'non-members cannot register a known private object on another workspace task'
 );
 
 select set_config('request.jwt.claim.sub', '81000000-0000-4000-8000-000000000001', true);

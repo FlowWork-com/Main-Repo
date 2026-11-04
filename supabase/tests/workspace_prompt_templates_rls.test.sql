@@ -1,6 +1,6 @@
 begin;
 
-select plan(12);
+select plan(14);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -15,8 +15,28 @@ insert into auth.users (
     'b1000000-0000-4000-8000-000000000002',
     '00000000-0000-0000-0000-000000000000',
     'authenticated', 'authenticated', 'prompt-template-outsider@example.test', '', now(), now(), now()
+  ),
+  (
+    'b1000000-0000-4000-8000-000000000003',
+    '00000000-0000-0000-0000-000000000000',
+    'authenticated', 'authenticated', 'prompt-template-other-workspace@example.test', '', now(), now(), now()
   )
 on conflict (id) do nothing;
+
+insert into public.workspaces (id, name, created_by)
+values (
+  'b2000000-0000-4000-8000-000000000002',
+  'Other prompt workspace',
+  'b1000000-0000-4000-8000-000000000003'
+)
+on conflict (id) do nothing;
+insert into public.workspace_members (workspace_id, user_id, role)
+values (
+  'b2000000-0000-4000-8000-000000000002',
+  'b1000000-0000-4000-8000-000000000003',
+  'owner'
+)
+on conflict (workspace_id, user_id) do nothing;
 
 insert into public.workspaces (id, name, created_by)
 values (
@@ -166,6 +186,33 @@ select throws_ok(
   '42501',
   'Workspace access is required.',
   'non-members cannot create templates in another workspace'
+);
+
+reset role;
+select set_config('request.jwt.claim.sub', 'b1000000-0000-4000-8000-000000000003', true);
+set local role authenticated;
+select throws_ok(
+  $$ select public.save_workspace_prompt_template(
+       'b2000000-0000-4000-8000-000000000002',
+       (select id from prompt_template_test_state),
+       2,
+       'Cross-workspace edit',
+       'Finance',
+       'This edit must remain scoped to its original workspace.'
+     ) $$,
+  '42501',
+  'Prompt template access is required.',
+  'a member cannot edit a template by combining their workspace ID with another workspace template ID'
+);
+select throws_ok(
+  $$ select public.archive_workspace_prompt_template(
+       'b2000000-0000-4000-8000-000000000002',
+       (select id from prompt_template_test_state),
+       2
+     ) $$,
+  '42501',
+  'Prompt template access is required.',
+  'a member cannot archive a template by combining their workspace ID with another workspace template ID'
 );
 
 select * from finish();

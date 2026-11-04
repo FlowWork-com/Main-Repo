@@ -1,6 +1,6 @@
 begin;
 
-select plan(19);
+select plan(22);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -15,6 +15,11 @@ insert into auth.users (
     '61000000-0000-4000-8000-000000000002',
     '00000000-0000-0000-0000-000000000000',
     'authenticated', 'authenticated', 'plan-outsider@example.test', '', now(), now(), now()
+  ),
+  (
+    '61000000-0000-4000-8000-000000000003',
+    '00000000-0000-0000-0000-000000000000',
+    'authenticated', 'authenticated', 'plan-other-workspace@example.test', '', now(), now(), now()
   )
 on conflict (id) do nothing;
 
@@ -37,6 +42,55 @@ insert into public.tasks (
   '62000000-0000-4000-8000-000000000001',
   '61000000-0000-4000-8000-000000000001',
   'Plan test task', '', 'Planning', 1
+);
+
+insert into public.workspaces (id, name, created_by)
+values (
+  '62000000-0000-4000-8000-000000000002',
+  'Other plan workspace',
+  '61000000-0000-4000-8000-000000000003'
+);
+insert into public.workspace_members (workspace_id, user_id, role)
+values (
+  '62000000-0000-4000-8000-000000000002',
+  '61000000-0000-4000-8000-000000000003',
+  'owner'
+);
+insert into public.tasks (
+  id, workspace_id, owner_id, title, details, status, attempt
+) values (
+  '63000000-0000-4000-8000-000000000002',
+  '62000000-0000-4000-8000-000000000002',
+  '61000000-0000-4000-8000-000000000003',
+  'Other workspace plan task', '', 'Planning', 1
+);
+insert into public.workflow_plans (
+  id, workspace_id, task_id, version, proposed_by, plan,
+  decision, decided_by, decided_at
+) values (
+  '64000000-0000-4000-8000-000000000002',
+  '62000000-0000-4000-8000-000000000002',
+  '63000000-0000-4000-8000-000000000002',
+  1,
+  '61000000-0000-4000-8000-000000000003',
+  jsonb_build_object(
+    'id', '64000000-0000-4000-8000-000000000002',
+    'taskId', '63000000-0000-4000-8000-000000000002',
+    'goal', 'Uppercase hello.',
+    'summary', 'Transform the supplied text.',
+    'validationStatus', 'valid',
+    'steps', jsonb_build_array(jsonb_build_object(
+      'id', 'step_1',
+      'title', 'Transform text',
+      'toolId', 'text-transform',
+      'toolVersion', '1.0.0',
+      'input', jsonb_build_object('operation', 'uppercase', 'text', 'hello'),
+      'dependencies', '[]'::jsonb
+    ))
+  ),
+  'accepted',
+  '61000000-0000-4000-8000-000000000003',
+  now()
 );
 
 create temporary table plan_test_payload (value jsonb);
@@ -131,6 +185,35 @@ select is(
   (select count(*) from public.task_tool_executions),
   0::bigint,
   'accepting a plan never creates a tool execution'
+);
+select throws_ok(
+  $$ select pg_temp.create_signed_workflow_plan(
+       '63000000-0000-4000-8000-000000000002',
+       jsonb_set(
+         (select value from plan_test_payload),
+         '{taskId}',
+         '"63000000-0000-4000-8000-000000000002"'::jsonb
+       )
+     ) $$,
+  '42501',
+  'Task access is required.',
+  'a member cannot create a plan for a task in another workspace'
+);
+select throws_ok(
+  $$ select public.decide_workflow_plan(
+       '64000000-0000-4000-8000-000000000002', 'accepted'
+     ) $$,
+  '42501',
+  'Plan access is required.',
+  'a member cannot decide an existing plan from another workspace'
+);
+select throws_ok(
+  $$ select public.start_workflow_plan_run(
+       '64000000-0000-4000-8000-000000000002'
+     ) $$,
+  '42501',
+  'Plan access is required.',
+  'a member cannot start an existing plan run from another workspace'
 );
 reset role;
 update public.tasks

@@ -164,6 +164,9 @@ jobs:
       - name: Test database migrations and RLS
         run: supabase test db
 
+      - name: Test concurrent plan-run claims and ambiguous recovery
+        run: node scripts/test-plan-run-worker-concurrency.mjs
+
   container:
     runs-on: ubuntu-latest
     timeout-minutes: 15

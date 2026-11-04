@@ -30,6 +30,17 @@ An execution recovered this way is a failed historical attempt, not proof that t
 
 The plan worker never automatically retries a failed or ambiguous step. The current tool contract does not declare a safe/idempotent retry guarantee, so a paused run is a safety stop, not an invitation to click retry.
 
+## Concurrency and ambiguous-recovery regression
+
+`scripts/test-plan-run-worker-concurrency.mjs` runs against the repository-local Supabase database in CI after the migration and pgTAP suite. It creates isolated synthetic workspace, task, plan, run, step, and execution rows, then opens overlapping PostgreSQL sessions:
+
+- Worker A claims a run inside an uncommitted transaction and holds the run-row lock.
+- Worker B is observed waiting on that lock; after A commits, B returns `busy` rather than acquiring a second lease.
+- After the lease expires, a new worker can reclaim a run with no in-flight step, while the old worker cannot finalize after losing ownership.
+- A separate expired run with a running step and matching running tool-execution row is paused as `expired_lease_ambiguous_step`. The step and execution remain running with the same execution ID; no output or evidence is written, the action is not replayed, and the task is not completed.
+
+This test proves database serialization and conservative recovery behavior with synthetic state. It does not execute a tool, prove the outcome of an external action, or substitute for a staging recovery drill. Never infer that a running execution had no external effect from a timeout or lease expiry.
+
 1. Inspect `workflow_plan_runs` for the run status, `pause_reason`, `policy_version`, lease timestamps, and cancellation request.
 2. Inspect `workflow_plan_step_runs` in `step_index` order, including each step's attempt, execution ID, status, sanitized error, and output.
 3. Correlate the step's execution ID with `task_tool_executions` and inspect `workflow_plan_run_events` for worker claims, step outcomes, lease expiry, and pause/cancel requests.

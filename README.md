@@ -25,6 +25,8 @@ npx supabase test db
 
 The local Supabase CLI requires Docker. Supabase Auth email confirmation is enabled in the local configuration.
 
+Email sign-in uses the current browser origin by default. In Codespaces, if the page is opened as `http://localhost:5173`, Vite derives the forwarded port URL (for example, `https://<codespace>-5173.app.github.dev`) for email callbacks. The hosted Supabase project's Auth URL Configuration must allow that forwarded URL; add `https://*-5173.app.github.dev/**` to its redirect allowlist, or set `VITE_AUTH_REDIRECT_URL` in `.env.local` to another reachable HTTPS app origin and allowlist it exactly. Request a fresh sign-in email after changing the redirect. Keep the Supabase Site URL itself on a stable, reachable app URL; it is the fallback when a redirect is not allowlisted.
+
 ### Run the containerized frontend
 
 Copy `.env.example` to `.env` and set the local Supabase URL and public anon key printed by `npx supabase status`. Then build and start the frontend container:

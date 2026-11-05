@@ -28,6 +28,7 @@ import { PromptTemplatesPanel } from './components/PromptTemplatesPanel';
 import { GoogleWorkspacePanel } from './components/GoogleWorkspacePanel';
 import { FinnlpIntegrationPanel } from './components/FinnlpIntegrationPanel';
 import { InvoiceExtractionQualityPanel } from './components/InvoiceExtractionQualityPanel';
+import { getAuthRedirectTo } from './authRedirect';
 
 export function App() {
   const [connection] = useState(initializeConnection);
@@ -77,7 +78,12 @@ export function App() {
     try {
       const { error } = await client.auth.signInWithOtp({
         email: email.trim(),
-        options: { emailRedirectTo: window.location.origin },
+        options: {
+          emailRedirectTo: getAuthRedirectTo(
+            window.location.origin,
+            import.meta.env.VITE_AUTH_REDIRECT_URL,
+          ),
+        },
       });
       if (error) throw error;
       setLinkSent(true);

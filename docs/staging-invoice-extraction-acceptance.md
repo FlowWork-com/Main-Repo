@@ -17,7 +17,26 @@
    - Secrets `STAGING_TEST_USER_EMAIL`, `STAGING_TEST_USER_PASSWORD`
 5. Choose a dedicated staging workspace containing the requester and at least one other distinct workspace member. The requester and approver must be different Supabase Auth users. The second member performs the approval in FlowWork itself; do not put an approver password in GitHub Actions or simulate approval in the script.
 
-The staging workspace previously inspected had only one member. Add a second dedicated test user through the supported workspace membership flow before testing the approval gate. The preparation workflow fails before task/file creation or provider invocation if the requester cannot authenticate or is not a member. The task remains safely pending until the second member approves it through the UI.
+The staging workspace previously inspected had only one member. The current app does not expose a workspace-invitation flow, and authenticated users have SELECT-only access to `workspace_members`. For this one-off staging test, a trusted staging operator must:
+
+1. Invite/create a second dedicated test user under **Supabase → Authentication → Users** in FlowWork Staging and complete its sign-in setup.
+2. Copy that user's Auth UUID from the staging Auth Users page.
+3. In the **FlowWork Staging Supabase SQL Editor** (as the project database operator), add that exact user as a `member` of the staging workspace. Verify both UUIDs and the selected project before executing:
+
+~~~sql
+insert into public.workspace_members (workspace_id, user_id, role)
+select
+  '<STAGING_WORKSPACE_ID>'::uuid,
+  u.id,
+  'member'
+from auth.users u
+where u.id = '<SECOND_TEST_USER_AUTH_UUID>'::uuid
+on conflict (workspace_id, user_id) do nothing;
+~~~
+
+4. Verify the new membership row exists for the exact workspace and Auth UUID before using the account to approve a synthetic task.
+
+Do not grant INSERT to `authenticated`, create a broad membership RPC, or bypass the self-approval constraint for this test. The preparation workflow fails before task/file creation or provider invocation if the requester cannot authenticate or is not a member. The task remains safely pending until the second member approves it through the UI.
 
 ## Prepare the synthetic task
 

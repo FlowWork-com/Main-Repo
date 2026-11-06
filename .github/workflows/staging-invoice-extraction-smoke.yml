@@ -1,18 +1,14 @@
-name: Staging synthetic invoice extraction acceptance
+name: Prepare staging synthetic invoice for human-approved extraction
 
 on:
   workflow_dispatch:
     inputs:
       workspace_id:
-        description: "Dedicated staging workspace UUID shared by the two synthetic test users."
+        description: "Dedicated staging workspace UUID for the requester and independent approver."
         type: string
         required: true
       requester_user_id:
         description: "Supabase Auth UUID for the task requester/uploader."
-        type: string
-        required: true
-      approver_user_id:
-        description: "Different Supabase Auth UUID for the independent approver."
         type: string
         required: true
 
@@ -25,7 +21,7 @@ concurrency:
 
 jobs:
   invoice-acceptance:
-    name: Approved synthetic PDF invoice acceptance
+    name: Prepare synthetic PDF and pending approval
     if: github.ref == 'refs/heads/main'
     environment:
       name: staging
@@ -46,7 +42,6 @@ jobs:
           STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
           STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
           REQUESTER_ID: ${{ inputs.requester_user_id }}
-          APPROVER_ID: ${{ inputs.approver_user_id }}
           WORKSPACE_ID: ${{ inputs.workspace_id }}
         shell: bash
         run: |
@@ -63,12 +58,8 @@ jobs:
             echo "::error::STAGING_SUPABASE_URL must exactly match STAGING_SUPABASE_PROJECT_REF."
             exit 1
           fi
-          if [[ ! "$WORKSPACE_ID" =~ ^[0-9a-fA-F-]{36}$ || ! "$REQUESTER_ID" =~ ^[0-9a-fA-F-]{36}$ || ! "$APPROVER_ID" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+          if [[ ! "$WORKSPACE_ID" =~ ^[0-9a-fA-F-]{36}$ || ! "$REQUESTER_ID" =~ ^[0-9a-fA-F-]{36}$ ]]; then
             echo "::error::Workspace and test-user inputs must be UUIDs."
-            exit 1
-          fi
-          if [[ "$REQUESTER_ID" == "$APPROVER_ID" ]]; then
-            echo "::error::Requester and approver must be different users; self-approval is forbidden."
             exit 1
           fi
 
@@ -78,7 +69,7 @@ jobs:
       - name: Check staging smoke script syntax
         run: node --check scripts/staging-invoice-extraction-smoke.mjs
 
-      - name: Run approved synthetic PDF invoice extraction
+      - name: Prepare synthetic PDF and pending approval (no provider call)
         env:
           STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
           STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
@@ -86,8 +77,5 @@ jobs:
           STAGING_TEST_USER_EMAIL: ${{ secrets.STAGING_TEST_USER_EMAIL }}
           STAGING_TEST_USER_PASSWORD: ${{ secrets.STAGING_TEST_USER_PASSWORD }}
           STAGING_TEST_USER_ID: ${{ inputs.requester_user_id }}
-          STAGING_APPROVER_EMAIL: ${{ secrets.STAGING_APPROVER_EMAIL }}
-          STAGING_APPROVER_PASSWORD: ${{ secrets.STAGING_APPROVER_PASSWORD }}
-          STAGING_APPROVER_USER_ID: ${{ inputs.approver_user_id }}
           STAGING_WORKSPACE_ID: ${{ inputs.workspace_id }}
         run: node scripts/staging-invoice-extraction-smoke.mjs

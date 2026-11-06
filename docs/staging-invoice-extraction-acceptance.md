@@ -25,7 +25,7 @@ After this branch is merged to `main`, open **GitHub → Actions → Prepare sta
 - `workspace_id`: the dedicated staging workspace UUID
 - `requester_user_id`: the synthetic task creator/uploader
 
-The workflow is manual-only, requires the `staging` environment, validates the project ref/URL, and explicitly refuses the FlowWork Main DB production ref and the separate Invoice DB ref.
+The workflow is manual-only, requires the `staging` environment, pins the project ref to FlowWork Staging (`flfwtsxuvzyuotltfrbt`), validates the URL, and explicitly refuses the FlowWork Main DB production ref and the separate Invoice DB ref.
 
 The workflow signs in as the requester, creates a task with a one-page fictitious invoice PDF, uploads it to the private `workflow-files` bucket, registers the attachment through `register_task_file`, and persists a pending approval request. It verifies that the task status is `Waiting for approval` and that the `task_approvals` row is still undecided. It then exits without approving or calling the invoice provider.
 

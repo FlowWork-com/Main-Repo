@@ -5,6 +5,7 @@ import process from 'node:process';
 import { URL } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 
+const EXPECTED_STAGING_PROJECT_REF = 'flfwtsxuvzyuotltfrbt';
 const FORBIDDEN_PROJECT_REFS = new Set([
   'nhvmeahmwywhaxtnuehr',
   'tlhznghnfdwpilhfjyyu',
@@ -106,6 +107,8 @@ async function main() {
 
   const parsedUrl = new URL(rawUrl);
   assert(/^[a-z0-9]{20}$/.test(projectRef), 'Staging project reference is invalid.');
+  assert(projectRef === EXPECTED_STAGING_PROJECT_REF,
+    'Refusing to run outside the confirmed FlowWork Staging project.');
   assert(!FORBIDDEN_PROJECT_REFS.has(projectRef),
     'Refusing to run against FlowWork Main DB production or the separate Invoice DB.');
   assert(

@@ -43,11 +43,11 @@ jobs:
 
       - name: Refuse production and non-staging targets
         env:
-          STAGING_SUPABASE_PROJECT_REF: ${ vars.STAGING_SUPABASE_PROJECT_REF }}
-          STAGING_SUPABASE_URL: ${ secrets.STAGING_SUPABASE_URL }}
-          REQUESTER_ID: ${ inputs.requester_user_id }}
-          APPROVER_ID: ${ inputs.approver_user_id }}
-          WORKSPACE_ID: ${ inputs.workspace_id }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+          STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          REQUESTER_ID: ${{ inputs.requester_user_id }}
+          APPROVER_ID: ${{ inputs.approver_user_id }}
+          WORKSPACE_ID: ${{ inputs.workspace_id }}
         shell: bash
         run: |
           set -euo pipefail
@@ -80,14 +80,14 @@ jobs:
 
       - name: Run approved synthetic PDF invoice extraction
         env:
-          STAGING_SUPABASE_URL: ${ secrets.STAGING_SUPABASE_URL }}
-          STAGING_SUPABASE_PROJECT_REF: ${ vars.STAGING_SUPABASE_PROJECT_REF }}
-          STAGING_SUPABASE_ANON_KEY: ${ secrets.STAGING_SUPABASE_ANON_KEY }}
-          STAGING_TEST_USER_EMAIL: ${ secrets.STAGING_TEST_USER_EMAIL }}
-          STAGING_TEST_USER_PASSWORD: ${ secrets.STAGING_TEST_USER_PASSWORD }}
-          STAGING_TEST_USER_ID: ${ inputs.requester_user_id }}
-          STAGING_APPROVER_EMAIL: ${ secrets.STAGING_APPROVER_EMAIL }}
-          STAGING_APPROVER_PASSWORD: ${ secrets.STAGING_APPROVER_PASSWORD }}
-          STAGING_APPROVER_USER_ID: ${ inputs.approver_user_id }}
-          STAGING_WORKSPACE_ID: ${ inputs.workspace_id }}
+          STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+          STAGING_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+          STAGING_TEST_USER_EMAIL: ${{ secrets.STAGING_TEST_USER_EMAIL }}
+          STAGING_TEST_USER_PASSWORD: ${{ secrets.STAGING_TEST_USER_PASSWORD }}
+          STAGING_TEST_USER_ID: ${{ inputs.requester_user_id }}
+          STAGING_APPROVER_EMAIL: ${{ secrets.STAGING_APPROVER_EMAIL }}
+          STAGING_APPROVER_PASSWORD: ${{ secrets.STAGING_APPROVER_PASSWORD }}
+          STAGING_APPROVER_USER_ID: ${{ inputs.approver_user_id }}
+          STAGING_WORKSPACE_ID: ${{ inputs.workspace_id }}
         run: node scripts/staging-invoice-extraction-smoke.mjs

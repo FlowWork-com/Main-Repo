@@ -59,7 +59,7 @@ jobs:
             echo "::error::FlowWork Main DB production and Invoice DB are forbidden targets."
             exit 1
           fi
-          if [[ "$STAGING_SUPABASE_URL" != "${STAGING_SUPABASE_PROJECT_REF}.supabase.co" ]]; then
+          if [[ "$STAGING_SUPABASE_URL" != "https://${STAGING_SUPABASE_PROJECT_REF}.supabase.co" ]]; then
             echo "::error::STAGING_SUPABASE_URL must exactly match STAGING_SUPABASE_PROJECT_REF."
             exit 1
           fi

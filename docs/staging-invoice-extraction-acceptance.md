@@ -1,6 +1,6 @@
 # Staging invoice extraction acceptance
 
-**Purpose:** exercise the real `invoice-document-extract` provider path using a synthetic PDF, with the production approval boundary intact. This is a manual staging test only. It is not a deployment workflow and is not a production-readiness certification.
+**Purpose:** prepare a synthetic PDF invoice in FlowWork Staging and verify the real invoice-extraction provider only after a distinct workspace member explicitly approves the task in the FlowWork UI. Automated preparation is manual-only. It does not approve or execute the high-risk tool.
 
 ## Preconditions
 
@@ -15,46 +15,55 @@
    - Variable `STAGING_SUPABASE_PROJECT_REF`
    - Secrets `STAGING_SUPABASE_URL`, `STAGING_SUPABASE_ANON_KEY`
    - Secrets `STAGING_TEST_USER_EMAIL`, `STAGING_TEST_USER_PASSWORD`
-   - Secrets `STAGING_APPROVER_EMAIL`, `STAGING_APPROVER_PASSWORD`
-5. Choose a dedicated staging workspace containing both test users. The requester and approver must be different Supabase Auth users and both must be workspace members. The approver must not be the requester. Do not weaken or bypass the database self-approval constraint to make the smoke pass.
+5. Choose a dedicated staging workspace containing the requester and at least one other distinct workspace member. The requester and approver must be different Supabase Auth users. The second member performs the approval in FlowWork itself; do not put an approver password in GitHub Actions or simulate approval in the script.
 
-The staging workspace previously inspected had only one member. Add a second dedicated test user through the supported workspace membership flow before dispatching this workflow. The smoke fails before task/file creation or provider invocation if either test user cannot authenticate, is not a workspace member, or both user IDs are the same.
+The staging workspace previously inspected had only one member. Add a second dedicated test user through the supported workspace membership flow before testing the approval gate. The preparation workflow fails before task/file creation or provider invocation if the requester cannot authenticate or is not a member. The task remains safely pending until the second member approves it through the UI.
 
-## Run the test
+## Prepare the synthetic task
 
-After this branch is merged to `main`, open **GitHub → Actions → Staging synthetic invoice extraction acceptance → Run workflow**. Supply:
+After this branch is merged to `main`, open **GitHub → Actions → Prepare staging synthetic invoice for human-approved extraction → Run workflow**. Supply:
 - `workspace_id`: the dedicated staging workspace UUID
 - `requester_user_id`: the synthetic task creator/uploader
-- `approver_user_id`: the distinct workspace-member approver
 
 The workflow is manual-only, requires the `staging` environment, validates the project ref/URL, and explicitly refuses the FlowWork Main DB production ref and the separate Invoice DB ref.
 
-## What it does
+The workflow signs in as the requester, creates a task with a one-page fictitious invoice PDF, uploads it to the private `workflow-files` bucket, registers the attachment through `register_task_file`, and persists a pending approval request. It verifies that the task status is `Waiting for approval` and that the `task_approvals` row is still undecided. It then exits without approving or calling the invoice provider.
 
-1. Signs in as both configured users and verifies their identities and workspace memberships.
-2. Creates a clearly named synthetic task and a one-page PDF containing fictitious invoice data.
-3. Uploads the PDF to the private `workflow-files` bucket and registers it through `register_task_file`.
-4. Persists a workflow approval request as the requester.
-5. Persists the approval decision as the distinct approver and verifies the saved `task_approvals` record.
-6. Calls the real `execute-tool` Edge Function for `invoice-document-extract` only after the approved decision is persisted.
-7. Checks the provider result against the fixture, checks field-level confidence/review flags, and requires `reviewRequired: true` plus task status `Verifying`.
+The output provides:
+- Task ID
+- Attachment file ID
+- Approval request ID
 
-A passing run requires the five critical fields (invoice number, date, vendor, currency, and total) to match and at least 7 of 8 expected fields to match. It also requires the normalized result to preserve the `needs_review` status and review warnings/limitations. This is a fixture acceptance threshold, not a general accuracy claim.
+## Complete the real approval and provider test
 
-## What it does not do
+1. Sign into the FlowWork staging app as a **different workspace member** from the requester.
+2. Open the synthetic task and use the existing **Approve and continue** control. This records the approval under the second user's real authenticated identity and moves the task to `Running`. The database's no-self-approval rule remains active.
+3. Sign into FlowWork as the task requester/owner. Open the same task's **Registered tools** panel and select **PDF/image invoice extraction**.
+4. Set the JSON input to the attachment file ID printed by the preparation workflow:
 
-- It does not bypass or forge approval.
-- It does not use real customer, supplier, or invoice information.
-- It does not change the source document or write extracted values into invoice records.
-- It does not send email, create a Gmail draft, execute a downstream tool, or contact any external business.
-- It does not run automatically on each push or merge.
-- It tests a live PDF provider request; JPEG/PNG live acceptance remains separate. The existing mocked adapter tests cover the image request construction.
+~~~json
+{"fileId":"<attachment-file-id-from-workflow-output>"}
+~~~
 
-The synthetic task and private PDF are retained in staging for audit. The script prints only task/execution/file IDs and aggregate match counts, not extracted field values or provider response bodies.
+5. Run the tool. The real `execute-tool` function will check the persisted approval before it sends the synthetic PDF to the configured provider.
+6. Confirm the result is a structured report, `reviewRequired: true` remains set, field-level low-confidence/missing values remain flagged, and the workflow moves to `Verifying` for independent human review. Do not mark the task complete merely because extraction succeeded.
+
+The expected synthetic values are invoice number SYNTH-INV-0001, date 2026-11-01, vendor Synthetic Supply Co, description Office stationery, currency INR, subtotal 1000, tax 180, and total 1180. Compare the returned values against the PDF. A passing fixture result requires the five critical fields (invoice number, date, vendor, currency, and total) to match and at least 7 of 8 expected fields to match. This is a fixture acceptance threshold, not a general accuracy claim.
+
+## Safety boundaries
+
+- The preparation workflow does not approve, impersonate a second user, or invoke the invoice provider.
+- The provider call happens only after a distinct workspace member approves in the FlowWork UI and the task owner separately initiates tool execution.
+- The test uses fictitious invoice information only.
+- It does not alter the source PDF or write extracted values into invoice records.
+- It does not send email, create a Gmail draft, or execute a downstream tool.
+- JPEG/PNG live acceptance remains separate. The existing mocked adapter tests cover image request construction.
+
+The synthetic task and private PDF are retained in staging for audit. The preparation script prints only task/attachment/approval IDs, not extracted field values or provider response bodies.
 
 ## Record the provider observation
 
-After a successful run, use the printed task ID to inspect `provider_call_metrics` from the privileged Supabase SQL editor or another authorized operator context. Authenticated workspace users do not have direct read access to this table.
+After the manual provider run, use the task ID to inspect `provider_call_metrics` from the privileged Supabase SQL editor or another authorized operator context. Authenticated workspace users do not have direct read access to this table.
 
 ~~~sql
 select
@@ -75,6 +84,6 @@ where task_id = '<synthetic task UUID>'
 order by occurred_at desc;
 ~~~
 
-Record the exact staging project ref, tested `execute-tool` revision, workflow run URL, task ID, provider/model ID, outcome, duration, and any usage/cost values the provider actually returned. Do not infer missing usage/cost. Do not copy credentials, raw invoice content, or raw provider responses into the audit.
+Record the exact staging project ref, tested `execute-tool` revision, preparation workflow run URL, task ID, provider/model ID, outcome, duration, and any usage/cost values the provider actually returned. Do not infer missing usage/cost. Do not copy credentials, raw invoice content, or raw provider responses into the audit.
 
 A live PDF pass does not certify JPEG/PNG compatibility, invoice accuracy across a representative corpus, provider availability under load, or production readiness. Keep Phase 9 open until all other acceptance and owner-sign-off items are addressed.

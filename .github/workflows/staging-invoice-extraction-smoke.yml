@@ -1,0 +1,85 @@
+name: Prepare staging synthetic invoice for human-approved extraction
+
+on:
+  workflow_dispatch:
+    inputs:
+      workspace_id:
+        description: "Dedicated staging workspace UUID for the requester and independent approver."
+        type: string
+        required: true
+      requester_user_id:
+        description: "Supabase Auth UUID for the task requester/uploader."
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flowwork-staging-invoice-extraction
+  cancel-in-progress: false
+
+jobs:
+  invoice-acceptance:
+    name: Prepare synthetic PDF and pending approval
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Refuse production and non-staging targets
+        env:
+          STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+          STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          REQUESTER_ID: ${{ inputs.requester_user_id }}
+          WORKSPACE_ID: ${{ inputs.workspace_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$STAGING_SUPABASE_PROJECT_REF" =~ ^[a-z0-9]{20}$ ]]; then
+            echo "::error::Set STAGING_SUPABASE_PROJECT_REF to a dedicated staging project reference."
+            exit 1
+          fi
+          if [[ "$STAGING_SUPABASE_PROJECT_REF" == "nhvmeahmwywhaxtnuehr" || "$STAGING_SUPABASE_PROJECT_REF" == "tlhznghnfdwpilhfjyyu" ]]; then
+            echo "::error::FlowWork Main DB production and Invoice DB are forbidden targets."
+            exit 1
+          fi
+          if [[ "$STAGING_SUPABASE_PROJECT_REF" != "flfwtsxuvzyuotltfrbt" ]]; then
+            echo "::error::This test is restricted to the confirmed FlowWork Staging project."
+            exit 1
+          fi
+          if [[ "$STAGING_SUPABASE_URL" != "https://${STAGING_SUPABASE_PROJECT_REF}.supabase.co" ]]; then
+            echo "::error::STAGING_SUPABASE_URL must exactly match STAGING_SUPABASE_PROJECT_REF."
+            exit 1
+          fi
+          if [[ ! "$WORKSPACE_ID" =~ ^[0-9a-fA-F-]{36}$ || ! "$REQUESTER_ID" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+            echo "::error::Workspace and test-user inputs must be UUIDs."
+            exit 1
+          fi
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Check staging smoke script syntax
+        run: node --check scripts/staging-invoice-extraction-smoke.mjs
+
+      - name: Prepare synthetic PDF and pending approval (no provider call)
+        env:
+          STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+          STAGING_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+          STAGING_TEST_USER_EMAIL: ${{ secrets.STAGING_TEST_USER_EMAIL }}
+          STAGING_TEST_USER_PASSWORD: ${{ secrets.STAGING_TEST_USER_PASSWORD }}
+          STAGING_TEST_USER_ID: ${{ inputs.requester_user_id }}
+          STAGING_WORKSPACE_ID: ${{ inputs.workspace_id }}
+        run: node scripts/staging-invoice-extraction-smoke.mjs

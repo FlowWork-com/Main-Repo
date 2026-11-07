@@ -100,6 +100,9 @@ jobs:
           assert_target_is_blocked "nhvmeahmwywhaxtnuehr"
           assert_target_is_blocked "tlhznghnfdwpilhfjyyu"
 
+      - name: Check manual staging invoice acceptance script syntax
+        run: node --check scripts/staging-invoice-extraction-smoke.mjs
+
       - name: Offline planner evaluation
         run: npm run evaluate:planner
 

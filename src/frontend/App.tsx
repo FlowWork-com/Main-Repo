@@ -232,6 +232,7 @@ function WorkspaceView({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [toolExecutionBusy, setToolExecutionBusy] = useState(false);
+  const [planRunActive, setPlanRunActive] = useState(false);
   const [error, setError] = useState('');
   const [details, setDetails] = useState('');
   const [historyQuery, setHistoryQuery] = useState('');
@@ -544,7 +545,7 @@ function WorkspaceView({
                 aria-current={selectedTaskId === task.id ? 'true' : undefined}
                 className={`task-list__item${selectedTaskId === task.id ? ' task-list__item--selected' : ''}`}
                 key={task.id}
-                disabled={toolExecutionBusy}
+                disabled={toolExecutionBusy || planRunActive}
                 onClick={() => setSelectedTaskId(task.id)}
                 type="button"
               >
@@ -584,6 +585,7 @@ function WorkspaceView({
                 taskStatus={selectedTask.workflow.task.status}
                 taskTitle={selectedTask.details || selectedTask.title}
                 onTaskRefresh={() => refreshTask(selectedTask.id)}
+                onRunActiveChange={setPlanRunActive}
               />
 
               <TaskToolExecutionPanel
@@ -599,7 +601,7 @@ function WorkspaceView({
                 {selectedTask.workflow.task.status === 'Planning' && (
                   <button
                     className="button"
-                    disabled={busy || toolExecutionBusy}
+                    disabled={busy || toolExecutionBusy || planRunActive}
                     onClick={() => void saveCommand({ ...commandContext(selectedTask), type: 'start' })}
                     type="button"
                   >
@@ -610,7 +612,7 @@ function WorkspaceView({
                   <>
                     <button
                       className="button button--secondary"
-                      disabled={busy || toolExecutionBusy}
+                      disabled={busy || toolExecutionBusy || planRunActive}
                       onClick={() => void saveCommand({
                         ...commandContext(selectedTask),
                         type: 'request-approval',
@@ -622,7 +624,7 @@ function WorkspaceView({
                     </button>
                     <button
                       className="button"
-                      disabled={busy || toolExecutionBusy}
+                      disabled={busy || toolExecutionBusy || planRunActive}
                       onClick={() => void saveCommand({
                         ...commandContext(selectedTask),
                         type: 'begin-verification',
@@ -644,7 +646,7 @@ function WorkspaceView({
                     </label>
                     <button
                       className="button"
-                      disabled={busy || toolExecutionBusy}
+                      disabled={busy || toolExecutionBusy || planRunActive}
                       onClick={() => void resolveApproval(selectedTask, true)}
                       type="button"
                     >
@@ -652,7 +654,7 @@ function WorkspaceView({
                     </button>
                     <button
                       className="button button--danger"
-                      disabled={busy || toolExecutionBusy}
+                      disabled={busy || toolExecutionBusy || planRunActive}
                       onClick={() => void resolveApproval(selectedTask, false)}
                       type="button"
                     >
@@ -692,7 +694,7 @@ function WorkspaceView({
                 {selectedTask.workflow.task.status === 'Failed' && (
                   <button
                     className="button"
-                    disabled={busy || toolExecutionBusy}
+                    disabled={busy || toolExecutionBusy || planRunActive}
                     onClick={() => void saveCommand({
                       ...commandContext(selectedTask),
                       type: 'retry',

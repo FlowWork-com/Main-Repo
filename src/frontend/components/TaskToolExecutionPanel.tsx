@@ -17,6 +17,7 @@ interface TaskToolExecutionPanelProps {
   readonly canAccessWorkspace: boolean;
   readonly client: SupabaseClient;
   readonly onTaskRefresh: () => Promise<PersistedTask>;
+  readonly onExecutionBusyChange?: (busy: boolean) => void;
   readonly task: PersistedTask;
 }
 
@@ -24,6 +25,7 @@ export function TaskToolExecutionPanel({
   canAccessWorkspace,
   client,
   onTaskRefresh,
+  onExecutionBusyChange,
   task,
 }: TaskToolExecutionPanelProps) {
   const historyRepository = useMemo(
@@ -101,6 +103,7 @@ export function TaskToolExecutionPanel({
     setExecutionMessage('');
     setResult(null);
     setBusy(true);
+    onExecutionBusyChange?.(true);
     try {
       const response = await executeTool(client, request);
       setResult(response.result);
@@ -139,6 +142,7 @@ export function TaskToolExecutionPanel({
       }
     } finally {
       setBusy(false);
+      onExecutionBusyChange?.(false);
       setHistoryLoading(true);
       setHistoryError('');
       setHistoryRefreshKey((key) => key + 1);
@@ -338,6 +342,8 @@ function readableExecutionError(code: string): string {
       return 'Execution timed out or was recovered after interruption. Check task history before deciding whether a new attempt is safe.';
     case 'EXECUTOR_UNAVAILABLE':
       return 'The execution service is temporarily unavailable.';
+    case 'INVALID_EXECUTION_CONTEXT':
+      return 'The workflow changed state before the tool could be reserved. Refresh the workflow and retry only while it is still eligible.';
     case 'TOOL_NOT_FOUND':
       return 'This registered tool version is no longer available.';
     default:

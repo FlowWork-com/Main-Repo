@@ -14,9 +14,10 @@ import { createMvpTools } from '../tools/mvpTools';
 import { ToolExecutor } from '../tools/toolExecutor';
 import { ToolRegistry } from '../tools/toolRegistry';
 import { ToolExecutionService } from './toolExecutionService';
-import type {
-  StoredToolExecution,
-  ToolExecutionRepository,
+import {
+  ToolExecutionStateConflictError,
+  type StoredToolExecution,
+  type ToolExecutionRepository,
 } from './toolExecutionRepository';
 import type { WorkflowRepository } from './workflowRepository';
 
@@ -191,6 +192,24 @@ describe('ToolExecutionService', () => {
     expect(executions.claimExecution).toHaveBeenCalledOnce();
     expect(executions.completeExecution).toHaveBeenCalledOnce();
     expect(workflows.persistEvents).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports a workflow state conflict instead of masking it as executor unavailability', async () => {
+    const executions = new MemoryExecutionRepository();
+    executions.claimExecution.mockRejectedValueOnce(new ToolExecutionStateConflictError());
+    const workflows = workflowRepository();
+    const service = createService(executions, workflows);
+
+    const outcome = await service.execute(request(), workflow());
+
+    expect(outcome.result).toMatchObject({
+      success: false,
+      error: {
+        code: 'INVALID_EXECUTION_CONTEXT',
+        message: 'The workflow left the Running state before the tool execution was reserved.',
+      },
+    });
+    expect(executions.completeExecution).not.toHaveBeenCalled();
   });
 
   it('binds provider observations to the server request and persisted execution identity', async () => {

@@ -100,6 +100,13 @@ interface TaskFileRow {
   readonly storage_path?: string;
 }
 
+export class ToolExecutionStateConflictError extends Error {
+  constructor() {
+    super('The workflow is no longer in the Running state.');
+    this.name = 'ToolExecutionStateConflictError';
+  }
+}
+
 export class SupabaseToolExecutionRepository
   implements ToolExecutionRepository
 {
@@ -181,6 +188,12 @@ export class SupabaseToolExecutionRepository
       p_input: input,
       p_actor_id: context.userId,
     });
+    if (
+      error?.code === '22023' &&
+      error.message === 'Task must be Running before tool execution.'
+    ) {
+      throw new ToolExecutionStateConflictError();
+    }
     if (error || !Array.isArray(data) || data.length !== 1) {
       throw operationError('reserve tool execution');
     }

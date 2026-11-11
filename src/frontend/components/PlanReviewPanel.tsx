@@ -23,6 +23,7 @@ export function PlanReviewPanel({
   taskId,
   taskTitle,
   onTaskRefresh,
+  onRunActiveChange,
 }: {
   readonly client: SupabaseClient;
   readonly canAccessWorkspace: boolean;
@@ -30,6 +31,7 @@ export function PlanReviewPanel({
   readonly taskId: string;
   readonly taskTitle: string;
   readonly onTaskRefresh?: () => Promise<unknown>;
+  readonly onRunActiveChange?: (active: boolean) => void;
 }) {
   const [goal, setGoal] = useState(taskTitle);
   const [proposal, setProposal] = useState<PersistedPlan | null>(null);
@@ -58,6 +60,10 @@ export function PlanReviewPanel({
 
   const proposalId = proposal?.id;
   const proposalDecision = proposal?.decision;
+
+  useEffect(() => {
+    onRunActiveChange?.(busy || runStatus === 'running');
+  }, [busy, onRunActiveChange, runStatus]);
 
   useEffect(() => {
     if (!proposalId || proposalDecision !== 'accepted') return;
@@ -123,6 +129,7 @@ export function PlanReviewPanel({
 
   async function startRun() {
     if (!proposal || proposal.decision !== 'accepted' || !canAccessWorkspace || taskStatus !== 'Running' || busy) return;
+    onRunActiveChange?.(true);
     setBusy(true);
     setError('');
     try {

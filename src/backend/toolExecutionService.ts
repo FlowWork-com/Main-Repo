@@ -16,9 +16,10 @@ import {
 import { ToolExecutor } from '../tools/toolExecutor.ts';
 import { ToolRegistry } from '../tools/toolRegistry.ts';
 import type { WorkflowRepository } from './workflowRepository.ts';
-import type {
-  StoredToolExecution,
-  ToolExecutionRepository,
+import {
+  ToolExecutionStateConflictError,
+  type StoredToolExecution,
+  type ToolExecutionRepository,
 } from './toolExecutionRepository.ts';
 
 export interface ToolExecutionRequest {
@@ -252,7 +253,16 @@ export class ToolExecutionService {
     let claimed: boolean;
     try {
       claimed = await this.executionRepository.claimExecution(context, request.input);
-    } catch {
+    } catch (error) {
+      if (error instanceof ToolExecutionStateConflictError) {
+        return unchanged(
+          workflow,
+          toolFailure(
+            'INVALID_EXECUTION_CONTEXT',
+            'The workflow left the Running state before the tool execution was reserved.',
+          ),
+        );
+      }
       let racedExecution: StoredToolExecution | null;
       try {
         racedExecution = await this.executionRepository.findExecution(context);

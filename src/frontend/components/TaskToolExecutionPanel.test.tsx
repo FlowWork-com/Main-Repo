@@ -96,16 +96,19 @@ function PanelHarness({
   client,
   initialStatus = 'Running',
   onRefresh = vi.fn(async () => taskWithStatus('Running')),
+  onExecutionBusyChange,
 }: {
   readonly client: SupabaseClient;
   readonly initialStatus?: WorkflowStatus;
   readonly onRefresh?: () => Promise<PersistedTask>;
+  readonly onExecutionBusyChange?: (busy: boolean) => void;
 }) {
   const [task, setTask] = useState(() => taskWithStatus(initialStatus));
   return (
     <TaskToolExecutionPanel
       canAccessWorkspace
       client={client}
+      onExecutionBusyChange={onExecutionBusyChange}
       onTaskRefresh={async () => {
         const refreshed = await onRefresh();
         setTask(refreshed);
@@ -220,6 +223,30 @@ describe('TaskToolExecutionPanel', () => {
     expect(calls).toHaveLength(2);
     expect(calls[1][1]).toEqual(calls[0][1]);
     expect(screen.getByRole('button', { name: 'Retry same request' })).toBeInTheDocument();
+  });
+
+  it('notifies the workspace while a tool request is in flight', async () => {
+    const { client } = createClient();
+    const onExecutionBusyChange = vi.fn();
+    let finish!: (response: ExecuteToolResponse) => void;
+    vi.mocked(executeTool).mockImplementationOnce(
+      () => new Promise((resolve) => { finish = resolve; }),
+    );
+    render(
+      <PanelHarness
+        client={client}
+        onExecutionBusyChange={onExecutionBusyChange}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Run Echo' }));
+    expect(onExecutionBusyChange).toHaveBeenNthCalledWith(1, true);
+
+    finish(successfulResponse());
+    await screen.findByRole('heading', { name: 'Latest result' });
+    await waitFor(() => {
+      expect(onExecutionBusyChange).toHaveBeenLastCalledWith(false);
+    });
   });
 
   it('loads scoped persisted history through the authenticated client and hides execution controls when ineligible', async () => {

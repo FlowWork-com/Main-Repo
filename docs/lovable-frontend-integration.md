@@ -62,12 +62,12 @@ Attachments establish the foundation for analysis, but no file is parsed merely 
 
 Set these as **server-side Supabase Edge Function secrets**, not browser `VITE_*` variables and never in Git:
 
-- `FLOWWORK_INVOICE_PROVIDER=openai-compatible`
-- `FLOWWORK_INVOICE_BASE_URL=https://api.openai.com/v1` (or a trusted compatible endpoint that supports the required PDF file and image content formats)
-- `FLOWWORK_INVOICE_MODEL=<vision-capable-model>`
-- `FLOWWORK_INVOICE_API_KEY=<server-side-api-key>`
+- `FLOWWORK_INVOICE_PROVIDER=groq-qwen-vision`
+- `FLOWWORK_INVOICE_BASE_URL=https://api.groq.com/openai/v1`
+- `FLOWWORK_INVOICE_MODEL=qwen/qwen3.8-27b`
+- `FLOWWORK_INVOICE_API_KEY=<separate server-side Groq key>`
 
-When these secrets are absent or incomplete, extraction fails closed as unavailable. Do not configure a provider unless it is authorized to receive the invoice documents users submit.
+When these secrets are absent or incomplete, extraction fails closed as unavailable. The invoice adapter renders PDFs locally into up to three PNG page images before sending those images to Groq Qwen; longer PDFs are rejected rather than silently truncated. The model is preview-listed and this profile is staging-only until live acceptance and owner review of provider data handling are complete. Do not configure a provider unless it is authorized to receive the invoice documents users submit.
 
 ## Phase 6 — human extraction review and feedback metrics
 

@@ -177,7 +177,7 @@ export function createGroqQwenInvoiceExtractor(
 async function createImageParts(file: TaskFileContent): Promise<Array<Record<string, unknown>>> {
   if (file.contentType === 'application/pdf') {
     const pages = await renderInvoicePdfPagesToPng(file.bytes);
-    return pages.map((page, index) => {
+    return pages.map((page) => {
       const dataUrl = `data:image/png;base64,${bytesToBase64(page)}`;
       if (dataUrl.length > MAX_PROVIDER_IMAGE_DATA_URL_CHARS) {
         throw new Error('A rendered invoice page exceeds the vision provider image-size limit.');
@@ -185,10 +185,8 @@ async function createImageParts(file: TaskFileContent): Promise<Array<Record<str
       return {
         type: 'image_url',
         image_url: { url: dataUrl, detail: 'high' },
-        // Page number is intentionally not embedded in a user-visible or persisted payload.
-        pageIndex: index,
       };
-    }).map(({ type, image_url }) => ({ type, image_url }));
+    });
   }
 
   if (file.contentType === 'image/jpeg' || file.contentType === 'image/png') {

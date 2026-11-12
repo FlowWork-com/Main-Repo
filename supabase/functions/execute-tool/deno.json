@@ -1,6 +1,7 @@
 {
   "imports": {
     "@supabase/supabase-js": "npm:@supabase/supabase-js@2.57.4",
+    "@hyzyla/pdfium": "npm:@hyzyla/pdfium@3.0.0/inline",
     "@sheetjs/xlsx": "npm:@e965/xlsx@0.20.3/xlsx.mjs",
     "@sheetjs/cptable": "npm:@e965/xlsx@0.20.3/dist/cpexcel.full.mjs"
   }

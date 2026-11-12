@@ -6,11 +6,11 @@
 
 1. Deploy the current `main` revision of `execute-tool` to the dedicated FlowWork Staging project.
 2. In **Supabase → Edge Functions → Secrets** for FlowWork Staging, verify that the invoice role is configured independently of the Groq planner/FinNLP reviewer:
-   - `FLOWWORK_INVOICE_PROVIDER=openai-compatible`
-   - `FLOWWORK_INVOICE_BASE_URL` is an HTTPS OpenAI-compatible endpoint
-   - `FLOWWORK_INVOICE_MODEL` is a vision model supported by that endpoint
-   - `FLOWWORK_INVOICE_API_KEY` is stored server-side
-3. The current adapter sends PDFs as a Chat Completions `type: "file"` part with a base64 data URI, and images as a Chat Completions `type: "image_url"` part. The provider must support the matching payload and JSON-object response format. Do not point the invoice adapter at the Groq planner/reviewer configuration or assume that an arbitrary OpenAI-compatible provider accepts PDF file parts.
+   - `FLOWWORK_INVOICE_PROVIDER=groq-qwen-vision`
+   - `FLOWWORK_INVOICE_BASE_URL=https://api.groq.com/openai/v1`
+   - `FLOWWORK_INVOICE_MODEL=qwen/qwen3.8-27b`
+   - `FLOWWORK_INVOICE_API_KEY` is a server-side Groq key stored under its own invoice-role secret name
+3. The invoice adapter renders every PDF page locally with PDFium WebAssembly and sends PNG `image_url` parts to Qwen. JPEG/PNG attachments are sent as image inputs. Groq supports up to three image inputs per request, so PDFs over three pages are rejected rather than truncated. This is a dedicated invoice profile; it does not inherit planner/FinNLP configuration.
 4. Configure the GitHub Actions `staging` environment:
    - Variable `STAGING_SUPABASE_PROJECT_REF`
    - Secrets `STAGING_SUPABASE_URL`, `STAGING_SUPABASE_ANON_KEY`
@@ -105,4 +105,4 @@ order by occurred_at desc;
 
 Record the exact staging project ref, tested `execute-tool` revision, preparation workflow run URL, task ID, provider/model ID, outcome, duration, and any usage/cost values the provider actually returned. Do not infer missing usage/cost. Do not copy credentials, raw invoice content, or raw provider responses into the audit.
 
-A live PDF pass does not certify JPEG/PNG compatibility, invoice accuracy across a representative corpus, provider availability under load, or production readiness. Keep Phase 9 open until all other acceptance and owner-sign-off items are addressed.
+A live PDF pass does not certify JPEG/PNG accuracy across a representative corpus, invoice accuracy across a representative corpus, provider availability under load, model production status, or production readiness. Keep Phase 9 open until all other acceptance and owner-sign-off items are addressed.

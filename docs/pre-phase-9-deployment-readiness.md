@@ -60,12 +60,12 @@ FinNLP is a verifier/financial-language decoder, not the main planner, not an au
 
 ### Invoice extraction
 
-- [ ] `FLOWWORK_INVOICE_PROVIDER=openai-compatible`
-- [ ] `FLOWWORK_INVOICE_BASE_URL=<separate validated provider endpoint>`
-- [ ] `FLOWWORK_INVOICE_MODEL=<approved-vision-model-id>`
-- [ ] `FLOWWORK_INVOICE_API_KEY=<separate server-side secret>`
+- [ ] `FLOWWORK_INVOICE_PROVIDER=groq-qwen-vision`
+- [ ] `FLOWWORK_INVOICE_BASE_URL=https://api.groq.com/openai/v1`
+- [ ] `FLOWWORK_INVOICE_MODEL=qwen/qwen3.8-27b`
+- [ ] `FLOWWORK_INVOICE_API_KEY=<separate server-side Groq key>`
 
-The selected Groq key configures only the planner and FinNLP reviewer in this staging profile. Do not reuse it for invoice extraction or point the current invoice adapter at Groq until an explicit provider adapter and PDF/image fixture-based contract tests pass. Do not enable Gemini by changing only this base URL; Gemini also requires an explicit provider adapter and fixture-based contract tests.
+Invoice extraction uses a dedicated Groq/Qwen adapter and separate secret name; it does not inherit planner or FinNLP credentials. The adapter renders every PDF page locally with PDFium WebAssembly inside the Edge Function and sends at most three PNG image parts to Qwen 3.8; JPEG/PNG files are sent as image inputs. PDFs over three pages are rejected rather than truncated. Qwen 3.8 is preview-listed, so this remains staging-only pending live fixture acceptance and a production model-status review. Before processing real customer invoices, the release owner must review Groq's data-retention controls and US data-location terms; use synthetic fixtures until that approval is recorded. Do not enable Gemini by changing only this base URL; Gemini requires its own provider adapter and fixture-based contract tests.
 
 ### Optional integrations
 

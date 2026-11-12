@@ -105,4 +105,4 @@ order by occurred_at desc;
 
 Record the exact staging project ref, tested `execute-tool` revision, preparation workflow run URL, task ID, provider/model ID, outcome, duration, and any usage/cost values the provider actually returned. Do not infer missing usage/cost. Do not copy credentials, raw invoice content, or raw provider responses into the audit.
 
-A live PDF pass does not certify JPEG/PNG compatibility, invoice accuracy across a representative corpus, provider availability under load, or production readiness. Keep Phase 9 open until all other acceptance and owner-sign-off items are addressed.
+A live PDF pass does not certify JPEG/PNG accuracy across a representative corpus, invoice accuracy across a representative corpus, provider availability under load, model production status, or production readiness. Keep Phase 9 open until all other acceptance and owner-sign-off items are addressed.

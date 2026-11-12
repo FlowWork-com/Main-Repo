@@ -21,7 +21,7 @@ export interface InvoiceVisionProviderConfig {
 const GROQ_VISION_PROVIDER = 'groq-qwen-vision';
 const GROQ_VISION_BASE_URL = 'https://api.groq.com/openai/v1';
 const GROQ_QWEN_VISION_MODEL = 'qwen/qwen3.8-27b';
-const MAX_PROVIDER_IMAGE_DATA_URL_CHARS = 20 * 1024 * 1024;
+const MAX_PROVIDER_IMAGE_DATA_URL_CHARS = 18 * 1024 * 1024;
 
 export function createInvoiceDocumentExtractorFromEnvironment(
   env: InvoiceProviderEnvironment,

@@ -1,6 +1,7 @@
 import { isCredentialLikeString, type ProviderCallObservation } from '../../../src/tools/contracts.ts';
 import type { TaskFileContent } from '../../../src/tools/mvpTools.ts';
 import type { InvoiceDocumentExtractor } from '../../../src/tools/invoiceDocumentExtraction.ts';
+import { renderInvoicePdfPagesToPng } from './invoicePdfPages.ts';
 
 export interface InvoiceProviderEnvironment {
   readonly FLOWWORK_INVOICE_PROVIDER?: string;
@@ -17,12 +18,18 @@ export interface InvoiceVisionProviderConfig {
   readonly timeoutMs?: number;
 }
 
+const GROQ_VISION_PROVIDER = 'groq-qwen-vision';
+const GROQ_VISION_BASE_URL = 'https://api.groq.com/openai/v1';
+const GROQ_QWEN_VISION_MODEL = 'qwen/qwen3.8-27b';
+const MAX_PROVIDER_IMAGE_DATA_URL_CHARS = 20 * 1024 * 1024;
+
 export function createInvoiceDocumentExtractorFromEnvironment(
   env: InvoiceProviderEnvironment,
 ): InvoiceDocumentExtractor | undefined {
-  if ((env.FLOWWORK_INVOICE_PROVIDER ?? '').trim().toLowerCase() !== 'openai-compatible') {
+  if ((env.FLOWWORK_INVOICE_PROVIDER ?? '').trim().toLowerCase() !== GROQ_VISION_PROVIDER) {
     return undefined;
   }
+
   const baseUrl = env.FLOWWORK_INVOICE_BASE_URL?.trim();
   const modelName = env.FLOWWORK_INVOICE_MODEL?.trim();
   const apiKey = env.FLOWWORK_INVOICE_API_KEY?.trim();
@@ -30,23 +37,25 @@ export function createInvoiceDocumentExtractorFromEnvironment(
     !baseUrl ||
     !modelName ||
     !apiKey ||
-    modelName.length > 200 ||
+    modelName !== GROQ_QWEN_VISION_MODEL ||
     apiKey.length > 4096 ||
-    !isAllowedBaseUrl(baseUrl)
+    !isAllowedGroqBaseUrl(baseUrl)
   ) {
     return undefined;
   }
-  return createOpenAICompatibleInvoiceExtractor({ baseUrl, modelName, apiKey });
+  return createGroqQwenInvoiceExtractor({ baseUrl, modelName, apiKey });
 }
 
 /**
- * Sends one approved private PDF/image as a multimodal Chat Completions request.
- * Provider response text and errors are bounded and never logged or exposed verbatim.
+ * Dedicated Groq/Qwen invoice adapter.
+ * PDFs are rendered locally into PNG pages before the request; Groq receives image_url
+ * parts, never an unsupported PDF file part. Keep this separate from the planner/FinNLP
+ * adapters and retain the existing approval gate before any document bytes leave FlowWork.
  */
-export function createOpenAICompatibleInvoiceExtractor(
+export function createGroqQwenInvoiceExtractor(
   config: InvoiceVisionProviderConfig,
 ): InvoiceDocumentExtractor {
-  const endpoint = `${config.baseUrl.replace(/\/+$/, '')}/chat/completions`;
+  const endpoint = `${config.baseUrl.replace(/\\/+$/, '')}/chat/completions`;
   const fetcher = config.fetcher ?? fetch;
 
   return async (
@@ -54,22 +63,7 @@ export function createOpenAICompatibleInvoiceExtractor(
     externalSignal?: AbortSignal,
     observeProviderCall?: (observation: ProviderCallObservation) => void | Promise<void>,
   ): Promise<unknown> => {
-    const base64Data = bytesToBase64(file.bytes);
-    const documentPart = file.contentType === 'application/pdf'
-      ? {
-        type: 'file',
-        file: {
-          filename: file.fileName,
-          file_data: `data:application/pdf;base64,${base64Data}`,
-        },
-      }
-      : {
-        type: 'image_url',
-        image_url: {
-          url: `data:${file.contentType};base64,${base64Data}`,
-          detail: 'high',
-        },
-      };
+    const imageParts = await createImageParts(file);
     const controller = new AbortController();
     const onExternalAbort = () => controller.abort();
     if (externalSignal?.aborted) controller.abort();
@@ -90,6 +84,7 @@ export function createOpenAICompatibleInvoiceExtractor(
         body: JSON.stringify({
           model: config.modelName,
           max_completion_tokens: 1800,
+          reasoning_effort: 'none',
           response_format: { type: 'json_object' },
           messages: [
             {
@@ -113,7 +108,7 @@ export function createOpenAICompatibleInvoiceExtractor(
                   type: 'text',
                   text: `Extract fields from this single invoice document for human review. Source filename: ${safeFileName(file.fileName)}. Return only the requested JSON object.`,
                 },
-                documentPart,
+                ...imageParts,
               ],
             },
           ],
@@ -177,6 +172,33 @@ export function createOpenAICompatibleInvoiceExtractor(
       }
     }
   };
+}
+
+async function createImageParts(file: TaskFileContent): Promise<Array<Record<string, unknown>>> {
+  if (file.contentType === 'application/pdf') {
+    const pages = await renderInvoicePdfPagesToPng(file.bytes);
+    return pages.map((page, index) => {
+      const dataUrl = `data:image/png;base64,${bytesToBase64(page)}`;
+      if (dataUrl.length > MAX_PROVIDER_IMAGE_DATA_URL_CHARS) {
+        throw new Error('A rendered invoice page exceeds the vision provider image-size limit.');
+      }
+      return {
+        type: 'image_url',
+        image_url: { url: dataUrl, detail: 'high' },
+        // Page number is intentionally not embedded in a user-visible or persisted payload.
+        pageIndex: index,
+      };
+    }).map(({ type, image_url }) => ({ type, image_url }));
+  }
+
+  if (file.contentType === 'image/jpeg' || file.contentType === 'image/png') {
+    const dataUrl = `data:${file.contentType};base64,${bytesToBase64(file.bytes)}`;
+    if (dataUrl.length > MAX_PROVIDER_IMAGE_DATA_URL_CHARS) {
+      throw new Error('The invoice image exceeds the vision provider image-size limit.');
+    }
+    return [{ type: 'image_url', image_url: { url: dataUrl, detail: 'high' } }];
+  }
+  throw new Error('Invoice extraction supports PDF, JPEG and PNG attachments.');
 }
 
 export function bytesToBase64(bytes: Uint8Array): string {
@@ -271,12 +293,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
-function isAllowedBaseUrl(value: string): boolean {
+function isAllowedGroqBaseUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
-    return !url.username && !url.password && !url.search && !url.hash &&
-      (url.protocol === 'https:' || (local && url.protocol === 'http:'));
+    return url.protocol === 'https:' &&
+      url.hostname === 'api.groq.com' &&
+      (url.pathname.replace(/\\/+$/, '') === '/openai/v1') &&
+      !url.username && !url.password && !url.search && !url.hash;
   } catch {
     return false;
   }

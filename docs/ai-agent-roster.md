@@ -14,7 +14,7 @@ This roster records the selected staging configuration, not proof of active depl
 
 These are explicit role assignments, not hard-coded fallbacks. The planner and FinNLP reviewer each need their own configured `*_BASE_URL` and server-side `*_API_KEY` secret name even if the same fresh Groq key is temporarily used for staging. Separate keys are preferable for attribution and rotation. Never put credentials in `VITE_*` variables, `.env.example`, browser code, or Git history. The invoice extractor has its own `FLOWWORK_INVOICE_API_KEY` secret name and a dedicated provider selector; it does not inherit planner or FinNLP configuration. Separate Groq keys are preferred for attribution and rotation.
 
-### Selected Groq profile for staging (planner + FinNLP only)
+### Selected Groq profiles for staging (planner, FinNLP, and separate invoice vision role)
 
 The planner and FinNLP reviewer use Groq's OpenAI-compatible Chat Completions endpoint at `https://api.groq.com/openai/v1`. The selected model IDs support Groq Strict Structured Outputs (JSON Schema); server-side canonical plan and tool validators remain authoritative. Configure these Edge Function secrets for staging:
 

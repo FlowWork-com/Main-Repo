@@ -296,9 +296,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isAllowedGroqBaseUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' &&
-      url.hostname === 'api.groq.com' &&
-      (url.pathname.replace(/\/+$/, '') === '/openai/v1') &&
+    return `${url.origin}${url.pathname.replace(/\/+$/, '')}` === GROQ_VISION_BASE_URL &&
       !url.username && !url.password && !url.search && !url.hash;
   } catch {
     return false;

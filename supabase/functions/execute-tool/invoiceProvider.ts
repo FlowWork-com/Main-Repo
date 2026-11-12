@@ -55,7 +55,7 @@ export function createInvoiceDocumentExtractorFromEnvironment(
 export function createGroqQwenInvoiceExtractor(
   config: InvoiceVisionProviderConfig,
 ): InvoiceDocumentExtractor {
-  const endpoint = `${config.baseUrl.replace(/\\/+$/, '')}/chat/completions`;
+  const endpoint = `${config.baseUrl.replace(/\/+$/, '')}/chat/completions`;
   const fetcher = config.fetcher ?? fetch;
 
   return async (
@@ -296,7 +296,7 @@ function isAllowedGroqBaseUrl(value: string): boolean {
     const url = new URL(value);
     return url.protocol === 'https:' &&
       url.hostname === 'api.groq.com' &&
-      (url.pathname.replace(/\\/+$/, '') === '/openai/v1') &&
+      (url.pathname.replace(/\/+$/, '') === '/openai/v1') &&
       !url.username && !url.password && !url.search && !url.hash;
   } catch {
     return false;

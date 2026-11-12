@@ -17,6 +17,15 @@ const metadata = (() => {
 export const MAX_INVOICE_DOCUMENT_BYTES = 10 * 1024 * 1024;
 export const FIELD_REVIEW_CONFIDENCE_THRESHOLD = 0.8;
 
+export class InvoiceDocumentPageLimitError extends Error {
+  constructor() {
+    super(
+      'The current invoice vision model supports PDFs with at most 3 pages. Split this document into separate PDFs of 3 pages or fewer and upload them as separate attachments.',
+    );
+    this.name = 'InvoiceDocumentPageLimitError';
+  }
+}
+
 export interface InvoiceDocumentExtractionField<T> {
   readonly value: T | null;
   /** Model-reported estimate, not an empirically calibrated probability. */
@@ -114,7 +123,10 @@ export function createInvoiceDocumentExtractionTool(
       let extracted: unknown;
       try {
         extracted = await extractor(file, context.signal, context.recordProviderCall);
-      } catch {
+      } catch (error) {
+        if (error instanceof InvoiceDocumentPageLimitError) {
+          return toolFailure('INVALID_TOOL_INPUT', error.message);
+        }
         return toolFailure(
           'EXECUTOR_UNAVAILABLE',
           'The invoice extraction provider could not process this document. Check the server-side provider configuration and retry.',

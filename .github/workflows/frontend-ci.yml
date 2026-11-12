@@ -120,7 +120,7 @@ jobs:
           deno check --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/google-workspace/index.ts
           deno test --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/google-workspace/provider_test.ts
           deno test --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/google-workspace/handler_test.ts
-          deno check --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/advance-plan-run/index.ts
+          deno check --config supabase/functions/execute-tool/deno.json --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/advance-plan-run/index.ts
           deno test --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/advance-plan-run/handler_test.ts
           deno check --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/finnlp-integration/index.ts
           deno test --node-modules-dir=auto --unstable-sloppy-imports supabase/functions/finnlp-integration/handler_test.ts
@@ -134,7 +134,7 @@ jobs:
         run: |
           deno check --config supabase/functions/execute-tool/deno.json --node-modules-dir=auto supabase/functions/execute-tool/index.ts
           deno check --node-modules-dir=auto supabase/functions/plan-workflow/index.ts
-          deno check --node-modules-dir=auto supabase/functions/advance-plan-run/index.ts
+          deno check --config supabase/functions/execute-tool/deno.json --node-modules-dir=auto supabase/functions/advance-plan-run/index.ts
           deno check --node-modules-dir=auto supabase/functions/finnlp-integration/index.ts
 
       - name: Enforce explicit extensions in deployed Edge Function import graphs

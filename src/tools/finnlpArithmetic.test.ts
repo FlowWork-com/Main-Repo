@@ -133,6 +133,34 @@ describe('deterministic FinNLP financial arithmetic', () => {
     expect(result.calculations[0].message).toContain('Do not compare or add');
   });
 
+  it('fails closed when currency symbols are ambiguous or a labelled operand omits currency', () => {
+    const ambiguous = analyzeFinancialArithmetic([
+      'Net sales: $96,000',
+      'Cost of goods sold: $58,000',
+      'Reported gross profit: $38,000',
+    ].join(String.fromCharCode(10)));
+    expect(ambiguous.calculations[0]).toMatchObject({
+      id: 'gross-profit',
+      status: 'currency_mismatch',
+      expectedAmount: null,
+      difference: null,
+    });
+    expect(ambiguous.calculations[0].message).toContain('ambiguous');
+
+    const missing = analyzeFinancialArithmetic([
+      'Net sales: INR 96,000',
+      'Cost of goods sold: 58,000',
+      'Reported gross profit: INR 38,000',
+    ].join(String.fromCharCode(10)));
+    expect(missing.calculations[0]).toMatchObject({
+      id: 'gross-profit',
+      status: 'currency_mismatch',
+      expectedAmount: null,
+      difference: null,
+    });
+    expect(missing.calculations[0].message).toContain('no explicit currency');
+  });
+
   it('does not derive operating profit from a cross-currency gross-profit calculation', () => {
     const result = analyzeFinancialArithmetic([
       'Net sales: INR 96,000',

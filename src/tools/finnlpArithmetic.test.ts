@@ -63,6 +63,41 @@ describe('deterministic FinNLP financial arithmetic', () => {
     ]);
   });
 
+  it('recalculates tax only when both a tax rate and taxable base are explicit', () => {
+    const valid = analyzeFinancialArithmetic([
+      'Taxable amount: INR 1,000',
+      'GST rate: 18%',
+      'Tax amount: INR 180',
+      'Invoice date: 2026-11-01',
+    ].join(String.fromCharCode(10)));
+    expect(valid.calculations).toMatchObject([{
+      id: 'tax-amount',
+      status: 'consistent',
+      expectedAmount: 180,
+      reportedAmount: 180,
+    }]);
+
+    const mismatch = analyzeFinancialArithmetic([
+      'Taxable amount: INR 1,000',
+      'GST rate: 18%',
+      'Tax amount: INR 200',
+    ].join(String.fromCharCode(10)));
+    expect(mismatch.calculations).toMatchObject([{
+      id: 'tax-amount',
+      status: 'mismatch',
+      expectedAmount: 180,
+      reportedAmount: 200,
+      difference: 20,
+    }]);
+
+    const missingBase = analyzeFinancialArithmetic([
+      'GST rate: 18%',
+      'Tax amount: INR 180',
+    ].join(String.fromCharCode(10)));
+    expect(missingBase.calculations).toEqual([]);
+    expect(missingBase.contextWarnings.join(' ')).toContain('no explicit taxable base');
+  });
+
   it('checks invoice totals including tax, discount, and shipping', () => {
     const result = analyzeFinancialArithmetic([
       'Subtotal: INR 1,000',

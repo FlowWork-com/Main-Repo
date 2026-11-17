@@ -257,6 +257,80 @@ Deno.test('financial plans get one FinNLP handoff and one main-planner refinemen
   );
 });
 
+Deno.test('planning-time FinNLP handoff overrides a wrong gross-profit calculation deterministically', async () => {
+  const requests: PlannerRequest[] = [];
+  const goal = [
+    'Net sales: INR 96,000',
+    'Cost of goods sold: INR 58,000',
+    'Reported gross profit: INR 42,000',
+  ].join(String.fromCharCode(10));
+  const makePlan = (request: PlannerRequest): WorkflowPlan => ({
+    id: '66000000-0000-4000-8000-000000000002',
+    taskId: request.taskId,
+    goal: request.goal,
+    summary: 'Review the financial figures.',
+    steps: [{
+      id: 'step-one',
+      title: 'Review figures',
+      description: 'Review the supplied financial figures.',
+      toolId: 'echo',
+      toolVersion: '1.0.0',
+      input: { label: request.goal },
+      dependencies: [],
+      expectedOutcome: 'The request is represented as structured data.',
+      verificationCriteria: 'The output preserves the supplied request.',
+      validation: { valid: true, blockingReasons: [] },
+    }],
+    dependencies: [],
+    createdAt: '2026-11-17T00:00:00.000Z',
+    version: 1,
+    validationStatus: 'valid',
+    limitations: [],
+  });
+  const adapter = {
+    providerName: 'test-main-planner',
+    async generatePlan(request: PlannerRequest): Promise<PlannerResponse> {
+      requests.push(request);
+      return { success: true, plan: makePlan(request) };
+    },
+  };
+  const reviewer = {
+    async reviewFinancialClaim() {
+      return {
+        reviewStatus: 'supported_by_sources',
+        decodedMeaning: 'The claim compares net sales and cost of goods sold with gross profit.',
+        assessmentSummary: 'The figures are arithmetically consistent: INR 96,000 minus INR 58,000 equals INR 42,000.',
+        findings: [{
+          statement: 'The figures are internally consistent arithmetically.',
+          assessment: 'supports_claim',
+          explanation: 'The supplied draft states that gross profit is INR 42,000.',
+          sourceIds: [],
+        }],
+        ambiguities: [],
+        questionsForMainAgent: [],
+        nextStepForMainAgent: 'Check the reporting period and source records.',
+        confidence: 'moderate',
+      };
+    },
+  };
+
+  const handler = createHandler({
+    plannerEnvironment: {
+      FLOWWORK_PLANNER_PROVIDER: 'mock',
+      FLOWWORK_PLANNER_ALLOW_MOCK: 'true',
+    },
+    createPlannerAdapter: () => adapter,
+    financialReviewer: reviewer,
+  });
+  const response = await handler(post(JSON.stringify({ taskId, goal })));
+  assertEquals(response.status, 200);
+  assertEquals(requests.length, 2);
+  assertEquals(requests[1].reviewerFeedback?.includes('INR 38,000'), true);
+  assertEquals(requests[1].reviewerFeedback?.includes('INR 4,000'), true);
+  assertEquals(requests[1].reviewerFeedback?.includes('overstated'), true);
+  assertEquals(requests[1].reviewerFeedback?.includes('internally consistent arithmetically'), false);
+});
+
 Deno.test('financial planning explicitly records when the FinNLP sidecar is not configured', async () => {
   const handler = createPlanWorkflowHandler({
     origins: new Set(),

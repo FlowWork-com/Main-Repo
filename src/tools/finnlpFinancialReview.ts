@@ -93,6 +93,7 @@ interface FinnlpFinancialAmbiguity {
 export interface FinnlpFinancialReviewOutput {
   readonly reviewer: 'FinNLP financial verification sidecar';
   readonly role: 'specialist_verifier_not_primary_agent';
+  readonly deterministicChecks?: DeterministicFinancialChecks;
   readonly reviewStatus: ReviewStatus;
   readonly decodedMeaning: string;
   readonly assessmentSummary: string;

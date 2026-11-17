@@ -288,8 +288,18 @@ export function createFinnlpFinancialReviewTool(
         );
       }
 
-      const output = normalizeFinnlpFinancialReview(rawReview, sources);
-      if (!output || !isPersistableJson(output)) {
+      const normalizedOutput = normalizeFinnlpFinancialReview(rawReview, sources);
+      if (!normalizedOutput) {
+        return toolFailure(
+          'EXECUTION_FAILED',
+          'The financial review could not be validated safely. No verification result was recorded.',
+        );
+      }
+      const output = applyDeterministicFinancialChecks(normalizedOutput, {
+        claim: input.claim,
+        ...(input.draftAnswer ? { draftAnswer: input.draftAnswer } : {}),
+      });
+      if (!isPersistableJson(output)) {
         return toolFailure(
           'EXECUTION_FAILED',
           'The financial review could not be validated safely. No verification result was recorded.',
@@ -301,10 +311,119 @@ export function createFinnlpFinancialReviewTool(
         evidence: {
           type: 'financial-review',
           reference: `finnlp-review://task/${context.taskId}/execution/${context.executionId}`,
-          summary: `FinNLP financial review: ${output.reviewStatus}; human review required.`,
+          summary: `FinNLP financial review: ${output.reviewStatus}; arithmetic: ${output.deterministicChecks.status}; human review required.`,
         },
       };
     },
+  };
+}
+
+
+function applyDeterministicFinancialChecks(
+  output: FinnlpFinancialReviewOutput,
+  input: Pick<FinnlpFinancialReviewInput, 'claim' | 'draftAnswer'>,
+): FinnlpFinancialReviewOutput {
+  const deterministicChecks = analyzeFinancialArithmetic(
+    [input.claim, input.draftAnswer ?? ''].join('\n'),
+  );
+  if (deterministicChecks.calculations.length === 0) {
+    return { ...output, deterministicChecks };
+  }
+
+  const calculationFindings: FinnlpFinancialReviewFinding[] =
+    deterministicChecks.calculations.map((check) => ({
+      statement: check.message,
+      assessment: check.status === 'mismatch'
+        ? 'contradicts_claim'
+        : check.status === 'consistent'
+          ? 'supports_claim'
+          : 'not_verifiable',
+      explanation: check.status === 'currency_mismatch'
+        ? 'The amounts cannot safely be compared until they are expressed in the same currency using an explicit conversion rate and date.'
+        : 'This result was calculated deterministically from the labelled amounts in the claim/draft. It is an arithmetic check, not independent evidence that the inputs themselves are accurate.',
+      sourceIds: [],
+      basis: 'deterministic_arithmetic',
+    }));
+
+  // A provider narrative about these same calculations is superseded by the
+  // deterministic result. Keep other language/evidence findings intact.
+  const relevantTerms = /arithmetic|gross profit|net sales|cost of goods sold|\bCOGS\b|operating profit|invoice total|subtotal|tax amount/i;
+  const retainedFindings = output.findings.filter((finding) =>
+    !relevantTerms.test(finding.statement) && !relevantTerms.test(finding.explanation));
+  const findings = [
+    ...retainedFindings.slice(0, Math.max(0, 8 - calculationFindings.length)),
+    ...calculationFindings.slice(0, 8),
+  ];
+
+  const hasIssue = deterministicChecks.status === 'mismatch_detected';
+  const calculationMessages = deterministicChecks.calculations.map((check) => check.message);
+  const contextMessage = deterministicChecks.contextWarnings.join(' ');
+  const assessmentSummary = hasIssue
+    ? [
+        'Deterministic financial arithmetic checks identified an issue.',
+        ...calculationMessages,
+        contextMessage,
+        'This arithmetic result is separate from external-source verification. The model-generated narrative does not override the deterministic calculation.',
+        `Independent source-verification status remains: ${output.reviewStatus}.`,
+      ].filter(Boolean).join(' ').slice(0, 1_000)
+    : [
+        output.assessmentSummary,
+        'Deterministic financial arithmetic checks:',
+        ...calculationMessages,
+        contextMessage,
+      ].filter(Boolean).join(' ').slice(0, 1_000);
+
+  const missingPeriodQuestion =
+    !deterministicChecks.reportingPeriodProvided
+      ? 'What reporting period or invoice date do these figures belong to?'
+      : null;
+  const questionsForMainAgent = [
+    ...output.questionsForMainAgent.filter((question) => question !== missingPeriodQuestion),
+    ...(missingPeriodQuestion ? [missingPeriodQuestion] : []),
+  ].slice(-4);
+
+  const ambiguities = missingPeriodQuestion
+    ? [
+        ...output.ambiguities.filter((ambiguity) => ambiguity.term.toLowerCase() !== 'reporting period'),
+        {
+          term: 'Reporting period',
+          interpretations: [
+            'The figures may refer to a financial year, quarter, month, or a single invoice date.',
+          ],
+          clarificationQuestion: missingPeriodQuestion,
+        },
+      ].slice(0, 4)
+    : output.ambiguities;
+
+  const nextStepForMainAgent = hasIssue
+    ? `Correct or explicitly explain the arithmetic issue before presenting the result. ${calculationMessages.join(' ')} Confirm the reporting period and source records before treating the input figures as factual.`.slice(0, 500)
+    : output.nextStepForMainAgent;
+
+  const handoffMessage = hasIssue
+    ? [
+        'FinNLP handoff: deterministic financial arithmetic checks take precedence over contradictory model arithmetic.',
+        ...calculationMessages,
+        contextMessage,
+        missingPeriodQuestion ?? '',
+        `Independent source-verification status remains ${output.reviewStatus}; arithmetic correctness does not establish that source figures are authentic.`,
+        'A human must review the calculations and source records. This is not financial advice or execution approval.',
+      ].filter(Boolean).join(' ').slice(0, 2_800)
+    : [
+        output.handoffMessage,
+        'Deterministic financial arithmetic checks:',
+        ...calculationMessages,
+        contextMessage,
+      ].filter(Boolean).join(' ').slice(0, 2_800);
+
+  return {
+    ...output,
+    deterministicChecks,
+    assessmentSummary,
+    findings,
+    ambiguities,
+    questionsForMainAgent,
+    nextStepForMainAgent,
+    handoffMessage,
   };
 }
 

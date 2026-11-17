@@ -311,7 +311,7 @@ export function createFinnlpFinancialReviewTool(
         evidence: {
           type: 'financial-review',
           reference: `finnlp-review://task/${context.taskId}/execution/${context.executionId}`,
-          summary: `FinNLP financial review: ${output.reviewStatus}; arithmetic: ${output.deterministicChecks.status}; human review required.`,
+          summary: `FinNLP financial review: ${output.reviewStatus}; arithmetic: ${output.deterministicChecks?.status ?? 'not_assessed'}; human review required.`,
         },
       };
     },

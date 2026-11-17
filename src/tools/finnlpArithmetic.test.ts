@@ -109,6 +109,26 @@ describe('deterministic FinNLP financial arithmetic', () => {
     expect(result.contextWarnings.join(' ')).toContain('No reporting period');
   });
 
+  it('does not calculate an invoice total when tax inclusion or extra charges are ambiguous', () => {
+    const inclusive = analyzeFinancialArithmetic([
+      'Subtotal: INR 1,000',
+      'Tax amount: INR 180',
+      'Grand total: INR 1,180',
+      'Tax inclusive invoice',
+    ].join(String.fromCharCode(10)));
+    expect(inclusive.calculations).toEqual([]);
+    expect(inclusive.contextWarnings.join(' ')).toContain('tax may already be included');
+
+    const extraCharges = analyzeFinancialArithmetic([
+      'Subtotal: INR 1,000',
+      'Tax amount: INR 180',
+      'Other charges apply',
+      'Grand total: INR 1,180',
+    ].join(String.fromCharCode(10)));
+    expect(extraCharges.calculations).toEqual([]);
+    expect(extraCharges.contextWarnings.join(' ')).toContain('additional charges');
+  });
+
   it('does not invent a calculation when required labelled operands are absent', () => {
     const result = analyzeFinancialArithmetic('The company reported good profitability and improved margins.');
 

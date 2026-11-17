@@ -326,7 +326,7 @@ function applyDeterministicFinancialChecks(
   const deterministicChecks = analyzeFinancialArithmetic(
     [input.claim, input.draftAnswer ?? ''].join('\n'),
   );
-  if (deterministicChecks.calculations.length === 0) {
+  if (deterministicChecks.calculations.length === 0 && deterministicChecks.contextWarnings.length === 0) {
     return { ...output, deterministicChecks };
   }
 
@@ -373,10 +373,10 @@ function applyDeterministicFinancialChecks(
         contextMessage,
       ].filter(Boolean).join(' ').slice(0, 1_000);
 
-  const missingPeriodQuestion =
-    !deterministicChecks.reportingPeriodProvided
-      ? 'What reporting period or invoice date do these figures belong to?'
-      : null;
+  const missingPeriodQuestion = deterministicChecks.contextWarnings.some((warning) =>
+    warning.startsWith('No reporting period'))
+    ? 'What reporting period or invoice date do these figures belong to?'
+    : null;
   const questionsForMainAgent = [
     ...output.questionsForMainAgent.filter((question) => question !== missingPeriodQuestion),
     ...(missingPeriodQuestion ? [missingPeriodQuestion] : []),

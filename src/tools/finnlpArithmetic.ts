@@ -119,7 +119,7 @@ export function analyzeFinancialArithmetic(text: string): DeterministicFinancial
         reportedAmount: grossProfit?.amount ?? null,
         difference: null,
         currency: null,
-        message: 'Gross profit was not calculated because net sales and cost of goods sold are stated in different currencies. Do not compare them without an explicit conversion rate and date.',
+        message: 'Gross profit was not calculated because net sales and cost of goods sold are stated in different currencies. Do not compare or add these amounts without an explicit conversion rate and date.',
       });
     } else {
       calculatedGrossProfit = roundMoney(netSales.amount - cogs.amount);

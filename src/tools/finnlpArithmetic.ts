@@ -97,46 +97,27 @@ export function analyzeFinancialArithmetic(text: string): DeterministicFinancial
   let calculatedGrossProfit: number | null = null;
   if (netSales && cogs) {
     if (grossProfitCurrencyConflict) {
-      calculations.push(compareAmounts({
+      const operands: FinancialArithmeticOperand[] = [netSales, cogs].map((amount) => ({
+        label: amount.label,
+        amount: amount.amount,
+        currency: amount.currency,
+      }));
+      calculations.push({
         id: 'gross-profit',
         label: 'Gross profit',
         formula: 'net sales − cost of goods sold',
-        operands: [netSales, cogs],
-        expectedAmount: netSales.amount - cogs.amount,
-        reported: grossProfit ?? {
-          key: 'grossProfit',
-          label: 'reported gross profit',
-          amount: 0,
-          currency: null,
-        },
-      }));
-      calculations.pop();
-      // The normal comparison below records the currency conflict without inventing a converted amount.
-      if (grossProfit) {
-        calculations.push(compareAmounts({
-          id: 'gross-profit',
-          label: 'Gross profit',
-          formula: 'net sales − cost of goods sold',
-          operands: [netSales, cogs],
-          expectedAmount: netSales.amount - cogs.amount,
-          reported: grossProfit,
-        }));
-      } else {
-        calculations.push({
-          id: 'gross-profit',
-          label: 'Gross profit',
-          formula: 'net sales − cost of goods sold',
-          status: 'currency_mismatch',
-          operands: [netSales, cogs].map((amount) => ({
-            label: amount.label, amount: amount.amount, currency: amount.currency,
-          })),
-          expectedAmount: null,
-          reportedAmount: 0,
-          difference: null,
-          currency: null,
-          message: 'Gross profit was not calculated because net sales and cost of goods sold are stated in different currencies. Do not compare them without an explicit conversion rate and date.',
-        });
-      }
+        status: 'currency_mismatch',
+        operands: grossProfit ? [...operands, {
+          label: grossProfit.label,
+          amount: grossProfit.amount,
+          currency: grossProfit.currency,
+        }] : operands,
+        expectedAmount: null,
+        reportedAmount: grossProfit?.amount ?? 0,
+        difference: null,
+        currency: null,
+        message: 'Gross profit was not calculated because net sales and cost of goods sold are stated in different currencies. Do not compare them without an explicit conversion rate and date.',
+      });
     } else {
       calculatedGrossProfit = roundMoney(netSales.amount - cogs.amount);
       if (grossProfit) {
@@ -151,7 +132,6 @@ export function analyzeFinancialArithmetic(text: string): DeterministicFinancial
       }
     }
   }
-
   if (!grossProfitCurrencyConflict && operatingExpenses && operatingProfit &&
     (calculatedGrossProfit !== null || grossProfit)) {
     const calculated = calculatedGrossProfit ?? grossProfit!.amount;

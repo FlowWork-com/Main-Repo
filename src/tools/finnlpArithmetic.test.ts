@@ -7,8 +7,7 @@ describe('deterministic FinNLP financial arithmetic', () => {
       'Net sales: INR 96,000',
       'Cost of goods sold: INR 58,000',
       'Reported gross profit: INR 42,000',
-    ].join('
-'));
+    ].join(String.fromCharCode(10)));
 
     expect(result.status).toBe('mismatch_detected');
     expect(result.calculations).toMatchObject([{
@@ -22,7 +21,7 @@ describe('deterministic FinNLP financial arithmetic', () => {
     expect(result.calculations[0].message).toContain('4,000 overstated');
   });
 
-  it('accepts a correct gross-profit calculation without claiming source verification', () => {
+  it('accepts a correct gross-profit calculation and recognizes its reporting period', () => {
     const result = analyzeFinancialArithmetic([
       'Net sales are INR 96,000',
       'Cost of goods sold is INR 58,000',
@@ -50,8 +49,7 @@ describe('deterministic FinNLP financial arithmetic', () => {
       'Operating expenses: INR 20,000',
       'Reported operating profit: INR 22,000',
       'Quarter ended 2026-09-30',
-    ].join('
-'));
+    ].join(String.fromCharCode(10)));
 
     expect(result.calculations.map((item) => item.id)).toEqual([
       'net-sales',
@@ -73,8 +71,7 @@ describe('deterministic FinNLP financial arithmetic', () => {
       'Shipping: INR 40',
       'Grand total: INR 1,200',
       'Invoice date: 2026-11-01',
-    ].join('
-'));
+    ].join(String.fromCharCode(10)));
 
     expect(result.calculations).toMatchObject([{
       id: 'invoice-total',
@@ -89,8 +86,7 @@ describe('deterministic FinNLP financial arithmetic', () => {
       'Net sales: INR 96,000',
       'Cost of goods sold: USD 58,000',
       'Reported gross profit: INR 38,000',
-    ].join('
-'));
+    ].join(String.fromCharCode(10)));
 
     expect(result.status).toBe('mismatch_detected');
     expect(result.calculations[0]).toMatchObject({
@@ -107,8 +103,7 @@ describe('deterministic FinNLP financial arithmetic', () => {
       'Net sales: INR 96,000',
       'Cost of goods sold: INR 58,000',
       'Reported gross profit: INR 38,000',
-    ].join('
-'));
+    ].join(String.fromCharCode(10)));
 
     expect(result.reportingPeriodProvided).toBe(false);
     expect(result.contextWarnings.join(' ')).toContain('No reporting period');

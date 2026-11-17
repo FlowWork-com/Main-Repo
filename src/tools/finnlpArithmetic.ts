@@ -54,6 +54,7 @@ const amountPatterns: readonly {
   { key: 'operatingProfit', label: 'reported operating profit', pattern: /\breported\s+operating\s+profit\b/gi },
   { key: 'operatingProfit', label: 'operating profit', pattern: /(?<!reported\s)\boperating\s+profit\b/gi },
   { key: 'subtotal', label: 'subtotal', pattern: /\bsubtotal\b/gi },
+  { key: 'taxableAmount', label: 'taxable amount', pattern: /\b(?:taxable\s+amount|taxable\s+base)\b/gi },
   { key: 'tax', label: 'tax amount', pattern: /\b(?:tax\s+amount|tax)(?!\s+rate)\b/gi },
   { key: 'discount', label: 'discount', pattern: /\bdiscount\b/gi },
   { key: 'shipping', label: 'shipping or delivery', pattern: /\b(?:shipping|delivery\s+charge)\b/gi },
@@ -76,7 +77,9 @@ export function analyzeFinancialArithmetic(text: string): DeterministicFinancial
   const operatingExpenses = get('operatingExpenses');
   const operatingProfit = get('operatingProfit');
   const subtotal = get('subtotal');
-  const tax = get('tax');\n  const taxableAmount = get('taxableAmount');\n  const taxRate = extractTaxRate(text);
+  const tax = get('tax');
+  const taxableAmount = get('taxableAmount');
+  const taxRate = extractTaxRate(text);
   const discount = get('discount');
   const shipping = get('shipping');
   const invoiceTotal = get('invoiceTotal');
@@ -229,7 +232,7 @@ export function analyzeFinancialArithmetic(text: string): DeterministicFinancial
 }
 
 function extractTaxRate(text: string): number | null {
-  const match = /\\b(?:GST|VAT|tax)\\s*(?:rate)?\\s*(?::|is|of|@)?\\s*(\\d{1,3}(?:\\.\\d{1,2})?)\\s*%/i.exec(text);
+  const match = /\b(?:GST|VAT|tax)\s*(?:rate)?\s*(?::|is|of|@)?\s*(\d{1,3}(?:\.\d{1,2})?)\s*%/i.exec(text);
   if (!match) return null;
   const rate = Number(match[1]);
   return Number.isFinite(rate) && rate > 0 && rate <= 100 ? rate : null;

@@ -283,8 +283,15 @@ function compareAmounts(input: {
     currency: operand.currency,
   }));
 
-  if (explicitCurrencies.size > 1) {
-    const currencyList = [...explicitCurrencies].join(', ');
+  const ambiguousCurrency = [...explicitCurrencies].some((value) =>
+    value === 'USD_OR_OTHER' || value === 'JPY_OR_CNY');
+  const mixedMissingCurrency = explicitCurrencies.size > 0 && !allAmountsHaveCurrency;
+  if (explicitCurrencies.size > 1 || ambiguousCurrency || mixedMissingCurrency) {
+    const reason = ambiguousCurrency
+      ? 'one or more currency symbols are ambiguous'
+      : mixedMissingCurrency
+        ? 'one or more operands have no explicit currency'
+        : `the operands use different currencies (${[...explicitCurrencies].join(', ')})`;
     return {
       id: input.id,
       label: input.label,
@@ -295,7 +302,7 @@ function compareAmounts(input: {
       reportedAmount: input.reported.amount,
       difference: null,
       currency: null,
-      message: `${input.label} was not recalculated because its operands use different currencies (${currencyList}). Do not compare or add these amounts without an explicit conversion rate and date.`,
+      message: `${input.label} was not recalculated because ${reason}. Specify matching ISO currency codes and, where needed, an explicit conversion rate and date.`,
     };
   }
 

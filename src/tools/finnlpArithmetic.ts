@@ -127,7 +127,9 @@ export function analyzeFinancialArithmetic(text: string): DeterministicFinancial
     }));
   }
 
-  if (subtotal && tax && invoiceTotal) {
+  const hasUnitemizedInvoiceCharges = /\\b(?:other\\s+charges|service\\s+charge|handling\\s+charge|freight|surcharge)\\b/i.test(text);
+  const taxAlreadyIncluded = /\\b(?:tax[- ]inclusive|inclusive\\s+of\\s+tax|tax\\s+included\\s+in\\s+(?:the\\s+)?subtotal)\\b/i.test(text);
+  if (subtotal && tax && invoiceTotal && !hasUnitemizedInvoiceCharges && !taxAlreadyIncluded) {
     const operands: ParsedAmount[] = [subtotal, tax];
     let expected = subtotal.amount + tax.amount;
     if (discount) {
@@ -162,6 +164,16 @@ export function analyzeFinancialArithmetic(text: string): DeterministicFinancial
     );
   }
 
+  if (financialAmountsPresent && [...amounts.values()].some((amount) => amount.currency === null) &&
+    [...amounts.values()].some((amount) => amount.currency !== null)) {
+    contextWarnings.push('Currency is missing from one or more labelled amounts. Confirm that all compared figures use the same currency and unit.');
+  }
+  if (hasUnitemizedInvoiceCharges) {
+    contextWarnings.push('Invoice total was not checked because additional charges were mentioned but not individually identified.');
+  }
+  if (taxAlreadyIncluded) {
+    contextWarnings.push('Invoice total was not checked because tax may already be included in the subtotal.');
+  }
   const hasMismatch = calculations.some((calculation) =>
     calculation.status === 'mismatch' || calculation.status === 'currency_mismatch');
   return {
@@ -210,7 +222,8 @@ function compareAmounts(input: {
       .map((operand) => operand.currency)
       .filter((currency): currency is string => currency !== null),
   );
-  const allAmountsHaveCurrency = [...input.operands, input.reported].every((operand) => operand.currency !== null);\n  const currency = explicitCurrencies.size === 1 && allAmountsHaveCurrency ? [...explicitCurrencies][0] : null;
+  const allAmountsHaveCurrency = [...input.operands, input.reported].every((operand) => operand.currency !== null);
+  const currency = explicitCurrencies.size === 1 && allAmountsHaveCurrency ? [...explicitCurrencies][0] : null;
   const operands: FinancialArithmeticOperand[] = [
     ...input.operands,
     input.reported,
@@ -241,11 +254,12 @@ function compareAmounts(input: {
   const difference = roundMoney(reportedAmount - expectedAmount);
   const status = Math.abs(difference) <= 0.01 ? 'consistent' : 'mismatch';
   const currencyPrefix = currency ? `${currency} ` : '';
+  const currencyWarning = allAmountsHaveCurrency ? '' : ' Currency was not explicitly stated on every amount; confirm units match.';
   const formula = input.operands
     .map((operand) => `${operand.label}: ${currencyPrefix}${formatAmount(operand.amount)}`)
     .join('; ');
   const message = status === 'consistent'
-    ? `${input.label} is arithmetically consistent. Formula: ${input.formula}. Inputs: ${formula}. Expected and reported amount: ${currencyPrefix}${formatAmount(reportedAmount)}.`
+    ? `${input.label} is arithmetically consistent. Formula: ${input.formula}. Inputs: ${formula}. Expected and reported amount: ${currencyPrefix}${formatAmount(reportedAmount)}.${currencyWarning}`
     : `${input.label} mismatch. Formula: ${input.formula}. Inputs: ${formula}. Correct amount: ${currencyPrefix}${formatAmount(expectedAmount)}; reported amount: ${currencyPrefix}${formatAmount(reportedAmount)} (${currencyPrefix}${formatAmount(Math.abs(difference))} ${difference > 0 ? 'overstated' : 'understated'}).${currencyWarning}`;
 
   return {

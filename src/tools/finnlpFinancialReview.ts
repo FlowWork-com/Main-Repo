@@ -1,4 +1,4 @@
-import { analyzeFinancialArithmetic, type DeterministicFinancialChecks } from './finnlpArithmetic';
+import { analyzeFinancialArithmetic, type DeterministicFinancialChecks } from './finnlpArithmetic.ts';
 import {
   isCredentialLikeString,
   isPersistableJson,

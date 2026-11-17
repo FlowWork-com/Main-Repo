@@ -54,7 +54,7 @@ const amountPatterns: readonly {
   { key: 'operatingProfit', label: 'reported operating profit', pattern: /\breported\s+operating\s+profit\b/gi },
   { key: 'operatingProfit', label: 'operating profit', pattern: /(?<!reported\s)\boperating\s+profit\b/gi },
   { key: 'subtotal', label: 'subtotal', pattern: /\bsubtotal\b/gi },
-  { key: 'tax', label: 'tax amount', pattern: /\b(?:tax\s+amount|tax)\b/gi },
+  { key: 'tax', label: 'tax amount', pattern: /\b(?:tax\s+amount|tax)(?!\s+rate)\b/gi },
   { key: 'discount', label: 'discount', pattern: /\bdiscount\b/gi },
   { key: 'shipping', label: 'shipping or delivery', pattern: /\b(?:shipping|delivery\s+charge)\b/gi },
   { key: 'invoiceTotal', label: 'invoice total', pattern: /\b(?:invoice\s+total|grand\s+total|total\s+amount|amount\s+due|total\s+due)\b/gi },
@@ -127,8 +127,8 @@ export function analyzeFinancialArithmetic(text: string): DeterministicFinancial
     }));
   }
 
-  const hasUnitemizedInvoiceCharges = /\\b(?:other\\s+charges|service\\s+charge|handling\\s+charge|freight|surcharge)\\b/i.test(text);
-  const taxAlreadyIncluded = /\\b(?:tax[- ]inclusive|inclusive\\s+of\\s+tax|tax\\s+included\\s+in\\s+(?:the\\s+)?subtotal)\\b/i.test(text);
+  const hasUnitemizedInvoiceCharges = /\b(?:other\s+charges|service\s+charge|handling\s+charge|freight|surcharge)\b/i.test(text);
+  const taxAlreadyIncluded = /\b(?:tax[- ]inclusive|inclusive\s+of\s+tax|tax\s+included\s+in\s+(?:the\s+)?subtotal)\b/i.test(text);
   if (subtotal && tax && invoiceTotal && !hasUnitemizedInvoiceCharges && !taxAlreadyIncluded) {
     const operands: ParsedAmount[] = [subtotal, tax];
     let expected = subtotal.amount + tax.amount;

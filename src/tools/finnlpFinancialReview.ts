@@ -1,3 +1,4 @@
+import { analyzeFinancialArithmetic, type DeterministicFinancialChecks } from './finnlpArithmetic';
 import {
   isCredentialLikeString,
   isPersistableJson,

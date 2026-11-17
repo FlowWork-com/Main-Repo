@@ -210,7 +210,7 @@ function compareAmounts(input: {
       .map((operand) => operand.currency)
       .filter((currency): currency is string => currency !== null),
   );
-  const currency = explicitCurrencies.size === 1 ? [...explicitCurrencies][0] : null;
+  const allAmountsHaveCurrency = [...input.operands, input.reported].every((operand) => operand.currency !== null);\n  const currency = explicitCurrencies.size === 1 && allAmountsHaveCurrency ? [...explicitCurrencies][0] : null;
   const operands: FinancialArithmeticOperand[] = [
     ...input.operands,
     input.reported,
@@ -232,7 +232,7 @@ function compareAmounts(input: {
       reportedAmount: input.reported.amount,
       difference: null,
       currency: null,
-      message: \`${input.label} was not recalculated because its operands use different currencies (${currencyList}). Do not compare or add these amounts without an explicit conversion rate and date.\`,
+      message: `${input.label} was not recalculated because its operands use different currencies (${currencyList}). Do not compare or add these amounts without an explicit conversion rate and date.`,
     };
   }
 
@@ -240,13 +240,13 @@ function compareAmounts(input: {
   const reportedAmount = roundMoney(input.reported.amount);
   const difference = roundMoney(reportedAmount - expectedAmount);
   const status = Math.abs(difference) <= 0.01 ? 'consistent' : 'mismatch';
-  const currencyPrefix = currency ? \`${currency} \` : '';
+  const currencyPrefix = currency ? `${currency} ` : '';
   const formula = input.operands
-    .map((operand) => \`${operand.label}: ${currencyPrefix}${formatAmount(operand.amount)}\`)
+    .map((operand) => `${operand.label}: ${currencyPrefix}${formatAmount(operand.amount)}`)
     .join('; ');
   const message = status === 'consistent'
-    ? \`${input.label} is arithmetically consistent. Formula: ${input.formula}. Inputs: ${formula}. Expected and reported amount: ${currencyPrefix}${formatAmount(reportedAmount)}.\`
-    : \`${input.label} mismatch. Formula: ${input.formula}. Inputs: ${formula}. Correct amount: ${currencyPrefix}${formatAmount(expectedAmount)}; reported amount: ${currencyPrefix}${formatAmount(reportedAmount)} (${currencyPrefix}${formatAmount(Math.abs(difference))} ${difference > 0 ? 'overstated' : 'understated'}).\`;
+    ? `${input.label} is arithmetically consistent. Formula: ${input.formula}. Inputs: ${formula}. Expected and reported amount: ${currencyPrefix}${formatAmount(reportedAmount)}.`
+    : `${input.label} mismatch. Formula: ${input.formula}. Inputs: ${formula}. Correct amount: ${currencyPrefix}${formatAmount(expectedAmount)}; reported amount: ${currencyPrefix}${formatAmount(reportedAmount)} (${currencyPrefix}${formatAmount(Math.abs(difference))} ${difference > 0 ? 'overstated' : 'understated'}).${currencyWarning}`;
 
   return {
     id: input.id,

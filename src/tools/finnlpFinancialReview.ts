@@ -320,7 +320,7 @@ export function createFinnlpFinancialReviewTool(
 }
 
 
-function applyDeterministicFinancialChecks(
+export function applyDeterministicFinancialChecks(
   output: FinnlpFinancialReviewOutput,
   input: Pick<FinnlpFinancialReviewInput, 'claim' | 'draftAnswer'>,
 ): FinnlpFinancialReviewOutput {

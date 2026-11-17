@@ -30,7 +30,7 @@ export interface DeterministicFinancialChecks {
 type AmountKey =
   | 'netSales' | 'grossSales' | 'returns' | 'costOfGoodsSold'
   | 'grossProfit' | 'operatingExpenses' | 'operatingProfit'
-  | 'subtotal' | 'tax' | 'discount' | 'shipping' | 'invoiceTotal';
+  | 'subtotal' | 'taxableAmount' | 'tax' | 'discount' | 'shipping' | 'invoiceTotal';
 
 interface ParsedAmount {
   readonly key: AmountKey;
@@ -76,7 +76,7 @@ export function analyzeFinancialArithmetic(text: string): DeterministicFinancial
   const operatingExpenses = get('operatingExpenses');
   const operatingProfit = get('operatingProfit');
   const subtotal = get('subtotal');
-  const tax = get('tax');
+  const tax = get('tax');\n  const taxableAmount = get('taxableAmount');\n  const taxRate = extractTaxRate(text);
   const discount = get('discount');
   const shipping = get('shipping');
   const invoiceTotal = get('invoiceTotal');
@@ -153,6 +153,17 @@ export function analyzeFinancialArithmetic(text: string): DeterministicFinancial
     }));
   }
 
+  if (taxableAmount && tax && taxRate !== null) {
+    calculations.push(compareAmounts({
+      id: 'tax-amount',
+      label: 'Tax amount',
+      formula: 'taxable amount × tax rate',
+      operands: [taxableAmount],
+      expectedAmount: taxableAmount.amount * taxRate / 100,
+      reported: tax,
+    }));
+  }
+
   const hasUnitemizedInvoiceCharges = /\b(?:other\s+charges|service\s+charge|handling\s+charge|freight|surcharge)\b/i.test(text);
   const taxAlreadyIncluded = /\b(?:tax[- ]inclusive|inclusive\s+of\s+tax|tax\s+included\s+in\s+(?:the\s+)?subtotal)\b/i.test(text);
   if (subtotal && tax && invoiceTotal && !hasUnitemizedInvoiceCharges && !taxAlreadyIncluded) {
@@ -194,6 +205,9 @@ export function analyzeFinancialArithmetic(text: string): DeterministicFinancial
     [...amounts.values()].some((amount) => amount.currency !== null)) {
     contextWarnings.push('Currency is missing from one or more labelled amounts. Confirm that all compared figures use the same currency and unit.');
   }
+  if (taxRate !== null && tax && !taxableAmount) {
+    contextWarnings.push('Tax rate was provided, but no explicit taxable base was identified. Tax was not recalculated.');
+  }
   if (hasUnitemizedInvoiceCharges) {
     contextWarnings.push('Invoice total was not checked because additional charges were mentioned but not individually identified.');
   }
@@ -212,6 +226,13 @@ export function analyzeFinancialArithmetic(text: string): DeterministicFinancial
     reportingPeriodProvided,
     contextWarnings,
   };
+}
+
+function extractTaxRate(text: string): number | null {
+  const match = /\\b(?:GST|VAT|tax)\\s*(?:rate)?\\s*(?::|is|of|@)?\\s*(\\d{1,3}(?:\\.\\d{1,2})?)\\s*%/i.exec(text);
+  if (!match) return null;
+  const rate = Number(match[1]);
+  return Number.isFinite(rate) && rate > 0 && rate <= 100 ? rate : null;
 }
 
 function extractAmounts(text: string): Map<AmountKey, ParsedAmount> {

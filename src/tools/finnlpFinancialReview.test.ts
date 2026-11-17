@@ -203,7 +203,7 @@ describe('FinNLP financial review sidecar', () => {
         'Net sales: INR 96,000',
         'Cost of goods sold: INR 58,000',
         'Reported gross profit: INR 42,000',
-      ].join('\\n'),
+      ].join(String.fromCharCode(10)),
       draftAnswer: 'The reported gross profit is correct at INR 42,000.',
     });
 

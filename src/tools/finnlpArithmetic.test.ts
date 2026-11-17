@@ -98,6 +98,23 @@ describe('deterministic FinNLP financial arithmetic', () => {
     expect(result.calculations[0].message).toContain('Do not compare or add');
   });
 
+  it('does not derive operating profit from a cross-currency gross-profit calculation', () => {
+    const result = analyzeFinancialArithmetic([
+      'Net sales: INR 96,000',
+      'Cost of goods sold: USD 58,000',
+      'Operating expenses: INR 20,000',
+      'Reported operating profit: INR 18,000',
+    ].join(String.fromCharCode(10)));
+
+    expect(result.calculations).toMatchObject([{
+      id: 'gross-profit',
+      status: 'currency_mismatch',
+      expectedAmount: null,
+      reportedAmount: null,
+    }]);
+    expect(result.calculations.some((item) => item.id === 'operating-profit')).toBe(false);
+  });
+
   it('warns when financial amounts have no identifiable reporting period', () => {
     const result = analyzeFinancialArithmetic([
       'Net sales: INR 96,000',

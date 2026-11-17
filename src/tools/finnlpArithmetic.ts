@@ -13,7 +13,7 @@ export interface FinancialArithmeticCheck {
   readonly status: FinancialArithmeticStatus;
   readonly operands: readonly FinancialArithmeticOperand[];
   readonly expectedAmount: number | null;
-  readonly reportedAmount: number;
+  readonly reportedAmount: number | null;
   /** Positive means the reported amount is overstated; negative means understated. */
   readonly difference: number | null;
   readonly currency: string | null;
@@ -113,7 +113,7 @@ export function analyzeFinancialArithmetic(text: string): DeterministicFinancial
           currency: grossProfit.currency,
         }] : operands,
         expectedAmount: null,
-        reportedAmount: grossProfit?.amount ?? 0,
+        reportedAmount: grossProfit?.amount ?? null,
         difference: null,
         currency: null,
         message: 'Gross profit was not calculated because net sales and cost of goods sold are stated in different currencies. Do not compare them without an explicit conversion rate and date.',

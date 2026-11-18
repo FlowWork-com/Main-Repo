@@ -391,13 +391,13 @@ function applyDeterministicFinancialCorrections(
 function stepMatchesFinancialCheck(stepText: string, checkId: string): boolean {
   switch (checkId) {
     case 'gross-profit':
-      return /gross profit|net sales|cost of goods sold|\\bCOGS\\b/i.test(stepText);
+      return /gross profit|net sales|cost of goods sold|\bCOGS\b/i.test(stepText);
     case 'net-sales':
       return /net sales|gross sales|returns and refunds|sales returns/i.test(stepText);
     case 'operating-profit':
       return /operating profit|gross profit|operating expenses/i.test(stepText);
     case 'tax-amount':
-      return /taxable amount|taxable base|tax amount|\\bGST\\b|\\bVAT\\b/i.test(stepText);
+      return /taxable amount|taxable base|tax amount|\bGST\b|\bVAT\b/i.test(stepText);
     case 'invoice-total':
       return /invoice total|grand total|amount due|subtotal/i.test(stepText);
     default:
@@ -406,7 +406,7 @@ function stepMatchesFinancialCheck(stepText: string, checkId: string): boolean {
 }
 
 function formatFinancialCheck(message: string): string {
-  return message.replace(/\\bINR\\s+/g, '₹');
+  return message.replace(/\bINR\s+/g, '₹');
 }
 
 function appendBoundedText(existing: string, addition: string, maximum: number): string {

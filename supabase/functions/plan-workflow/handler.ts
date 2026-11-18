@@ -293,22 +293,31 @@ async function applyFinnlpReviewAndRefinePlan<Context>(
     });
     if (!refinedResponse.success) {
       dependencies.logFailure?.('FINNLP_PLAN_REFINEMENT_FAILED');
-      return appendPlanLimitations(initialPlan, [
-        'FinNLP supplied feedback, but the main planner could not revise its draft; the original plan is retained and needs human review.',
-        ...reviewNotes,
-      ]);
+      return appendPlanLimitations(
+        applyDeterministicFinancialCorrections(initialPlan, review),
+        [
+          'FinNLP supplied feedback, but the main planner could not revise its draft; the original plan structure was retained and deterministic arithmetic findings were applied. Human review remains required.',
+          ...reviewNotes,
+        ],
+      );
     }
     const refinedPlan = validatePlan(refinedResponse.plan, registry, {
       taskId: requestBody.taskId,
       goal: requestBody.goal,
     });
-    return appendPlanLimitations(refinedPlan, reviewNotes);
+    return appendPlanLimitations(
+      applyDeterministicFinancialCorrections(refinedPlan, review),
+      reviewNotes,
+    );
   } catch {
     dependencies.logFailure?.('FINNLP_PLAN_REFINEMENT_INVALID');
-    return appendPlanLimitations(initialPlan, [
-      'FinNLP supplied feedback, but the main planner produced an invalid or unavailable revision; the original plan is retained and needs human review.',
-      ...reviewNotes,
-    ]);
+    return appendPlanLimitations(
+      applyDeterministicFinancialCorrections(initialPlan, review),
+      [
+        'FinNLP supplied feedback, but the main planner produced an invalid or unavailable revision; the original plan structure was retained and deterministic arithmetic findings were applied. Human review remains required.',
+        ...reviewNotes,
+      ],
+    );
   }
 }
 
@@ -319,9 +328,14 @@ function createFinNlpPlanNotes(
     .map((item) => `${item.term}: ${item.clarificationQuestion}`)
     .join(' | ');
   const questionSummary = review.questionsForMainAgent.slice(0, 3).join(' | ');
+  const arithmeticNotes = (review.deterministicChecks?.calculations ?? [])
+    .filter((check) => check.status !== 'consistent')
+    .slice(0, 3)
+    .map((check) => `FinNLP deterministic arithmetic: ${formatFinancialCheck(check.message)}`);
   return [
     `FinNLP review status: ${review.reviewStatus}. Human review is still required; model confidence is a qualitative self-assessment only.`,
     `FinNLP decoded meaning: ${review.decodedMeaning}`,
+    ...arithmeticNotes,
     `FinNLP evidence assessment: ${review.assessmentSummary}`,
     ambiguitySummary || questionSummary
       ? `FinNLP clarification: ${[ambiguitySummary, questionSummary].filter(Boolean).join(' | ')}`
@@ -329,6 +343,75 @@ function createFinNlpPlanNotes(
     `FinNLP next step: ${review.nextStepForMainAgent}.`,
     'No independent source snippets were supplied during planning review, so this is not factual verification.',
   ];
+}
+
+function applyDeterministicFinancialCorrections(
+  plan: WorkflowPlan,
+  review: NonNullable<ReturnType<typeof normalizeFinnlpFinancialReview>>,
+): WorkflowPlan {
+  const mismatches = (review.deterministicChecks?.calculations ?? [])
+    .filter((check) => check.status === 'mismatch' || check.status === 'currency_mismatch');
+  if (!mismatches.length) return plan;
+
+  const formattedMessages = mismatches.map((check) => formatFinancialCheck(check.message));
+  const correctionText = formattedMessages.join(' ');
+  const summary = `Deterministic financial arithmetic: ${correctionText} ${plan.summary}`.slice(0, 400);
+  const steps = plan.steps.map((step) => {
+    const searchable = [
+      step.title,
+      step.description,
+      step.expectedOutcome,
+      step.verificationCriteria,
+    ].join(' ');
+    const relevantMessages = mismatches
+      .filter((check) => stepMatchesFinancialCheck(searchable, check.id))
+      .map((check) => formatFinancialCheck(check.message));
+    if (!relevantMessages.length) return step;
+
+    const finding = `FinNLP deterministic arithmetic finding: ${relevantMessages.join(' ')}`;
+    const toolCaveat = step.toolId === 'echo'
+      ? ' The Echo tool only records or echoes supplied values; it does not perform this calculation or independently verify the underlying financial inputs.'
+      : ' This is a deterministic arithmetic check of the supplied values, not independent verification of the underlying financial inputs.';
+    return {
+      ...step,
+      description: appendBoundedText(step.description, `${finding}${toolCaveat}`, 1_000),
+      expectedOutcome: appendBoundedText(step.expectedOutcome, relevantMessages.join(' '), 1_000),
+      verificationCriteria: appendBoundedText(step.verificationCriteria, relevantMessages.join(' '), 1_000),
+    };
+  });
+
+  return {
+    ...plan,
+    summary,
+    steps,
+  };
+}
+
+function stepMatchesFinancialCheck(stepText: string, checkId: string): boolean {
+  switch (checkId) {
+    case 'gross-profit':
+      return /gross profit|net sales|cost of goods sold|\bCOGS\b/i.test(stepText);
+    case 'net-sales':
+      return /net sales|gross sales|returns and refunds|sales returns/i.test(stepText);
+    case 'operating-profit':
+      return /operating profit|gross profit|operating expenses/i.test(stepText);
+    case 'tax-amount':
+      return /taxable amount|taxable base|tax amount|\bGST\b|\bVAT\b/i.test(stepText);
+    case 'invoice-total':
+      return /invoice total|grand total|amount due|subtotal/i.test(stepText);
+    default:
+      return false;
+  }
+}
+
+function formatFinancialCheck(message: string): string {
+  return message.replace(/\bINR\s+/g, '₹');
+}
+
+function appendBoundedText(existing: string, addition: string, maximum: number): string {
+  const suffix = ` ${addition}`.slice(0, maximum);
+  const prefix = existing.slice(0, Math.max(0, maximum - suffix.length));
+  return `${prefix}${suffix}`;
 }
 
 function appendPlanLimitations(plan: WorkflowPlan, notes: readonly string[]): WorkflowPlan {

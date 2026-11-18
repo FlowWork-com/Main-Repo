@@ -1,7 +1,7 @@
 import { buildToolCatalogForPlanner, createPlannerError, validatePlan, type PlannerAdapter, type PlannerRequest, type WorkflowPlan } from '../../../src/planning/planning.ts';
 import { createPlannerAdapterFromEnvironment, type PlannerEnvironment } from '../../../src/planning/provider.ts';
 import { isCredentialLikeString } from '../../../src/tools/contracts.ts';
-import { normalizeFinnlpFinancialReview, type FinnlpFinancialReviewer } from '../../../src/tools/finnlpFinancialReview.ts';
+import { applyDeterministicFinancialChecks, normalizeFinnlpFinancialReview, type FinnlpFinancialReviewer } from '../../../src/tools/finnlpFinancialReview.ts';
 import type { ProviderCallMetric, ProviderCallObservation } from '../../../src/tools/contracts.ts';
 import { createMvpTools } from '../../../src/tools/mvpTools.ts';
 import { ToolRegistry } from '../../../src/tools/toolRegistry.ts';
@@ -263,7 +263,10 @@ async function applyFinnlpReviewAndRefinePlan<Context>(
       },
       { claim: goal, draftAnswer, sources: [] },
     );
-    review = normalizeFinnlpFinancialReview(rawReview, []);
+    const normalizedReview = normalizeFinnlpFinancialReview(rawReview, []);
+    review = normalizedReview
+      ? applyDeterministicFinancialChecks(normalizedReview, { claim: goal, draftAnswer })
+      : null;
   } catch {
     dependencies.logFailure?.('FINNLP_REVIEW_UNAVAILABLE');
     return appendPlanLimitations(initialPlan, [

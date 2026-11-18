@@ -184,6 +184,65 @@ describe('FinNLP financial review sidecar', () => {
     expect(reviewer.reviewFinancialClaim).not.toHaveBeenCalled();
   });
 
+  it('overrides contradictory model arithmetic with deterministic financial checks', async () => {
+    const reviewer = {
+      reviewFinancialClaim: vi.fn(async () => ({
+        ...reviewResult([]),
+        assessmentSummary: 'The draft answer correctly states the arithmetic result: INR 96,000 minus INR 58,000 equals INR 42,000.',
+        findings: [{
+          statement: 'The figures are internally consistent arithmetically.',
+          assessment: 'supports_claim',
+          explanation: 'The reported gross profit is correct.',
+          sourceIds: [],
+        }],
+      })),
+    };
+    const tool = createFinnlpFinancialReviewTool(undefined, reviewer);
+    const result = await tool.execute(context, {
+      claim: [
+        'Net sales: INR 96,000',
+        'Cost of goods sold: INR 58,000',
+        'Reported gross profit: INR 42,000',
+      ].join(String.fromCharCode(10)),
+      draftAnswer: 'The reported gross profit is correct at INR 42,000.',
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.output).toMatchObject({
+        reviewStatus: 'insufficient_evidence',
+        deterministicChecks: {
+          status: 'mismatch_detected',
+          calculations: [{
+            id: 'gross-profit',
+            status: 'mismatch',
+            expectedAmount: 38_000,
+            reportedAmount: 42_000,
+            difference: 4_000,
+          }],
+        },
+      });
+      const output = result.output as {
+        findings: Array<{ statement: string; assessment: string; basis?: string }>;
+        assessmentSummary: string;
+        handoffMessage: string;
+        questionsForMainAgent: string[];
+      };
+      expect(output.findings.some((finding) =>
+        finding.basis === 'deterministic_arithmetic' &&
+        finding.assessment === 'contradicts_claim' &&
+        finding.statement.includes('4,000 overstated'))).toBe(true);
+      expect(output.findings.some((finding) =>
+        finding.statement.includes('internally consistent arithmetically'))).toBe(false);
+      expect(output.assessmentSummary).toContain('deterministic');
+      expect(output.handoffMessage).toContain('INR 38,000');
+      expect(output.handoffMessage).toContain('INR 42,000');
+      expect(output.questionsForMainAgent).toContain(
+        'What reporting period or invoice date do these figures belong to?',
+      );
+    }
+  });
+
   it('fails closed when no reviewer provider is configured', async () => {
     const tool = createFinnlpFinancialReviewTool();
     await expect(tool.execute(context, validInput)).resolves.toMatchObject({

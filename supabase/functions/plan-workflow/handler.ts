@@ -362,7 +362,6 @@ function applyDeterministicFinancialCorrections(
       step.description,
       step.expectedOutcome,
       step.verificationCriteria,
-      JSON.stringify(step.input),
     ].join(' ');
     const relevantMessages = mismatches
       .filter((check) => stepMatchesFinancialCheck(searchable, check.id))

@@ -377,7 +377,7 @@ Deno.test('deterministic financial findings are applied when the main planner re
   let plannerCalls = 0;
   const adapter = {
     providerName: 'test-main-planner',
-    async generatePlan(_request: PlannerRequest): Promise<PlannerResponse> {
+    async generatePlan(): Promise<PlannerResponse> {
       plannerCalls += 1;
       if (plannerCalls === 2) {
         return {

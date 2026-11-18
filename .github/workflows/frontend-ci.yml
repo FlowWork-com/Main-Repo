@@ -145,6 +145,17 @@ jobs:
         with:
           version: 2.121.0
 
+      # Let the pinned Supabase CLI (v2.121.0) select free local ports on hosted runners.
+      # The repository's fixed developer ports can collide with services already bound by a runner.
+      - name: Remove fixed local Supabase ports for CI
+        run: |
+          set -euo pipefail
+          sed -i -E '/^port = [0-9]+$/d' supabase/config.toml
+          if grep -Eq '^[[:space:]]*port[[:space:]]*=' supabase/config.toml; then
+            echo "::error::Fixed local Supabase ports remain in the CI config."
+            exit 1
+          fi
+
       - name: Start local Supabase
         timeout-minutes: 10
         run: |

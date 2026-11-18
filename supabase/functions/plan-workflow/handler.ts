@@ -1,7 +1,7 @@
 import { buildToolCatalogForPlanner, createPlannerError, validatePlan, type PlannerAdapter, type PlannerRequest, type WorkflowPlan } from '../../../src/planning/planning.ts';
 import { createPlannerAdapterFromEnvironment, type PlannerEnvironment } from '../../../src/planning/provider.ts';
 import { isCredentialLikeString } from '../../../src/tools/contracts.ts';
-import { applyDeterministicFinancialChecks, normalizeFinnlpFinancialReview, type FinnlpFinancialReviewer } from '../../../src/tools/finnlpFinancialReview.ts';
+import { FINNLP_FINANCIAL_REVIEW_TOOL_ID, applyDeterministicFinancialChecks, normalizeFinnlpFinancialReview, type FinnlpFinancialReviewer } from '../../../src/tools/finnlpFinancialReview.ts';
 import type { ProviderCallMetric, ProviderCallObservation } from '../../../src/tools/contracts.ts';
 import { createMvpTools } from '../../../src/tools/mvpTools.ts';
 import { ToolRegistry } from '../../../src/tools/toolRegistry.ts';
@@ -135,6 +135,10 @@ export function createPlanWorkflowHandler<Context>(
 
     const registry = new ToolRegistry();
     for (const tool of createMvpTools({ async getTaskFileMetadata() { return null; } })) {
+      // FinNLP is a background reviewer, not a planner-selectable execution step.
+      // Keep its registered executor available to execute-tool, but do not expose it
+      // in the planner catalog or allow the model to schedule it as a normal tool.
+      if (tool.id === FINNLP_FINANCIAL_REVIEW_TOOL_ID) continue;
       registry.register(tool);
     }
 

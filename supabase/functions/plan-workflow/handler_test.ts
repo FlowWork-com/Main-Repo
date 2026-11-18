@@ -239,6 +239,10 @@ Deno.test('financial plans get one FinNLP handoff and one main-planner refinemen
   assertEquals(response.status, 200);
   assertEquals(requests.length, 2);
   assertEquals(reviewerCalls, 1);
+  assertEquals(
+    requests.every((request) => !request.toolCatalog.some((tool) => tool.id === 'finnlp-financial-review')),
+    true,
+  );
   assertEquals(typeof requests[1].reviewerFeedback, 'string');
   assertEquals(requests[1].reviewerFeedback?.includes('No independent financial evidence'), true);
 

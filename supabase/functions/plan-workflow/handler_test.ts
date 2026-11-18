@@ -333,6 +333,96 @@ Deno.test('planning-time FinNLP handoff overrides a wrong gross-profit calculati
   assertEquals(requests[1].reviewerFeedback?.includes('INR 4,000'), true);
   assertEquals(requests[1].reviewerFeedback?.includes('overstated'), true);
   assertEquals(requests[1].reviewerFeedback?.includes('internally consistent arithmetically'), false);
+
+  const body = await response.json();
+  const plan = body.plan as WorkflowPlan;
+  assertEquals(plan.summary.includes('₹38,000'), true);
+  assertEquals(plan.summary.includes('₹42,000'), true);
+  assertEquals(plan.summary.includes('₹4,000'), true);
+  assertEquals(plan.steps[0].description.includes('₹38,000'), true);
+  assertEquals(plan.steps[0].description.includes('Echo tool only records or echoes'), true);
+  assertEquals(plan.limitations.some((item) => item.includes('₹38,000') && item.includes('₹4,000')), true);
+  assertEquals(plan.steps.some((step) => step.toolId === 'finnlp-financial-review'), false);
+});
+
+Deno.test('deterministic financial findings are applied when the main planner refinement fails', async () => {
+  const goal = [
+    'Net sales: INR 96,000',
+    'Cost of goods sold: INR 58,000',
+    'Reported gross profit: INR 42,000',
+  ].join(String.fromCharCode(10));
+  const basePlan: WorkflowPlan = {
+    id: '66000000-0000-4000-8000-000000000003',
+    taskId,
+    goal,
+    summary: 'Review the supplied financial figures.',
+    steps: [{
+      id: 'gross-profit',
+      title: 'Calculate Gross Profit',
+      description: 'Calculate gross profit from net sales and COGS.',
+      toolId: 'echo',
+      toolVersion: '1.0.0',
+      input: { label: goal },
+      dependencies: [],
+      expectedOutcome: 'Computed gross profit equals the supplied calculation.',
+      verificationCriteria: 'Confirm the gross profit calculation.',
+      validation: { valid: true, blockingReasons: [] },
+    }],
+    dependencies: [],
+    createdAt: '2026-11-18T00:00:00.000Z',
+    version: 1,
+    validationStatus: 'valid',
+    limitations: [],
+  };
+  let plannerCalls = 0;
+  const adapter = {
+    providerName: 'test-main-planner',
+    async generatePlan(_request: PlannerRequest): Promise<PlannerResponse> {
+      plannerCalls += 1;
+      if (plannerCalls === 2) {
+        return {
+          success: false,
+          error: {
+            code: 'PROVIDER_UNAVAILABLE',
+            message: 'The simulated refinement request was unavailable.',
+          },
+        };
+      }
+      return { success: true, plan: basePlan };
+    },
+  };
+  const reviewer = {
+    async reviewFinancialClaim() {
+      return {
+        reviewStatus: 'insufficient_evidence',
+        decodedMeaning: 'Gross profit is net sales minus cost of goods sold.',
+        assessmentSummary: 'No independent source snippets were supplied; this is a deterministic arithmetic check only.',
+        findings: [],
+        ambiguities: [],
+        questionsForMainAgent: [],
+        nextStepForMainAgent: 'Use the corrected arithmetic result and require human review of source records.',
+        confidence: 'moderate',
+      };
+    },
+  };
+  const response = await createHandler({
+    createPlannerAdapter: () => adapter,
+    financialReviewer: reviewer,
+  })(post(JSON.stringify({ taskId, goal })));
+
+  assertEquals(response.status, 200);
+  assertEquals(plannerCalls, 2);
+  const body = await response.json();
+  const plan = body.plan as WorkflowPlan;
+  assertEquals(plan.summary.includes('₹38,000'), true);
+  assertEquals(plan.summary.includes('₹42,000'), true);
+  assertEquals(plan.summary.includes('₹4,000'), true);
+  assertEquals(plan.steps[0].description.includes('₹38,000'), true);
+  assertEquals(plan.steps[0].expectedOutcome.includes('₹38,000'), true);
+  assertEquals(plan.steps[0].verificationCriteria.includes('₹4,000'), true);
+  assertEquals(plan.limitations.some((item) => item.includes('original plan structure was retained')), true);
+  assertEquals(plan.limitations.some((item) => item.includes('₹38,000') && item.includes('₹4,000')), true);
+  assertEquals(plan.steps.some((step) => step.toolId === 'finnlp-financial-review'), false);
 });
 
 Deno.test('financial planning explicitly records when the FinNLP sidecar is not configured', async () => {

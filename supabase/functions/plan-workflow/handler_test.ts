@@ -261,7 +261,7 @@ Deno.test('financial plans get one FinNLP handoff and one main-planner refinemen
   );
 });
 
-Deno.test('planning-time FinNLP handoff overrides a wrong gross-profit calculation deterministically', async () => {
+Deno.test('planning-time FinNLP handoff applies deterministic gross-profit corrections to the saved plan', async () => {
   const requests: PlannerRequest[] = [];
   const goal = [
     'Net sales: INR 96,000',

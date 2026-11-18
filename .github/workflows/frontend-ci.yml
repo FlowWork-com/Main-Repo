@@ -151,6 +151,10 @@ jobs:
         run: |
           set -euo pipefail
           sed -i -E '/^port = [0-9]+$/d' supabase/config.toml
+          if grep -Eq '^[[:space:]]*port[[:space:]]*=' supabase/config.toml; then
+            echo "::error::Fixed local Supabase ports remain in the CI config."
+            exit 1
+          fi
 
       - name: Start local Supabase
         timeout-minutes: 10

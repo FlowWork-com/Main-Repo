@@ -352,7 +352,7 @@ select throws_ok(
 
 
 select lives_ok(
-  $ select pg_temp.create_signed_workflow_plan(
+  $plan$ select pg_temp.create_signed_workflow_plan(
        '63000000-0000-4000-8000-000000000001',
        jsonb_set(
          jsonb_set(
@@ -363,7 +363,7 @@ select lives_ok(
          '{steps,0,input}',
          '{"calculation":"gross-profit","netSales":96000,"costOfGoodsSold":58000,"reportedGrossProfit":42000,"currency":"INR"}'::jsonb
        )
-     ) $,
+     ) $plan$,
   'the database accepts a valid deterministic financial-arithmetic step'
 );
 select is(
@@ -375,7 +375,7 @@ select is(
   'the deterministic financial-arithmetic step is durably persisted'
 );
 select throws_ok(
-  $ select pg_temp.create_signed_workflow_plan(
+  $plan$ select pg_temp.create_signed_workflow_plan(
        '63000000-0000-4000-8000-000000000001',
        jsonb_set(
          jsonb_set(
@@ -386,7 +386,7 @@ select throws_ok(
          '{steps,0,input}',
          '{"calculation":"gross-profit","netSales":-1,"costOfGoodsSold":58000,"reportedGrossProfit":42000}'::jsonb
        )
-     ) $,
+     ) $plan$,
   '22023',
   'Plan contains invalid financial-arithmetic input.',
   'the database rejects negative financial-arithmetic inputs'

@@ -348,7 +348,7 @@ Deno.test('planning-time FinNLP handoff applies deterministic gross-profit corre
     reportedGrossProfit: 42000,
     currency: 'INR',
   });
-  assertEquals(plan.steps[0].expectedOutcome.includes('INR 38,000'), true);
+  assertEquals(plan.steps[0].expectedOutcome.includes('₹38,000'), true);
   assertEquals(plan.steps[0].description.includes('Echo tool only records or echoes'), false);
   assertEquals(plan.limitations.some((item) => item.includes('₹38,000') && item.includes('₹4,000')), true);
   assertEquals(plan.steps.some((step) => step.toolId === 'finnlp-financial-review'), false);
@@ -434,7 +434,7 @@ Deno.test('deterministic financial findings are applied when the main planner re
     reportedGrossProfit: 42000,
     currency: 'INR',
   });
-  assertEquals(plan.steps[0].expectedOutcome.includes('INR 38,000'), true);
+  assertEquals(plan.steps[0].expectedOutcome.includes('₹38,000'), true);
   assertEquals(plan.steps[0].verificationCriteria.includes('₹4,000'), true);
   assertEquals(plan.limitations.some((item) => item.includes('original plan structure was retained')), true);
   assertEquals(plan.limitations.some((item) => item.includes('₹38,000') && item.includes('₹4,000')), true);

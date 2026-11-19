@@ -113,6 +113,37 @@ describe('deterministic MVP tools', () => {
     });
   });
 
+  it('supports the other documented accounting formulas', async () => {
+    const tools = registry({ getTaskFileMetadata: vi.fn() });
+    const tool = tools.get('financial-arithmetic', '1.0.0');
+    const financialContext = { ...context, toolId: 'financial-arithmetic' };
+    const cases = [
+      {
+        input: { calculation: 'net-sales', grossSales: 100000, returns: 4000, reportedNetSales: 96000, currency: 'INR' },
+        expected: { status: 'consistent', calculatedAmount: 96000, difference: 0 },
+      },
+      {
+        input: { calculation: 'operating-profit', grossProfit: 38000, operatingExpenses: 10000, reportedOperatingProfit: 28000 },
+        expected: { status: 'consistent', calculatedAmount: 28000, difference: 0 },
+      },
+      {
+        input: { calculation: 'tax-amount', taxableAmount: 1000, taxRatePercent: 18, reportedTaxAmount: 170 },
+        expected: { status: 'mismatch_detected', calculatedAmount: 180, difference: -10, differenceDirection: 'understated' },
+      },
+      {
+        input: { calculation: 'invoice-total', subtotal: 100, taxAmount: 18, discount: 5, shipping: 2, reportedInvoiceTotal: 115 },
+        expected: { status: 'consistent', calculatedAmount: 115, difference: 0 },
+      },
+    ];
+
+    for (const testCase of cases) {
+      await expect(tool?.execute(financialContext, testCase.input)).resolves.toMatchObject({
+        success: true,
+        output: testCase.expected,
+      });
+    }
+  });
+
   it('performs deterministic text operations', async () => {
     const tools = registry({ getTaskFileMetadata: vi.fn() });
     const transform = tools.get('text-transform', '1.0.0');

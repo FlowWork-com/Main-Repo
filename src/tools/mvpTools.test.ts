@@ -63,6 +63,56 @@ describe('deterministic MVP tools', () => {
     expect(source.getTaskFileMetadata).not.toHaveBeenCalled();
   });
 
+  it('calculates financial formulas deterministically and compares reported amounts', async () => {
+    const tools = registry({ getTaskFileMetadata: vi.fn() });
+    const tool = tools.get('financial-arithmetic', '1.0.0');
+    const financialContext = { ...context, toolId: 'financial-arithmetic' };
+    const input = {
+      calculation: 'gross-profit',
+      netSales: 96000,
+      costOfGoodsSold: 58000,
+      reportedGrossProfit: 42000,
+      currency: 'INR',
+      reportingPeriod: 'FY2026',
+    };
+
+    expect(tool).toBeDefined();
+    expect(tool?.validateInput(input)).toBe(true);
+    expect(tool?.validateInput({ ...input, netSales: -1 })).toBe(false);
+    expect(tool?.validateInput({ ...input, apiKey: 'not-allowed' })).toBe(false);
+    await expect(tool?.execute(financialContext, input)).resolves.toMatchObject({
+      success: true,
+      output: {
+        calculation: 'gross-profit',
+        status: 'mismatch_detected',
+        calculatedAmount: 38000,
+        reportedAmount: 42000,
+        difference: 4000,
+        differenceDirection: 'overstated',
+        currency: 'INR',
+        sourceVerification: 'not_performed',
+        externalDataConsulted: false,
+        requiresHumanReview: true,
+        financialAdvice: false,
+        executionApproval: false,
+      },
+      evidence: {
+        type: 'deterministic-financial-arithmetic',
+      },
+    });
+
+    await expect(tool?.execute(financialContext, {
+      calculation: 'gross-profit',
+      netSales: 96000,
+      costOfGoodsSold: 58000,
+      reportedGrossProfit: 38000,
+      currency: 'INR',
+    })).resolves.toMatchObject({
+      success: true,
+      output: { status: 'consistent', calculatedAmount: 38000, difference: 0 },
+    });
+  });
+
   it('performs deterministic text operations', async () => {
     const tools = registry({ getTaskFileMetadata: vi.fn() });
     const transform = tools.get('text-transform', '1.0.0');

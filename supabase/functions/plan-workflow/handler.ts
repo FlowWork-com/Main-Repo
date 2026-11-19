@@ -408,7 +408,7 @@ function ensureDeterministicGrossProfitStep(plan: WorkflowPlan, goal: string): W
     input,
     expectedOutcome: formatFinancialCheck(check.message),
     verificationCriteria:
-      'Confirm the calculator output and reported-versus-calculated difference. Separately review the source records and reporting period before treating the figures as factual.',
+      `Confirm the calculator output. ${formatFinancialCheck(check.message)} Separately review the source records and reporting period before treating the figures as factual.`,
     validation: { valid: true, blockingReasons: [] },
   };
 

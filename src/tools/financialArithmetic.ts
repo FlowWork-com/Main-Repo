@@ -144,7 +144,7 @@ export function isFinancialArithmeticInput(value: unknown): value is FinancialAr
     (typeof value.reportingPeriod !== 'string' ||
       !value.reportingPeriod.trim() ||
       value.reportingPeriod.length > 40 ||
-      /[\u0000-\u001f\u007f]/.test(value.reportingPeriod))) {
+      hasControlCharacters(value.reportingPeriod))) {
     return false;
   }
 
@@ -278,6 +278,14 @@ export function createFinancialArithmeticTool(): ToolDefinition {
       };
     },
   };
+}
+
+function hasControlCharacters(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code < 0x20 || code === 0x7f) return true;
+  }
+  return false;
 }
 
 function isValidAmount(value: unknown, isRate = false): value is number {

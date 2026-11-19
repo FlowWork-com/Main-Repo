@@ -1,8 +1,8 @@
 begin;
 
 -- Add the deterministic calculator to the signed-plan database allowlist.
--- The function continues to enforce the tool ID/version and validates every
--- supported calculation's explicit numeric input before persisting a proposal.
+-- The function continues to enforce the existing authorization, signature,
+-- bounds, dependency, and task-state rules and validates calculator inputs.
 create or replace function public.create_workflow_plan(
   p_task_id uuid,
   p_plan_json text,
@@ -134,10 +134,7 @@ begin
         'gross-profit', 'net-sales', 'operating-profit', 'tax-amount', 'invoice-total'
       )
       or exists (
-        select 1
-        from jsonb_object_keys(
-          case when jsonb_typeof(v_input) = 'object' then v_input else '{}'::jsonb end
-        ) as input_keys(key)
+        select 1 from jsonb_object_keys(v_input) as input_keys(key)
         where input_keys.key not in (
           'calculation', 'currency', 'reportingPeriod',
           'netSales', 'costOfGoodsSold', 'reportedGrossProfit',
@@ -147,11 +144,9 @@ begin
           'subtotal', 'taxAmount', 'discount', 'shipping', 'reportedInvoiceTotal'
         )
       )
-      or (
-        v_input ? 'currency'
-        and (
-          jsonb_typeof(v_input->'currency') is distinct from 'string'
-          or coalesce(v_input->>'currency', '') !~ '^[A-Z]{3}      and jsonb_typeof(v_input) is distinct from 'object' then
+      or (v_input ? 'currency' and (
+        jsonb_typeof(v_input->'currency') is distinct from 'string'
+        or (v_input->>'currency') !~ '^[A-Z]{3}      and jsonb_typeof(v_input) is distinct from 'object' then
       raise exception 'Plan contains invalid tool input.' using errcode = '22023';
     end if;
     if v_step->>'toolId' = 'text-transform' and (
@@ -376,21 +371,15 @@ begin
   );
 end;
 $$;
-        )
-      )
-      or (
-        v_input ? 'reportingPeriod'
-        and (
-          jsonb_typeof(v_input->'reportingPeriod') is distinct from 'string'
-          or char_length(trim(coalesce(v_input->>'reportingPeriod', ''))) not between 1 and 40
-        )
-      )
+      ))
+      or (v_input ? 'reportingPeriod' and (
+        jsonb_typeof(v_input->'reportingPeriod') is distinct from 'string'
+        or char_length(trim(v_input->>'reportingPeriod')) not between 1 and 40
+      ))
       or exists (
         select 1
-        from jsonb_each(
-          case when jsonb_typeof(v_input) = 'object' then v_input else '{}'::jsonb end
-        ) as numeric_fields(key, value)
-        where numeric_fields.key in (
+        from jsonb_each(v_input) as fields(key, value)
+        where fields.key in (
           'netSales', 'costOfGoodsSold', 'reportedGrossProfit',
           'grossSales', 'returns', 'reportedNetSales',
           'grossProfit', 'operatingExpenses', 'reportedOperatingProfit',
@@ -398,13 +387,11 @@ $$;
           'subtotal', 'taxAmount', 'discount', 'shipping', 'reportedInvoiceTotal'
         )
         and case
-          when jsonb_typeof(numeric_fields.value) is distinct from 'number' then true
-          when numeric_fields.key = 'taxRatePercent' then
-            (numeric_fields.value #>> '{}')::numeric < 0
-            or (numeric_fields.value #>> '{}')::numeric > 100
+          when jsonb_typeof(fields.value) is distinct from 'number' then true
+          when fields.key = 'taxRatePercent' then
+            (fields.value #>> '{}')::numeric < 0 or (fields.value #>> '{}')::numeric > 100
           else
-            (numeric_fields.value #>> '{}')::numeric < 0
-            or (numeric_fields.value #>> '{}')::numeric > 1000000000000
+            (fields.value #>> '{}')::numeric < 0 or (fields.value #>> '{}')::numeric > 1000000000000
         end
       )
       or case coalesce(v_input->>'calculation', '')
@@ -428,7 +415,6 @@ $$;
     ) then
       raise exception 'Plan contains invalid financial-arithmetic input.' using errcode = '22023';
     end if;
-
     if v_step->>'toolId' in ('text-transform', 'json-inspect', 'file-metadata', 'finnlp-company-news', 'invoice-csv-review', 'invoice-document-extract')
       and jsonb_typeof(v_input) is distinct from 'object' then
       raise exception 'Plan contains invalid tool input.' using errcode = '22023';

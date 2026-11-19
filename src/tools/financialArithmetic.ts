@@ -122,7 +122,7 @@ export function isFinancialArithmeticInput(value: unknown): value is FinancialAr
   if (!isPlainObject(value) ||
     Object.keys(value).some((key) => !allowedKeys.has(key)) ||
     typeof value.calculation !== 'string' ||
-    !Object.hasOwn(definitions, value.calculation)) {
+    !Object.prototype.hasOwnProperty.call(definitions, value.calculation)) {
     return false;
   }
 

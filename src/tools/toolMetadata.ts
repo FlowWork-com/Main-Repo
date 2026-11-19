@@ -45,6 +45,20 @@ export const MVP_PLANNER_TOOL_UI_METADATA: readonly ToolUiMetadata[] = [
     exampleInput: { fileId: '55000000-0000-4000-8000-000000000001' },
   },
   {
+    id: 'financial-arithmetic',
+    name: 'Financial arithmetic',
+    description: 'Calculate supported accounting formulas from explicit numeric inputs and compare an optional reported result. Deterministic and read-only; does not authenticate inputs, consult source documents, or authorize actions. Human review remains required.',
+    version: '1.0.0',
+    exampleInput: {
+      calculation: 'gross-profit',
+      netSales: 96000,
+      costOfGoodsSold: 58000,
+      reportedGrossProfit: 42000,
+      currency: 'INR',
+      reportingPeriod: 'FY2026',
+    },
+  },
+  {
     id: 'invoice-document-extract',
     name: 'PDF/image invoice extraction',
     description: 'Extract invoice fields from an attached PDF or image using the configured external vision provider. Returns field-level model-estimated confidence and validation warnings. Always requires human review and approval before document transfer.',

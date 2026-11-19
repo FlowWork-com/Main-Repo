@@ -57,7 +57,7 @@ const safeToolProperties = {
   requiresApproval: false,
 } as const;
 
-const [echoMetadata, fileMetadata, jsonInspectMetadata, textTransformMetadata, , , financialArithmeticMetadata] =
+const [echoMetadata, fileMetadata, jsonInspectMetadata, textTransformMetadata] =
   MVP_PLANNER_TOOL_UI_METADATA;
 
 const echo: ToolDefinition = {

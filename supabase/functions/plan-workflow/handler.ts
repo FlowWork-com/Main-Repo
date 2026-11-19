@@ -4,7 +4,7 @@ import { isCredentialLikeString } from '../../../src/tools/contracts.ts';
 import { FINNLP_FINANCIAL_REVIEW_TOOL_ID, applyDeterministicFinancialChecks, normalizeFinnlpFinancialReview, type FinnlpFinancialReviewer } from '../../../src/tools/finnlpFinancialReview.ts';
 import { analyzeFinancialArithmetic } from '../../../src/tools/finnlpArithmetic.ts';
 import { FINANCIAL_ARITHMETIC_TOOL_ID, FINANCIAL_ARITHMETIC_TOOL_VERSION } from '../../../src/tools/financialArithmetic.ts';
-import type { ProviderCallMetric, ProviderCallObservation } from '../../../src/tools/contracts.ts';
+import type { JsonValue, ProviderCallMetric, ProviderCallObservation } from '../../../src/tools/contracts.ts';
 import { createMvpTools } from '../../../src/tools/mvpTools.ts';
 import { ToolRegistry } from '../../../src/tools/toolRegistry.ts';
 
@@ -382,7 +382,7 @@ function ensureDeterministicGrossProfitStep(plan: WorkflowPlan, goal: string): W
     ]);
   }
 
-  const input: Record<string, unknown> = {
+  const input: Record<string, JsonValue> = {
     calculation: 'gross-profit',
     netSales: netSales.amount,
     costOfGoodsSold: costOfGoodsSold.amount,

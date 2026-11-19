@@ -58,7 +58,6 @@ export const MVP_PLANNER_TOOL_UI_METADATA: readonly ToolUiMetadata[] = [
       reportingPeriod: 'FY2026',
     },
   },
-  },
   {
     id: 'invoice-document-extract',
     name: 'PDF/image invoice extraction',

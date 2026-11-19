@@ -260,7 +260,7 @@ export function createFinancialArithmeticTool(): ToolDefinition {
       const result = calculateFinancialArithmetic(input);
       const output: JsonValue = {
         ...result,
-        sourceVerification: 'not_performed',
+        sourceVerification: 'not_performed' as const,
         externalDataConsulted: false,
         requiresHumanReview: true,
         financialAdvice: false,

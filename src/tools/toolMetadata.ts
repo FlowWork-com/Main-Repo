@@ -47,7 +47,7 @@ export const MVP_PLANNER_TOOL_UI_METADATA: readonly ToolUiMetadata[] = [
   {
     id: 'financial-arithmetic',
     name: 'Financial arithmetic',
-    description: 'Calculate supported accounting formulas from explicit numeric inputs and compare an optional reported result. Deterministic and read-only; does not authenticate inputs, consult source documents, or authorize actions. Human review remains required.',
+    description: 'Calculate supported accounting formulas from explicit numeric inputs and compare an optional reported result. Supports gross profit, net sales, operating profit, tax amount, and invoice total. Deterministic and read-only: it does not consult source documents, authenticate supplied figures, provide financial advice, or authorize actions. Human review remains required.',
     version: '1.0.0',
     exampleInput: {
       calculation: 'gross-profit',
@@ -57,6 +57,7 @@ export const MVP_PLANNER_TOOL_UI_METADATA: readonly ToolUiMetadata[] = [
       currency: 'INR',
       reportingPeriod: 'FY2026',
     },
+  },
   },
   {
     id: 'invoice-document-extract',

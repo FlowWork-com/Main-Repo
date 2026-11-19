@@ -2,7 +2,9 @@ import { buildToolCatalogForPlanner, createPlannerError, validatePlan, type Plan
 import { createPlannerAdapterFromEnvironment, type PlannerEnvironment } from '../../../src/planning/provider.ts';
 import { isCredentialLikeString } from '../../../src/tools/contracts.ts';
 import { FINNLP_FINANCIAL_REVIEW_TOOL_ID, applyDeterministicFinancialChecks, normalizeFinnlpFinancialReview, type FinnlpFinancialReviewer } from '../../../src/tools/finnlpFinancialReview.ts';
-import type { ProviderCallMetric, ProviderCallObservation } from '../../../src/tools/contracts.ts';
+import { analyzeFinancialArithmetic } from '../../../src/tools/finnlpArithmetic.ts';
+import { FINANCIAL_ARITHMETIC_TOOL_ID, FINANCIAL_ARITHMETIC_TOOL_VERSION } from '../../../src/tools/financialArithmetic.ts';
+import type { JsonValue, ProviderCallMetric, ProviderCallObservation } from '../../../src/tools/contracts.ts';
 import { createMvpTools } from '../../../src/tools/mvpTools.ts';
 import { ToolRegistry } from '../../../src/tools/toolRegistry.ts';
 
@@ -182,6 +184,8 @@ export function createPlanWorkflowHandler<Context>(
           payload.goal,
         );
       }
+      plan = ensureDeterministicGrossProfitStep(plan, payload.goal);
+      plan = validatePlan(plan, registry, { taskId: task.id, goal: payload.goal });
       if (new TextEncoder().encode(JSON.stringify(plan)).byteLength > maxRequestBytes) {
         throw createPlannerError('INVALID_PLAN', 'The proposed plan is too large to save.');
       }
@@ -345,6 +349,96 @@ function createFinNlpPlanNotes(
   ];
 }
 
+/**
+ * Promote a gross-profit calculation from a descriptive/echo step into a real,
+ * deterministic executable tool step. This server-side guard means a planner
+ * refinement cannot accidentally leave arithmetic as a non-computing Echo task.
+ */
+function ensureDeterministicGrossProfitStep(plan: WorkflowPlan, goal: string): WorkflowPlan {
+  const check = analyzeFinancialArithmetic(goal).calculations.find((item) => item.id === 'gross-profit');
+  if (!check) return plan;
+
+  if (check.status === 'currency_mismatch') {
+    const steps = plan.steps.filter((step) =>
+      !stepMatchesFinancialCheck(
+        [step.title, step.description, step.expectedOutcome, step.verificationCriteria].join(' '),
+        'gross-profit',
+      ));
+    return appendPlanLimitations({
+      ...plan,
+      steps,
+    }, [
+      'No executable gross-profit calculation step was created because the supplied amounts use different, missing, or ambiguous currencies. Normalize the figures to one explicit currency before calculating.',
+    ]);
+  }
+
+  const netSales = check.operands.find((operand) => operand.label === 'net sales');
+  const costOfGoodsSold = check.operands.find((operand) => operand.label === 'cost of goods sold');
+  if (!netSales || !costOfGoodsSold || check.reportedAmount === null ||
+    [netSales.amount, costOfGoodsSold.amount, check.reportedAmount]
+      .some((amount) => !Number.isFinite(amount) || amount < 0 || amount > 1_000_000_000_000)) {
+    return appendPlanLimitations(plan, [
+      'The gross-profit figures could not be mapped safely into the deterministic calculator input; no calculation tool step was substituted.',
+    ]);
+  }
+
+  const input: Record<string, JsonValue> = {
+    calculation: 'gross-profit',
+    netSales: netSales.amount,
+    costOfGoodsSold: costOfGoodsSold.amount,
+    reportedGrossProfit: check.reportedAmount,
+    ...(check.currency ? { currency: check.currency } : {}),
+  };
+  const matchingIndex = plan.steps.findIndex((step) =>
+    stepMatchesFinancialCheck(
+      [step.title, step.description, step.expectedOutcome, step.verificationCriteria].join(' '),
+      'gross-profit',
+    ));
+  const existing = matchingIndex >= 0 ? plan.steps[matchingIndex] : null;
+  const arithmeticStep = {
+    ...(existing ?? {
+      id: uniquePlanStepId(plan, 'financial-arithmetic-gross-profit'),
+      dependencies: [],
+    }),
+    title: existing?.title || 'Calculate and compare gross profit',
+    description:
+      'Run the deterministic Financial arithmetic tool using the supplied net sales and cost of goods sold. This calculation does not authenticate the source figures.',
+    toolId: FINANCIAL_ARITHMETIC_TOOL_ID,
+    toolVersion: FINANCIAL_ARITHMETIC_TOOL_VERSION,
+    input,
+    expectedOutcome: formatFinancialCheck(check.message),
+    verificationCriteria:
+      `Confirm the calculator output. ${formatFinancialCheck(check.message)} Separately review the source records and reporting period before treating the figures as factual.`,
+    validation: { valid: true, blockingReasons: [] },
+  };
+
+  const steps = [...plan.steps];
+  if (matchingIndex >= 0) {
+    steps[matchingIndex] = arithmeticStep;
+  } else if (steps.length < 10) {
+    steps.push(arithmeticStep);
+  } else {
+    return appendPlanLimitations(plan, [
+      'A deterministic gross-profit calculation was identified, but the plan already uses the maximum 10 steps and has no matching arithmetic step to replace.',
+    ]);
+  }
+
+  return appendPlanLimitations({
+    ...plan,
+    steps,
+  }, [
+    'The Financial arithmetic tool calculates gross profit from supplied figures only. It does not authenticate source records or perform factual financial verification; human review remains required.',
+  ]);
+}
+
+function uniquePlanStepId(plan: WorkflowPlan, base: string): string {
+  const existing = new Set(plan.steps.map((step) => step.id));
+  if (!existing.has(base)) return base;
+  let suffix = 2;
+  while (existing.has(`${base}-${suffix}`)) suffix += 1;
+  return `${base}-${suffix}`;
+}
+
 function applyDeterministicFinancialCorrections(
   plan: WorkflowPlan,
   review: NonNullable<ReturnType<typeof normalizeFinnlpFinancialReview>>,
@@ -369,9 +463,8 @@ function applyDeterministicFinancialCorrections(
     if (!relevantMessages.length) return step;
 
     const finding = `FinNLP deterministic arithmetic finding: ${relevantMessages.join(' ')}`;
-    const toolCaveat = step.toolId === 'echo'
-      ? ' The Echo tool only records or echoes supplied values; it does not perform this calculation or independently verify the underlying financial inputs.'
-      : ' This is a deterministic arithmetic check of the supplied values, not independent verification of the underlying financial inputs.';
+    const toolCaveat =
+      ' This is a deterministic arithmetic check of the supplied values, not independent verification of the underlying financial inputs.';
     return {
       ...step,
       description: appendBoundedText(step.description, `${finding}${toolCaveat}`, 1_000),

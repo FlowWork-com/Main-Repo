@@ -1,6 +1,6 @@
 begin;
 
-select plan(22);
+select plan(25);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -348,6 +348,48 @@ select throws_ok(
   '22023',
   'An invalid plan cannot be accepted.',
   'unsupported plans cannot be accepted'
+);
+
+
+select lives_ok(
+  $plan$ select pg_temp.create_signed_workflow_plan(
+       '63000000-0000-4000-8000-000000000001',
+       jsonb_set(
+         jsonb_set(
+           (select value from plan_test_payload),
+           '{steps,0,toolId}',
+           '"financial-arithmetic"'::jsonb
+         ),
+         '{steps,0,input}',
+         '{"calculation":"gross-profit","netSales":96000,"costOfGoodsSold":58000,"reportedGrossProfit":42000,"currency":"INR"}'::jsonb
+       )
+     ) $plan$,
+  'the database accepts a valid deterministic financial-arithmetic step'
+);
+select is(
+  (select plan->'steps'->0->>'toolId'
+   from public.workflow_plans
+   where task_id = '63000000-0000-4000-8000-000000000001'
+   order by version desc limit 1),
+  'financial-arithmetic',
+  'the deterministic financial-arithmetic step is durably persisted'
+);
+select throws_ok(
+  $plan$ select pg_temp.create_signed_workflow_plan(
+       '63000000-0000-4000-8000-000000000001',
+       jsonb_set(
+         jsonb_set(
+           (select value from plan_test_payload),
+           '{steps,0,toolId}',
+           '"financial-arithmetic"'::jsonb
+         ),
+         '{steps,0,input}',
+         '{"calculation":"gross-profit","netSales":-1,"costOfGoodsSold":58000,"reportedGrossProfit":42000}'::jsonb
+       )
+     ) $plan$,
+  '22023',
+  'Plan contains invalid financial-arithmetic input.',
+  'the database rejects negative financial-arithmetic inputs'
 );
 
 select * from finish();

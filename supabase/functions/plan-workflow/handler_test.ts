@@ -339,8 +339,18 @@ Deno.test('planning-time FinNLP handoff applies deterministic gross-profit corre
   assertEquals(plan.summary.includes('₹38,000'), true);
   assertEquals(plan.summary.includes('₹42,000'), true);
   assertEquals(plan.summary.includes('₹4,000'), true);
-  assertEquals(plan.steps[0].description.includes('₹38,000'), true);
-  assertEquals(plan.steps[0].description.includes('Echo tool only records or echoes'), true);
+  assertEquals(plan.steps[0].toolId, 'financial-arithmetic');
+  assertEquals(plan.steps[0].toolVersion, '1.0.0');
+  assertEquals(plan.steps[0].input, {
+    calculation: 'gross-profit',
+    netSales: 96000,
+    costOfGoodsSold: 58000,
+    reportedGrossProfit: 42000,
+    currency: 'INR',
+  });
+  assertEquals(plan.steps[0].expectedOutcome.includes('₹38,000'), true);
+  assertEquals(plan.steps[0].verificationCriteria.includes('₹4,000'), true);
+  assertEquals(plan.steps[0].description.includes('Echo tool only records or echoes'), false);
   assertEquals(plan.limitations.some((item) => item.includes('₹38,000') && item.includes('₹4,000')), true);
   assertEquals(plan.steps.some((step) => step.toolId === 'finnlp-financial-review'), false);
 });
@@ -417,7 +427,14 @@ Deno.test('deterministic financial findings are applied when the main planner re
   assertEquals(plan.summary.includes('₹38,000'), true);
   assertEquals(plan.summary.includes('₹42,000'), true);
   assertEquals(plan.summary.includes('₹4,000'), true);
-  assertEquals(plan.steps[0].description.includes('₹38,000'), true);
+  assertEquals(plan.steps[0].toolId, 'financial-arithmetic');
+  assertEquals(plan.steps[0].input, {
+    calculation: 'gross-profit',
+    netSales: 96000,
+    costOfGoodsSold: 58000,
+    reportedGrossProfit: 42000,
+    currency: 'INR',
+  });
   assertEquals(plan.steps[0].expectedOutcome.includes('₹38,000'), true);
   assertEquals(plan.steps[0].verificationCriteria.includes('₹4,000'), true);
   assertEquals(plan.limitations.some((item) => item.includes('original plan structure was retained')), true);

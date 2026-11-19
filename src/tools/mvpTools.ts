@@ -10,6 +10,7 @@ import { createInvoiceDocumentExtractionTool, type InvoiceDocumentExtractor } fr
 import { MVP_PLANNER_TOOL_UI_METADATA } from './toolMetadata.ts';
 import { createFinnlpCompanyNewsTool, type FinnlpCompanyNewsProvider } from './finnlpCompanyNews.ts';
 import { createFinnlpFinancialReviewTool, type FinnlpFinancialReviewer } from './finnlpFinancialReview.ts';
+import { createFinancialArithmeticTool } from './financialArithmetic.ts';
 
 export interface TaskFileMetadata {
   readonly id: string;
@@ -56,7 +57,7 @@ const safeToolProperties = {
   requiresApproval: false,
 } as const;
 
-const [echoMetadata, fileMetadata, jsonInspectMetadata, textTransformMetadata] =
+const [echoMetadata, fileMetadata, jsonInspectMetadata, textTransformMetadata, , , financialArithmeticMetadata] =
   MVP_PLANNER_TOOL_UI_METADATA;
 
 const echo: ToolDefinition = {
@@ -269,6 +270,7 @@ export function createMvpTools(
     createFileMetadataTool(fileMetadataSource),
     jsonInspect,
     textTransform,
+    createFinancialArithmeticTool(),
     createInvoiceCsvReviewTool(fileContentSource, spreadsheetWorkbookReader),
     createInvoiceDocumentExtractionTool(fileContentSource, invoiceDocumentExtractor),
     createFinnlpCompanyNewsTool(finnlpCompanyNewsProvider),

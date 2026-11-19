@@ -349,6 +349,7 @@ Deno.test('planning-time FinNLP handoff applies deterministic gross-profit corre
     currency: 'INR',
   });
   assertEquals(plan.steps[0].expectedOutcome.includes('₹38,000'), true);
+  assertEquals(plan.steps[0].verificationCriteria.includes('₹4,000'), true);
   assertEquals(plan.steps[0].description.includes('Echo tool only records or echoes'), false);
   assertEquals(plan.limitations.some((item) => item.includes('₹38,000') && item.includes('₹4,000')), true);
   assertEquals(plan.steps.some((step) => step.toolId === 'finnlp-financial-review'), false);

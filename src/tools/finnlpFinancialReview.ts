@@ -354,18 +354,33 @@ export function applyDeterministicFinancialChecks(
   const retainedFindings = output.findings.filter((finding) =>
     !relevantTerms.test(finding.statement) && !relevantTerms.test(finding.explanation));
   const hasMultipleReportingPeriods = deterministicChecks.reportingPeriods.length > 1;
-  const reportingPeriodQuestion = hasMultipleReportingPeriods
-    ? 'Please provide same-period net sales and cost of goods sold source figures for each report (' +
-      deterministicChecks.reportingPeriods.join(', ') +
-      '). Keep the reports separate; do not use a figure from one period to validate another.'
+  const incompleteGrossProfitPeriods = deterministicChecks.periodCoverage.filter((coverage) =>
+    coverage.hasGrossProfit && coverage.missingGrossProfitInputs.length > 0);
+  const missingPeriodSourceQuestions = incompleteGrossProfitPeriods.map((coverage) =>
+    'For ' + coverage.period + ', provide its own same-period ' +
+    coverage.missingGrossProfitInputs.join(' and ') +
+    ' source figures. Do not reuse amounts from another period.');
+  const reportingPeriodQuestionParts = [
+    ...missingPeriodSourceQuestions,
+    ...(hasMultipleReportingPeriods ? [
+      'Keep these reporting periods separate (' + deterministicChecks.reportingPeriods.join(', ') +
+      '); do not use a figure from one period to validate another.',
+    ] : []),
+  ];
+  const reportingPeriodQuestion = reportingPeriodQuestionParts.length > 0
+    ? reportingPeriodQuestionParts.join(' ')
     : null;
+  const missingPeriodSummary = incompleteGrossProfitPeriods.map((coverage) =>
+    coverage.period + ' has a reported gross-profit figure but is missing ' +
+    coverage.missingGrossProfitInputs.join(' and ') + ' source figures.');
   const reportingPeriodFindings: FinnlpFinancialReviewFinding[] = hasMultipleReportingPeriods
     ? [{
         statement: 'Multiple reporting periods detected: ' +
           deterministicChecks.reportingPeriods.join(' and ') +
-          '. Keep the financial reports separate.',
+          '. ' + missingPeriodSummary.join(' ') +
+          ' Keep the financial reports separate.',
         assessment: 'not_verifiable',
-        explanation: 'A gross-profit amount from one reporting period cannot corroborate another period. Match each figure only to net sales and cost of goods sold from that same period; the supplied text does not independently authenticate either report.',
+        explanation: 'A gross-profit amount from one reporting period cannot corroborate another period. Match each figure only to net sales and cost of goods sold from that same period. Missing same-period inputs must be obtained from that period’s source records; the supplied text does not independently authenticate either report.',
         sourceIds: [],
         basis: 'reporting_period_context',
       }]
@@ -434,7 +449,9 @@ export function applyDeterministicFinancialChecks(
     : output.nextStepForMainAgent;
   const reportingPeriodNextStep = hasMultipleReportingPeriods
     ? 'Keep ' + deterministicChecks.reportingPeriods.join(' and ') +
-      ' as separate reporting periods. Do not use a result from one period to corroborate another; obtain period-matched source net sales and cost of goods sold before accepting each gross-profit figure.'
+      ' as separate reporting periods. Do not use a result from one period to corroborate another. ' +
+      missingPeriodSummary.join(' ') +
+      ' Obtain period-matched source net sales and cost of goods sold before accepting each gross-profit figure.'
     : '';
   const nextStepForMainAgent = [arithmeticNextStep, reportingPeriodNextStep]
     .filter(Boolean).join(' ').slice(0, 500);

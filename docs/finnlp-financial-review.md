@@ -12,7 +12,7 @@ Use it when a task contains a financial statement, financial terminology, an age
 - Ask the main agent for missing units, reporting periods, currency, accounting basis, or other context instead of guessing.
 - Return a compact handoff note so the main agent can revise its task result, state limitations, or request clarification.
 
-The reviewer is a second opinion, not an oracle. Finnhub news is provider-retrieved content, not independently fact-checked truth. Evidence supplied by a user or another agent is labelled unverified. The verifier can help find ambiguity and contradictions; it cannot guarantee financial accuracy.
+The reviewer is a second opinion, not an oracle. Finnhub news is provider-retrieved content, not independently fact-checked truth. Evidence supplied by a user or another agent is labelled unverified. The verifier can help find ambiguity and contradictions; it cannot guarantee financial accuracy. Financial records with different month, quarter, or fiscal-year labels are kept separate: a result from one period cannot corroborate another, and each gross-profit figure must be checked against net sales and cost of goods sold from the same period. Missing same-period source figures are returned as clarification requests rather than inferred.
 
 ## Planning-time talk-back loop
 

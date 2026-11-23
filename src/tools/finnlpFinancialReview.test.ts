@@ -243,6 +243,82 @@ describe('FinNLP financial review sidecar', () => {
     }
   });
 
+  it('surfaces separate reporting periods and requests period-matched source figures', async () => {
+    const claim = [
+      'October 2026 sales register: Net sales of INR 96,000 and COGS of INR 58,000.',
+      'Manager report: October 2026 gross profit as INR 42,000.',
+      'Finance department report: gross profit of INR 38,000, but its report is for September 2026.',
+    ].join(' ');
+    const reviewer = {
+      reviewFinancialClaim: vi.fn(async () => reviewResult([])),
+    };
+    const tool = createFinnlpFinancialReviewTool(undefined, reviewer);
+    const result = await tool.execute(context, { claim });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const output = result.output as {
+        deterministicChecks: {
+          reportingPeriods: string[];
+          periodCoverage: Array<{
+            period: string;
+            hasGrossProfit: boolean;
+            hasNetSales: boolean;
+            hasCostOfGoodsSold: boolean;
+            missingGrossProfitInputs: string[];
+          }>;
+          contextWarnings: string[];
+          calculations: Array<{ id: string; expectedAmount: number | null; reportedAmount: number | null }>;
+        };
+        findings: Array<{ basis?: string; statement: string; assessment: string }>;
+        ambiguities: Array<{ term: string; clarificationQuestion: string }>;
+        questionsForMainAgent: string[];
+        nextStepForMainAgent: string;
+        handoffMessage: string;
+      };
+      expect(output.deterministicChecks.reportingPeriods).toEqual(['October 2026', 'September 2026']);
+      expect(output.deterministicChecks.periodCoverage).toEqual([
+        {
+          period: 'October 2026',
+          hasGrossProfit: true,
+          hasNetSales: true,
+          hasCostOfGoodsSold: true,
+          missingGrossProfitInputs: [],
+        },
+        {
+          period: 'September 2026',
+          hasGrossProfit: true,
+          hasNetSales: false,
+          hasCostOfGoodsSold: false,
+          missingGrossProfitInputs: ['net sales', 'cost of goods sold'],
+        },
+      ]);
+      expect(output.deterministicChecks.contextWarnings.join(' ')).toContain(
+        'September 2026 has a reported gross-profit figure but is missing period-matched net sales and cost of goods sold',
+      );
+      expect(output.deterministicChecks.calculations).toMatchObject([{
+        id: 'gross-profit',
+        expectedAmount: 38_000,
+        reportedAmount: 42_000,
+      }]);
+      expect(output.findings.some((finding) =>
+        finding.basis === 'reporting_period_context' &&
+        finding.assessment === 'not_verifiable')).toBe(true);
+      expect(output.ambiguities.some((ambiguity) =>
+        ambiguity.term === 'Multiple reporting periods' &&
+        ambiguity.clarificationQuestion.includes('September 2026') &&
+        ambiguity.clarificationQuestion.includes('October 2026'))).toBe(true);
+      expect(output.questionsForMainAgent.some((question) =>
+        question.includes('September 2026') &&
+        question.includes('October 2026') &&
+        question.includes('same-period'))).toBe(true);
+      expect(output.nextStepForMainAgent).toContain('separate reporting periods');
+      expect(output.nextStepForMainAgent).toContain('corroborate another');
+      expect(output.handoffMessage).toContain('do not use a figure from one period to validate another');
+      expect(output.handoffMessage).toContain('September 2026');
+    }
+  });
+
   it('fails closed when no reviewer provider is configured', async () => {
     const tool = createFinnlpFinancialReviewTool();
     await expect(tool.execute(context, validInput)).resolves.toMatchObject({

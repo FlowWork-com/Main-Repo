@@ -20,10 +20,20 @@ export interface FinancialArithmeticCheck {
   readonly message: string;
 }
 
+export interface FinancialReportingPeriodCoverage {
+  readonly period: string;
+  readonly hasGrossProfit: boolean;
+  readonly hasNetSales: boolean;
+  readonly hasCostOfGoodsSold: boolean;
+  readonly missingGrossProfitInputs: readonly string[];
+}
+
 export interface DeterministicFinancialChecks {
   readonly status: 'mismatch_detected' | 'no_mismatch_detected' | 'not_assessed';
   readonly calculations: readonly FinancialArithmeticCheck[];
   readonly reportingPeriodProvided: boolean;
+  readonly reportingPeriods: readonly string[];
+  readonly periodCoverage: readonly FinancialReportingPeriodCoverage[];
   readonly contextWarnings: readonly string[];
 }
 
@@ -62,7 +72,7 @@ const amountPatterns: readonly {
 ];
 
 const amountAfterLabel =
-  /^\s*(?:(?:is|are|was|were|of|at|equals?|reported\s+as)\s+|[:=]\s*)?(INR|Rs\.?|rupees|₹|USD|US\$|EUR|€|GBP|£|JPY|¥|\$)?\s*([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)/i;
+  /^\s*(?:(?:is|are|was|were|of|at|as|equals?|reported\s+as)\s+|[:=]\s*)?(INR|Rs\.?|rupees|₹|USD|US\$|EUR|€|GBP|£|JPY|¥|\$)?\s*([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)/i;
 
 export function analyzeFinancialArithmetic(text: string): DeterministicFinancialChecks {
   const amounts = extractAmounts(text);
@@ -191,12 +201,28 @@ export function analyzeFinancialArithmetic(text: string): DeterministicFinancial
   }
 
   const financialAmountsPresent = amounts.size > 0;
-  const reportingPeriodProvided = hasReportingPeriod(text);
+  const reportingPeriods = extractReportingPeriods(text);
+  const periodCoverage = analyzeReportingPeriodCoverage(text, reportingPeriods);
+  const reportingPeriodProvided = reportingPeriods.length > 0 || hasReportingPeriod(text);
   const contextWarnings: string[] = [];
   if (financialAmountsPresent && !reportingPeriodProvided) {
     contextWarnings.push(
       'No reporting period or invoice date was identified. Confirm the relevant financial year, quarter, month, or document date before comparing records.',
     );
+  }
+  if (financialAmountsPresent && reportingPeriods.length > 1) {
+    contextWarnings.push(
+      'Multiple reporting periods were detected (' + reportingPeriods.join('; ') + '). Keep each report period-scoped: a figure from one period is not evidence for another. Compare each gross-profit figure only with net sales and cost of goods sold from the same period, and request missing same-period source figures before accepting cross-period conclusions.',
+    );
+  }
+  for (const coverage of periodCoverage) {
+    if (coverage.missingGrossProfitInputs.length > 0) {
+      contextWarnings.push(
+        coverage.period + ' has a reported gross-profit figure but is missing period-matched ' +
+          coverage.missingGrossProfitInputs.join(' and ') +
+          '. Obtain those source figures for ' + coverage.period + ' specifically; do not reuse amounts from another period.',
+      );
+    }
   }
   if (financialAmountsPresent && [...amounts.values()].every((amount) => amount.currency === null)) {
     contextWarnings.push(
@@ -227,6 +253,8 @@ export function analyzeFinancialArithmetic(text: string): DeterministicFinancial
         : 'no_mismatch_detected',
     calculations,
     reportingPeriodProvided,
+    reportingPeriods,
+    periodCoverage,
     contextWarnings,
   };
 }
@@ -345,10 +373,98 @@ function normalizeCurrency(value: string | undefined): string | null {
   return normalized;
 }
 
+function extractReportingPeriods(text: string): string[] {
+  const periods = new Set<string>();
+  const monthNames: Readonly<Record<string, string>> = {
+    jan: 'January', january: 'January',
+    feb: 'February', february: 'February',
+    mar: 'March', march: 'March',
+    apr: 'April', april: 'April',
+    may: 'May',
+    jun: 'June', june: 'June',
+    jul: 'July', july: 'July',
+    aug: 'August', august: 'August',
+    sep: 'September', sept: 'September', september: 'September',
+    oct: 'October', october: 'October',
+    nov: 'November', november: 'November',
+    dec: 'December', december: 'December',
+  };
+
+  const monthYear = /\b(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sept|sep|october|oct|november|nov|december|dec)\.?\s+(20\d{2})\b/gi;
+  for (const match of text.matchAll(monthYear)) {
+    const month = monthNames[match[1].toLowerCase()];
+    if (month) periods.add(month + ' ' + match[2]);
+  }
+
+  const reverseMonthYear = /\b(20\d{2})\s+(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sept|sep|october|oct|november|nov|december|dec)\b/gi;
+  for (const match of text.matchAll(reverseMonthYear)) {
+    const month = monthNames[match[2].toLowerCase()];
+    if (month) periods.add(month + ' ' + match[1]);
+  }
+
+  const quarters = /\b(Q[1-4])\s*(20\d{2})\b/gi;
+  for (const match of text.matchAll(quarters)) {
+    periods.add(match[1].toUpperCase() + ' ' + match[2]);
+  }
+
+  const fiscalYears = /\bFY\s*(20\d{2})(?:[-/](\d{2,4}))?\b/gi;
+  for (const match of text.matchAll(fiscalYears)) {
+    periods.add('FY ' + match[1] + (match[2] ? '-' + match[2] : ''));
+  }
+
+  return [...periods];
+}
+
+function analyzeReportingPeriodCoverage(
+  text: string,
+  reportingPeriods: readonly string[],
+): FinancialReportingPeriodCoverage[] {
+  const byPeriod = new Map<string, {
+    hasGrossProfit: boolean;
+    hasNetSales: boolean;
+    hasCostOfGoodsSold: boolean;
+  }>();
+  const segments = text.split(/(?<=[.!?])\s+(?=[A-Z])|\r?\n+/);
+  for (const segment of segments) {
+    const segmentPeriods = extractReportingPeriods(segment);
+    if (segmentPeriods.length !== 1) continue;
+    const hasGrossProfit = /\bgross\s+profit\b/i.test(segment);
+    const hasNetSales = /\bnet\s+sales\b/i.test(segment);
+    const hasCostOfGoodsSold = /\b(?:cost\s+of\s+goods\s+sold|COGS)\b/i.test(segment);
+    if (!hasGrossProfit && !hasNetSales && !hasCostOfGoodsSold) continue;
+
+    const period = segmentPeriods[0];
+    const current = byPeriod.get(period) ?? {
+      hasGrossProfit: false,
+      hasNetSales: false,
+      hasCostOfGoodsSold: false,
+    };
+    current.hasGrossProfit ||= hasGrossProfit;
+    current.hasNetSales ||= hasNetSales;
+    current.hasCostOfGoodsSold ||= hasCostOfGoodsSold;
+    byPeriod.set(period, current);
+  }
+
+  return reportingPeriods.flatMap((period) => {
+    const coverage = byPeriod.get(period);
+    if (!coverage) return [];
+    const missingGrossProfitInputs = coverage.hasGrossProfit
+      ? [
+          ...(!coverage.hasNetSales ? ['net sales'] : []),
+          ...(!coverage.hasCostOfGoodsSold ? ['cost of goods sold'] : []),
+        ]
+      : [];
+    return [{
+      period,
+      ...coverage,
+      missingGrossProfitInputs,
+    }];
+  });
+}
+
 function hasReportingPeriod(text: string): boolean {
   return /\b(?:FY\s*20\d{2}(?:[-/]\d{2,4})?|Q[1-4]\s*20\d{2}|(?:financial\s+)?(?:year|quarter|month)\s+ended|(?:for|during)\s+(?:the\s+)?(?:financial\s+)?(?:year|quarter|month)\s+(?:of\s+)?20\d{2}|20\d{2}[-/]\d{1,2}(?:[-/]\d{1,2})?)\b/i.test(text);
 }
-
 function roundMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }

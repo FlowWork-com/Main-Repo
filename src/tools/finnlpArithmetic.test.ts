@@ -178,6 +178,27 @@ describe('deterministic FinNLP financial arithmetic', () => {
     expect(result.calculations.some((item) => item.id === 'operating-profit')).toBe(false);
   });
 
+  it('detects multiple named month/year periods and prevents cross-period corroboration', () => {
+    const result = analyzeFinancialArithmetic([
+      'October 2026 sales register: Net sales of INR 96,000 and COGS of INR 58,000.',
+      'Manager report: October 2026 gross profit as INR 42,000.',
+      'Finance department report: gross profit of INR 38,000, but its report is for September 2026.',
+    ].join(' '));
+
+    expect(result.status).toBe('mismatch_detected');
+    expect(result.calculations).toMatchObject([{
+      id: 'gross-profit',
+      status: 'mismatch',
+      expectedAmount: 38_000,
+      reportedAmount: 42_000,
+      difference: 4_000,
+    }]);
+    expect(result.reportingPeriodProvided).toBe(true);
+    expect(result.reportingPeriods).toEqual(['October 2026', 'September 2026']);
+    expect(result.contextWarnings.join(' ')).toContain('Multiple reporting periods');
+    expect(result.contextWarnings.join(' ')).toContain('a figure from one period is not evidence for another');
+  });
+
   it('warns when financial amounts have no identifiable reporting period', () => {
     const result = analyzeFinancialArithmetic([
       'Net sales: INR 96,000',

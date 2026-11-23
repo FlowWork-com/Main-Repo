@@ -83,6 +83,7 @@ interface FinnlpFinancialReviewFinding {
   readonly assessment: FindingAssessment;
   readonly explanation: string;
   readonly sourceIds: readonly string[];
+  readonly basis?: 'deterministic_arithmetic' | 'reporting_period_context';
 }
 
 interface FinnlpFinancialAmbiguity {
@@ -352,10 +353,28 @@ export function applyDeterministicFinancialChecks(
   const relevantTerms = /arithmetic|gross profit|net sales|cost of goods sold|\bCOGS\b|operating profit|invoice total|subtotal|tax amount/i;
   const retainedFindings = output.findings.filter((finding) =>
     !relevantTerms.test(finding.statement) && !relevantTerms.test(finding.explanation));
+  const hasMultipleReportingPeriods = deterministicChecks.reportingPeriods.length > 1;
+  const reportingPeriodQuestion = hasMultipleReportingPeriods
+    ? 'Please provide same-period net sales and cost of goods sold source figures for each report (' +
+      deterministicChecks.reportingPeriods.join(', ') +
+      '). Keep the reports separate; do not use a figure from one period to validate another.'
+    : null;
+  const reportingPeriodFindings: FinnlpFinancialReviewFinding[] = hasMultipleReportingPeriods
+    ? [{
+        statement: 'Multiple reporting periods detected: ' +
+          deterministicChecks.reportingPeriods.join(' and ') +
+          '. Keep the financial reports separate.',
+        assessment: 'not_verifiable',
+        explanation: 'A gross-profit amount from one reporting period cannot corroborate another period. Match each figure only to net sales and cost of goods sold from that same period; the supplied text does not independently authenticate either report.',
+        sourceIds: [],
+        basis: 'reporting_period_context',
+      }]
+    : [];
   const findings = [
-    ...retainedFindings.slice(0, Math.max(0, 8 - calculationFindings.length)),
+    ...retainedFindings.slice(0, Math.max(0, 8 - calculationFindings.length - reportingPeriodFindings.length)),
     ...calculationFindings.slice(0, 8),
-  ];
+    ...reportingPeriodFindings,
+  ].slice(0, 8);
 
   const hasIssue = deterministicChecks.status === 'mismatch_detected';
   const calculationMessages = deterministicChecks.calculations.map((check) => check.message);
@@ -380,42 +399,58 @@ export function applyDeterministicFinancialChecks(
     ? 'What reporting period or invoice date do these figures belong to?'
     : null;
   const questionsForMainAgent = [
-    ...output.questionsForMainAgent.filter((question) => question !== missingPeriodQuestion),
+    ...output.questionsForMainAgent.filter((question) =>
+      question !== missingPeriodQuestion && question !== reportingPeriodQuestion),
     ...(missingPeriodQuestion ? [missingPeriodQuestion] : []),
+    ...(reportingPeriodQuestion ? [reportingPeriodQuestion] : []),
   ].slice(-4);
 
-  const ambiguities = missingPeriodQuestion
-    ? [
-        ...output.ambiguities.filter((ambiguity) => ambiguity.term.toLowerCase() !== 'reporting period'),
-        {
-          term: 'Reporting period',
-          interpretations: [
-            'The figures may refer to a financial year, quarter, month, or a single invoice date.',
-          ],
-          clarificationQuestion: missingPeriodQuestion,
-        },
-      ].slice(0, 4)
-    : output.ambiguities;
+  const periodAmbiguities: FinnlpFinancialAmbiguity[] = [
+    ...(missingPeriodQuestion ? [{
+      term: 'Reporting period',
+      interpretations: [
+        'The figures may refer to a financial year, quarter, month, or a single invoice date.',
+      ],
+      clarificationQuestion: missingPeriodQuestion,
+    }] : []),
+    ...(reportingPeriodQuestion ? [{
+      term: 'Multiple reporting periods',
+      interpretations: [
+        'The supplied records refer to separate periods: ' +
+          deterministicChecks.reportingPeriods.join(', ') + '.',
+        'A result from one reporting period may have been incorrectly treated as evidence for another.',
+      ],
+      clarificationQuestion: reportingPeriodQuestion,
+    }] : []),
+  ];
+  const ambiguities = [
+    ...output.ambiguities.filter((ambiguity) =>
+      !['reporting period', 'multiple reporting periods'].includes(ambiguity.term.toLowerCase())),
+    ...periodAmbiguities,
+  ].slice(-4);
 
-  const nextStepForMainAgent = hasIssue
-    ? `Correct or explicitly explain the arithmetic issue before presenting the result. ${calculationMessages.join(' ')} Confirm the reporting period and source records before treating the input figures as factual.`.slice(0, 500)
+  const arithmeticNextStep = hasIssue
+    ? `Correct or explicitly explain the arithmetic issue before presenting the result. ${calculationMessages.join(' ')} Confirm the reporting period and source records before treating the input figures as factual.`
     : output.nextStepForMainAgent;
+  const reportingPeriodNextStep = hasMultipleReportingPeriods
+    ? 'Keep ' + deterministicChecks.reportingPeriods.join(' and ') +
+      ' as separate reporting periods. Do not use a result from one period to corroborate another; obtain period-matched source net sales and cost of goods sold before accepting each gross-profit figure.'
+    : '';
+  const nextStepForMainAgent = [arithmeticNextStep, reportingPeriodNextStep]
+    .filter(Boolean).join(' ').slice(0, 500);
 
-  const handoffMessage = hasIssue
-    ? [
-        'FinNLP handoff: deterministic financial arithmetic checks take precedence over contradictory model arithmetic.',
-        ...calculationMessages,
-        contextMessage,
-        missingPeriodQuestion ?? '',
-        `Independent source-verification status remains ${output.reviewStatus}; arithmetic correctness does not establish that source figures are authentic.`,
-        'A human must review the calculations and source records. This is not financial advice or execution approval.',
-      ].filter(Boolean).join(' ').slice(0, 2_800)
-    : [
-        output.handoffMessage,
-        'Deterministic financial arithmetic checks:',
-        ...calculationMessages,
-        contextMessage,
-      ].filter(Boolean).join(' ').slice(0, 2_800);
+  const handoffMessage = [
+    ...(hasIssue
+      ? ['FinNLP handoff: deterministic financial arithmetic checks take precedence over contradictory model arithmetic.']
+      : [output.handoffMessage, 'Deterministic financial arithmetic checks:']),
+    ...calculationMessages,
+    contextMessage,
+    missingPeriodQuestion ?? '',
+    reportingPeriodQuestion ?? '',
+    reportingPeriodNextStep,
+    `Independent source-verification status remains ${output.reviewStatus}; arithmetic correctness does not establish that source figures are authentic.`,
+    'A human must review the calculations and source records. This is not financial advice or execution approval.',
+  ].filter(Boolean).join(' ').slice(0, 2_800);
 
   return {
     ...output,

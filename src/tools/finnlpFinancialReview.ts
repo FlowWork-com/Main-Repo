@@ -453,7 +453,7 @@ export function applyDeterministicFinancialChecks(
       missingPeriodSummary.join(' ') +
       ' Obtain period-matched source net sales and cost of goods sold before accepting each gross-profit figure.'
     : '';
-  const nextStepForMainAgent = [arithmeticNextStep, reportingPeriodNextStep]
+  const nextStepForMainAgent = [reportingPeriodNextStep, arithmeticNextStep]
     .filter(Boolean).join(' ').slice(0, 500);
 
   const handoffMessage = [

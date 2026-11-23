@@ -20,11 +20,20 @@ export interface FinancialArithmeticCheck {
   readonly message: string;
 }
 
+export interface FinancialReportingPeriodCoverage {
+  readonly period: string;
+  readonly hasGrossProfit: boolean;
+  readonly hasNetSales: boolean;
+  readonly hasCostOfGoodsSold: boolean;
+  readonly missingGrossProfitInputs: readonly string[];
+}
+
 export interface DeterministicFinancialChecks {
   readonly status: 'mismatch_detected' | 'no_mismatch_detected' | 'not_assessed';
   readonly calculations: readonly FinancialArithmeticCheck[];
   readonly reportingPeriodProvided: boolean;
   readonly reportingPeriods: readonly string[];
+  readonly periodCoverage: readonly FinancialReportingPeriodCoverage[];
   readonly contextWarnings: readonly string[];
 }
 
@@ -193,6 +202,7 @@ export function analyzeFinancialArithmetic(text: string): DeterministicFinancial
 
   const financialAmountsPresent = amounts.size > 0;
   const reportingPeriods = extractReportingPeriods(text);
+  const periodCoverage = analyzeReportingPeriodCoverage(text, reportingPeriods);
   const reportingPeriodProvided = reportingPeriods.length > 0 || hasReportingPeriod(text);
   const contextWarnings: string[] = [];
   if (financialAmountsPresent && !reportingPeriodProvided) {
@@ -204,6 +214,15 @@ export function analyzeFinancialArithmetic(text: string): DeterministicFinancial
     contextWarnings.push(
       'Multiple reporting periods were detected (' + reportingPeriods.join('; ') + '). Keep each report period-scoped: a figure from one period is not evidence for another. Compare each gross-profit figure only with net sales and cost of goods sold from the same period, and request missing same-period source figures before accepting cross-period conclusions.',
     );
+  }
+  for (const coverage of periodCoverage) {
+    if (coverage.missingGrossProfitInputs.length > 0) {
+      contextWarnings.push(
+        coverage.period + ' has a reported gross-profit figure but is missing period-matched ' +
+          coverage.missingGrossProfitInputs.join(' and ') +
+          '. Obtain those source figures for ' + coverage.period + ' specifically; do not reuse amounts from another period.',
+      );
+    }
   }
   if (financialAmountsPresent && [...amounts.values()].every((amount) => amount.currency === null)) {
     contextWarnings.push(
@@ -235,6 +254,7 @@ export function analyzeFinancialArithmetic(text: string): DeterministicFinancial
     calculations,
     reportingPeriodProvided,
     reportingPeriods,
+    periodCoverage,
     contextWarnings,
   };
 }
@@ -393,6 +413,53 @@ function extractReportingPeriods(text: string): string[] {
   }
 
   return [...periods];
+}
+
+function analyzeReportingPeriodCoverage(
+  text: string,
+  reportingPeriods: readonly string[],
+): FinancialReportingPeriodCoverage[] {
+  const byPeriod = new Map<string, {
+    hasGrossProfit: boolean;
+    hasNetSales: boolean;
+    hasCostOfGoodsSold: boolean;
+  }>();
+  const segments = text.split(/(?<=[.!?])\s+(?=[A-Z])|\r?\n+/);
+  for (const segment of segments) {
+    const segmentPeriods = extractReportingPeriods(segment);
+    if (segmentPeriods.length !== 1) continue;
+    const hasGrossProfit = /\bgross\s+profit\b/i.test(segment);
+    const hasNetSales = /\bnet\s+sales\b/i.test(segment);
+    const hasCostOfGoodsSold = /\b(?:cost\s+of\s+goods\s+sold|COGS)\b/i.test(segment);
+    if (!hasGrossProfit && !hasNetSales && !hasCostOfGoodsSold) continue;
+
+    const period = segmentPeriods[0];
+    const current = byPeriod.get(period) ?? {
+      hasGrossProfit: false,
+      hasNetSales: false,
+      hasCostOfGoodsSold: false,
+    };
+    current.hasGrossProfit ||= hasGrossProfit;
+    current.hasNetSales ||= hasNetSales;
+    current.hasCostOfGoodsSold ||= hasCostOfGoodsSold;
+    byPeriod.set(period, current);
+  }
+
+  return reportingPeriods.flatMap((period) => {
+    const coverage = byPeriod.get(period);
+    if (!coverage) return [];
+    const missingGrossProfitInputs = coverage.hasGrossProfit
+      ? [
+          ...(!coverage.hasNetSales ? ['net sales'] : []),
+          ...(!coverage.hasCostOfGoodsSold ? ['cost of goods sold'] : []),
+        ]
+      : [];
+    return [{
+      period,
+      ...coverage,
+      missingGrossProfitInputs,
+    }];
+  });
 }
 
 function hasReportingPeriod(text: string): boolean {

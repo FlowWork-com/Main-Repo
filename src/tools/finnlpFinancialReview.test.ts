@@ -260,6 +260,13 @@ describe('FinNLP financial review sidecar', () => {
       const output = result.output as {
         deterministicChecks: {
           reportingPeriods: string[];
+          periodCoverage: Array<{
+            period: string;
+            hasGrossProfit: boolean;
+            hasNetSales: boolean;
+            hasCostOfGoodsSold: boolean;
+            missingGrossProfitInputs: string[];
+          }>;
           contextWarnings: string[];
           calculations: Array<{ id: string; expectedAmount: number | null; reportedAmount: number | null }>;
         };
@@ -270,6 +277,25 @@ describe('FinNLP financial review sidecar', () => {
         handoffMessage: string;
       };
       expect(output.deterministicChecks.reportingPeriods).toEqual(['October 2026', 'September 2026']);
+      expect(output.deterministicChecks.periodCoverage).toEqual([
+        {
+          period: 'October 2026',
+          hasGrossProfit: true,
+          hasNetSales: true,
+          hasCostOfGoodsSold: true,
+          missingGrossProfitInputs: [],
+        },
+        {
+          period: 'September 2026',
+          hasGrossProfit: true,
+          hasNetSales: false,
+          hasCostOfGoodsSold: false,
+          missingGrossProfitInputs: ['net sales', 'cost of goods sold'],
+        },
+      ]);
+      expect(output.deterministicChecks.contextWarnings.join(' ')).toContain(
+        'September 2026 has a reported gross-profit figure but is missing period-matched net sales and cost of goods sold',
+      );
       expect(output.deterministicChecks.calculations).toMatchObject([{
         id: 'gross-profit',
         expectedAmount: 38_000,

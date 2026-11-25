@@ -217,7 +217,7 @@ async function callDeepSeek(apiKey, model, prompt) {
   };
 }
 
-function readTokenCount(value) {
+export function readTokenCount(value) {
   return Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 

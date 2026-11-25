@@ -63,7 +63,7 @@ In **Tool execution**, the registered `finnlp-company-news` tool accepts only `t
 
 ### Runtime AI model assignments
 
-The runtime model-role roster and Phase 9+ readiness hold are documented in [AI agent roster and model assignments](docs/ai-agent-roster.md). The runtime planner, FinNLP verifier, and invoice extractor are model-backed roles; the Finnhub news bridge, spreadsheet arithmetic, and workflow authorization/state machine are not separate generative agents.
+The runtime model-role roster and Phase 9+ readiness hold are documented in [AI agent roster and model assignments](docs/ai-agent-roster.md). Engineering-provider onboarding for the manual Claude/DeepSeek PR-review checkpoint is documented in [AI agent onboarding and integration](docs/agent-integrations-onboarding.md). The runtime planner, FinNLP verifier, and invoice extractor are model-backed roles; the Finnhub news bridge, spreadsheet arithmetic, and workflow authorization/state machine are not separate generative agents.
 
 ### FinNLP financial verification sidecar
 

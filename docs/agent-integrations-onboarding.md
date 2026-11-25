@@ -16,7 +16,8 @@ It is an engineering review checkpoint, not a new FlowWork runtime agent. It doe
 | Groq | Existing main planner | Existing model-backed role; staging configuration and release acceptance remain governed by the AI roster and Phase 9 gates. |
 | Groq / Qwen | Existing FinNLP financial verifier | Existing model-backed sidecar; remains advisory, bounded, and non-authoritative. |
 | Groq / Qwen vision | Existing invoice document extractor | Dedicated adapter exists in the repository. Live synthetic invoice acceptance and preview-model risk remain open. |
-| Groq | Independent review of selected PR diffs using the existing Groq account | Manual review option added. Requires GROQ_API_KEY in repository Actions secrets. Uses the Groq OpenAI-compatible Chat Completions API. |\n| Claude | Independent review of selected high-impact PR diffs | Manual review workflow added in this branch. Requires ANTHROPIC_API_KEY and a successful manual test after merge. |
+| Groq | Independent review of selected PR diffs using the existing Groq account | Manual review option added. Requires GROQ_API_KEY in repository Actions secrets. Uses the Groq OpenAI-compatible Chat Completions API. |
+| Claude | Independent review of selected high-impact PR diffs | Manual review workflow added in this branch. Requires ANTHROPIC_API_KEY and a successful manual test after merge. |
 | DeepSeek | Independent cost-conscious review of selected low/medium-risk PR diffs | Manual review workflow added in this branch. Requires DEEPSEEK_API_KEY and a successful manual test after merge. |
 | ChatGPT | Requirements clarification, architecture discussion, and decision synthesis | Human-operated development checkpoint; not a FlowWork production runtime dependency. |
 | Codex | Issue-scoped implementation and test work | Development tool. Continue requiring a dedicated branch, CI, review, and human merge. No self-merge or deployment authority. |
@@ -38,7 +39,8 @@ The workflow defaults are:
 
 | Provider | Model | API endpoint |
 |---|---|---|
-| Groq | openai/gpt-oss-120b | https://api.groq.com/openai/v1/chat/completions (see [Groq Chat Completions API](https://console.groq.com/docs/api-reference) and [supported models](https://console.groq.com/docs/models)) |\n| Claude | claude-sonnet-5-5 | https://api.anthropic.com/v1/messages (see [Claude Messages API](https://platform.claude.com/docs/en/api/messages) and [Sonnet 5.5 model details](https://platform.claude.com/docs/en/models/sonnet-5-5/overview)) |
+| Groq | openai/gpt-oss-120b | https://api.groq.com/openai/v1/chat/completions (see [Groq Chat Completions API](https://console.groq.com/docs/api-reference) and [supported models](https://console.groq.com/docs/models)) |
+| Claude | claude-sonnet-5-5 | https://api.anthropic.com/v1/messages (see [Claude Messages API](https://platform.claude.com/docs/en/api/messages) and [Sonnet 5.5 model details](https://platform.claude.com/docs/en/models/sonnet-5-5/overview)) |
 | DeepSeek | deepseek-flash | https://api.deepseek.com/chat/completions (see [DeepSeek Chat Completions API](https://api-docs.deepseek.com/api/create-chat-completion/)) |
 
 Models are explicit workflow settings and can be updated after a reviewed model/version change. Provider account billing and rate limits still apply. Selecting both calls both APIs and may incur charges from each provider.

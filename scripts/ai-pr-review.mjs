@@ -169,7 +169,7 @@ async function fetchPullRequestFiles(apiBase, repository, prNumber, token) {
 export function formatProviderError(providerName, status, payload) {
   const error = payload?.error;
   const detail = typeof error?.message === 'string'
-    ? redactSensitiveData(error.message).replace(/[\\r\\n\\t]+/g, ' ').slice(0, 400)
+    ? redactSensitiveData(error.message).replace(/[\r\n\t]+/g, ' ').slice(0, 400)
     : '';
   const type = typeof error?.type === 'string' ? error.type.slice(0, 80) : '';
   const requestId = typeof payload?.request_id === 'string' ? payload.request_id.slice(0, 100) : '';

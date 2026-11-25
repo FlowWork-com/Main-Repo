@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildReviewPrompt,
+  readTokenCount,
   redactSensitiveData,
   runReview,
   shouldReviewFile,
@@ -96,4 +97,12 @@ test("refuses to run from a branch other than main", async () => {
     }),
     /Run this workflow from the main branch/,
   );
+});
+
+test("accepts only non-negative safe-integer provider token counts", () => {
+  assert.equal(readTokenCount(123), 123);
+  assert.equal(readTokenCount(0), 0);
+  assert.equal(readTokenCount(-1), null);
+  assert.equal(readTokenCount("123"), null);
+  assert.equal(readTokenCount(Number.MAX_SAFE_INTEGER + 1), null);
 });

@@ -64,7 +64,7 @@ test("review prompt marks PR diffs as untrusted and redacts credentials", () => 
   );
   const parsed = JSON.parse(prompt);
   assert.match(parsed.reviewInstructions.join(" "), /untrusted data/);
-  assert.match(parsed.reviewInstructions.join(" "), /Do not approve/);
+  assert.match(parsed.reviewInstructions.join(" "), /Do not say that the PR is approved/);
   assert.equal(parsed.changeLimits.skippedFiles, 3);
   assert.equal(parsed.changeLimits.truncatedFiles, 1);
   assert.doesNotMatch(prompt, /ghp_F{20,}/);

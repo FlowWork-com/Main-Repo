@@ -34,10 +34,13 @@ test("filters review scope to supported source, documentation and workflow files
   assert.equal(shouldReviewFile("src/planning/provider.ts"), true);
   assert.equal(shouldReviewFile("supabase/functions/plan-workflow/index.ts"), true);
   assert.equal(shouldReviewFile("supabase/migrations/0011_example.sql"), true);
+  assert.equal(shouldReviewFile("supabase/tests/rls_test.sql"), true);
+  assert.equal(shouldReviewFile(".github/agents/security-reviewer.md"), true);
   assert.equal(shouldReviewFile("docs/agent-integrations-onboarding.md"), true);
   assert.equal(shouldReviewFile(".github/workflows/ai-pr-review.yml"), true);
   assert.equal(shouldReviewFile(".env.local"), false);
   assert.equal(shouldReviewFile("src/.env.production"), false);
+  assert.equal(shouldReviewFile("src/secrets.ts"), false);
   assert.equal(shouldReviewFile("src/fixtures/customer-invoices.ts"), false);
   assert.equal(shouldReviewFile("scripts/customer-data.csv"), false);
   assert.equal(shouldReviewFile("package-lock.json"), false);

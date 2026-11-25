@@ -139,5 +139,5 @@ test("redacts credentials from provider error details", () => {
     error: { type: "invalid_request_error", message: "Rejected value " + secret },
   });
   assert.doesNotMatch(message, /ghp_A{20,}/);
-  assert.match(message, /\\[REDACTED\\]/);
+  assert.match(message, /\[REDACTED\]/);
 });

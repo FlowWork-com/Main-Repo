@@ -166,6 +166,20 @@ async function fetchPullRequestFiles(apiBase, repository, prNumber, token) {
   throw new Error('This PR changes too many files for a bounded AI review. Split the PR first.');
 }
 
+export function formatProviderError(providerName, status, payload) {
+  const error = payload?.error;
+  const detail = typeof error?.message === 'string'
+    ? redactSensitiveData(error.message).replace(/[\\r\\n\\t]+/g, ' ').slice(0, 400)
+    : '';
+  const type = typeof error?.type === 'string' ? error.type.slice(0, 80) : '';
+  const requestId = typeof payload?.request_id === 'string' ? payload.request_id.slice(0, 100) : '';
+  const parts = [providerName + ' API request failed with HTTP ' + status + '.'];
+  if (type) parts.push('Type: ' + type + '.');
+  if (detail) parts.push(detail);
+  if (requestId) parts.push('Request ID: ' + requestId + '.');
+  return parts.join(' ');
+}
+
 async function callClaude(apiKey, model, prompt) {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -183,7 +197,15 @@ async function callClaude(apiKey, model, prompt) {
     redirect: 'error',
     signal: AbortSignal.timeout(90_000),
   });
-  if (!response.ok) throw new Error('Claude API request failed with HTTP ' + response.status + '.');
+  if (!response.ok) {
+    let errorPayload = null;
+    try {
+      errorPayload = await readBoundedJson(response, 32 * 1024, 'Claude error');
+    } catch {
+      // Preserve the HTTP status when the provider returns a non-JSON error body.
+    }
+    throw new Error(formatProviderError('Claude', response.status, errorPayload));
+  }
   const payload = await readBoundedJson(response, 512 * 1024, 'Claude');
   const text = Array.isArray(payload?.content)
     ? payload.content.filter((block) => block?.type === 'text').map((block) => block.text).join('\n')

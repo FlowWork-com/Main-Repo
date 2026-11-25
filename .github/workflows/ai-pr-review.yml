@@ -11,10 +11,11 @@ on:
         description: "Choose which independent reviewer(s) to run"
         type: choice
         required: true
-        default: claude
+        default: groq
         options:
           - claude
           - deepseek
+          - groq
           - both
 
 permissions: {}
@@ -43,7 +44,7 @@ jobs:
         with:
           node-version: 22
 
-      - name: Run bounded Claude / DeepSeek review
+      - name: Run bounded selected-provider review
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_REF: ${{ github.ref }}
@@ -53,6 +54,8 @@ jobs:
           REVIEWERS: ${{ inputs.reviewers }}
           ANTHROPIC_API_KEY: ${{ (inputs.reviewers == 'claude' || inputs.reviewers == 'both') && secrets.ANTHROPIC_API_KEY || '' }}
           DEEPSEEK_API_KEY: ${{ (inputs.reviewers == 'deepseek' || inputs.reviewers == 'both') && secrets.DEEPSEEK_API_KEY || '' }}
+          GROQ_API_KEY: ${{ inputs.reviewers == 'groq' && secrets.GROQ_API_KEY || '' }}
+          GROQ_REVIEW_MODEL: openai/gpt-oss-120b
           CLAUDE_REVIEW_MODEL: claude-sonnet-5-5
           DEEPSEEK_REVIEW_MODEL: deepseek-flash
         run: node scripts/ai-pr-review.mjs

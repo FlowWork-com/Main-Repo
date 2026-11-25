@@ -5,7 +5,7 @@
 
 ## 1. What this stage adds
 
-This feature branch adds a manually triggered GitHub Actions workflow named **Manual AI-assisted PR review**. It runs an independent review of an open pull request against main using Claude, DeepSeek, or both, and publishes an advisory comment on that PR.
+This feature branch adds a manually triggered GitHub Actions workflow named **Manual AI-assisted PR review**. It runs an independent review of an open pull request against main using Groq, Claude, DeepSeek, or both, and publishes an advisory comment on that PR.
 
 It is an engineering review checkpoint, not a new FlowWork runtime agent. It does not change the main planner, FinNLP, invoice-extractor role names or assignments.
 
@@ -16,7 +16,7 @@ It is an engineering review checkpoint, not a new FlowWork runtime agent. It doe
 | Groq | Existing main planner | Existing model-backed role; staging configuration and release acceptance remain governed by the AI roster and Phase 9 gates. |
 | Groq / Qwen | Existing FinNLP financial verifier | Existing model-backed sidecar; remains advisory, bounded, and non-authoritative. |
 | Groq / Qwen vision | Existing invoice document extractor | Dedicated adapter exists in the repository. Live synthetic invoice acceptance and preview-model risk remain open. |
-| Claude | Independent review of selected high-impact PR diffs | Manual review workflow added in this branch. Requires ANTHROPIC_API_KEY and a successful manual test after merge. |
+| Groq | Independent review of selected PR diffs using the existing Groq account | Manual review option added. Requires GROQ_API_KEY in repository Actions secrets. Uses the Groq OpenAI-compatible Chat Completions API. |\n| Claude | Independent review of selected high-impact PR diffs | Manual review workflow added in this branch. Requires ANTHROPIC_API_KEY and a successful manual test after merge. |
 | DeepSeek | Independent cost-conscious review of selected low/medium-risk PR diffs | Manual review workflow added in this branch. Requires DEEPSEEK_API_KEY and a successful manual test after merge. |
 | ChatGPT | Requirements clarification, architecture discussion, and decision synthesis | Human-operated development checkpoint; not a FlowWork production runtime dependency. |
 | Codex | Issue-scoped implementation and test work | Development tool. Continue requiring a dedicated branch, CI, review, and human merge. No self-merge or deployment authority. |
@@ -25,20 +25,20 @@ It is an engineering review checkpoint, not a new FlowWork runtime agent. It doe
 
 The implementation deliberately does not fan every request out to every model. The selected reviewer(s) are invoked only when a maintainer manually dispatches the workflow.
 
-## 2. Configure Claude and DeepSeek
+## 2. Configure Groq, Claude, and DeepSeek
 
 Create API keys with the relevant provider accounts. Add them as **GitHub repository Actions secrets**:
 
 1. Open the Main-Repo GitHub repository.
 2. Go to Settings → Secrets and variables → Actions.
-3. Under Repository secrets, add ANTHROPIC_API_KEY and/or DEEPSEEK_API_KEY.
+3. Under Repository secrets, add GROQ_API_KEY, ANTHROPIC_API_KEY, and/or DEEPSEEK_API_KEY.
 4. Do not place provider keys in source files, workflow YAML literals, frontend environment variables, or committed environment files.
 
 The workflow defaults are:
 
 | Provider | Model | API endpoint |
 |---|---|---|
-| Claude | claude-sonnet-5-5 | https://api.anthropic.com/v1/messages (see [Claude Messages API](https://platform.claude.com/docs/en/api/messages) and [Sonnet 5.5 model details](https://platform.claude.com/docs/en/models/sonnet-5-5/overview)) |
+| Groq | openai/gpt-oss-120b | https://api.groq.com/openai/v1/chat/completions (see [Groq Chat Completions API](https://console.groq.com/docs/api-reference) and [supported models](https://console.groq.com/docs/models)) |\n| Claude | claude-sonnet-5-5 | https://api.anthropic.com/v1/messages (see [Claude Messages API](https://platform.claude.com/docs/en/api/messages) and [Sonnet 5.5 model details](https://platform.claude.com/docs/en/models/sonnet-5-5/overview)) |
 | DeepSeek | deepseek-flash | https://api.deepseek.com/chat/completions (see [DeepSeek Chat Completions API](https://api-docs.deepseek.com/api/create-chat-completion/)) |
 
 Models are explicit workflow settings and can be updated after a reviewed model/version change. Provider account billing and rate limits still apply. Selecting both calls both APIs and may incur charges from each provider.
@@ -51,7 +51,7 @@ After this PR is merged:
 2. Select **Manual AI-assisted PR review**.
 3. Choose Run workflow from the main branch.
 4. Enter the open PR number.
-5. Select Claude, DeepSeek, or both.
+5. Select Groq, Claude, DeepSeek, or both.
 6. Run the workflow and read its comment on the selected PR.
 
 The workflow only reviews PRs that belong to this repository, are open, and target main. If a selected provider secret is missing, the run fails with a setup message.
@@ -79,7 +79,7 @@ The AI reviewer is advisory. It does not run the project's CI, inspect live secr
 
 ## 5. Integration sequence after this PR
 
-1. **Claude and DeepSeek PR review:** merge the workflow, add the selected provider secret(s), run against a small non-sensitive PR, verify the comment, model IDs, and returned input/output token counts, then confirm charges in the provider billing console.
+1. **Groq / Claude / DeepSeek PR review:** select one configured provider, add its corresponding repository Actions secret, run against a small non-sensitive PR, verify the comment, model ID, and returned input/output token counts, then confirm usage in the provider console.
 2. **Gemini invoice adapter:** implement a separate native Gemini adapter against the existing invoice-extraction interface. Preserve the current approval gate, human review, null/abstention behavior, document-size limits, and evidence handling. Compare it against the same synthetic PDF/image fixtures as the current provider before changing any assignment.
 3. **Devin implementation service:** connect a dedicated Devin service user using its V3 API key and a narrowly scoped GitHub repository connection. It should receive one bounded issue, produce a branch/PR, and stop for existing CI and human review. It must not receive production secrets, self-merge, change branch protection, or deploy.
 4. **Codex development integration:** retain the current dedicated-branch coding workflow. A later SDK/app-server integration should preserve explicit approval events and keep the agent separate from repository merge/deployment authority.

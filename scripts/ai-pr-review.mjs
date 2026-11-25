@@ -11,9 +11,12 @@ const ANTHROPIC_VERSION = '2026-10-21';
 const SECRET_PATTERNS = [
   /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b/g,
   /\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g,
+  /\bglpat-[A-Za-z0-9_-]{20,}\b/g,
   /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g,
   /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g,
   /\bAIza[0-9A-Za-z_-]{30,}\b/g,
+  /\bya29\.[A-Za-z0-9_-]{20,}\b/g,
+  /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g,
   /\bcog_[A-Za-z0-9_-]{16,}\b/g,
   /\bAKIA[0-9A-Z]{16}\b/g,
   /\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/gi,
@@ -35,12 +38,13 @@ export function redactSensitiveData(value) {
 export function shouldReviewFile(filename) {
   if (typeof filename !== 'string' || filename.length > 500) return false;
   const path = filename.replaceAll('\\', '/');
-  if (/(^|\/)(?:\.env(?:\..*)?|secrets?|credentials?)(?:\/|$)/i.test(path)) return false;
+  if (/(^|\/)(?:\.env(?:\..*)?|secrets?(?:\.[^/]*)?|credentials?(?:\.[^/]*)?)(?:\/|$)/i.test(path)) return false;
   if (/(^|\/)(?:fixtures?|testdata|sample[-_]?data)(?:\/|$)/i.test(path)) return false;
   if (/\.(?:pem|key|p12|pfx|jks|keystore|zip|gz|pdf|png|jpe?g|webp|xlsx?|csv|tsv|lock)$/i.test(path)) return false;
   if (/(?:^|\/)(?:package-lock|bun\.lockb?|pnpm-lock|yarn\.lock|deno\.lock)(?:\.|$)/i.test(path)) return false;
-  return /^(?:src\/|supabase\/functions\/|supabase\/migrations\/|scripts\/|docs\/|\.github\/workflows\/)/.test(path) &&
-    /\.(?:[cm]?[jt]sx?|sql|md|ya?ml|toml)$/i.test(path);
+  const supportedPath = /^(?:src\/|supabase\/(?:functions|migrations|tests)\/|scripts\/|docs\/|\.github\/(?:workflows|agents)\/)/.test(path) ||
+    /^(?:package\.json|tsconfig(?:\.[^/]+)?\.json|deno\.json(?:c)?|vite\.config\.[cm]?js|eslint\.config\.[cm]?js)$/.test(path);
+  return supportedPath && /\.(?:[cm]?[jt]sx?|py|sql|md|ya?ml|toml|json)$/i.test(path);
 }
 
 export function buildReviewPrompt(pullRequest, reviewedFiles, skippedFiles, truncatedFiles = 0) {
@@ -93,7 +97,44 @@ async function fetchGitHubJson(url, token) {
   if (!response.ok) {
     throw new Error('GitHub API request failed with HTTP ' + response.status + '.');
   }
-  return response.json();
+  return readBoundedJson(response, 5 * 1024 * 1024, 'GitHub');
+}
+
+async function readBoundedJson(response, maxBytes, sourceName) {
+  const declaredLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    await response.body?.cancel();
+    throw new Error(sourceName + ' returned a response larger than the configured limit.');
+  }
+  if (!response.body) throw new Error(sourceName + ' returned an empty response.');
+  const reader = response.body.getReader();
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        await reader.cancel();
+        throw new Error(sourceName + ' returned a response larger than the configured limit.');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+  } catch {
+    throw new Error(sourceName + ' returned an invalid JSON response.');
+  }
 }
 
 async function fetchPullRequestFiles(apiBase, repository, prNumber, token) {
@@ -126,7 +167,7 @@ async function callClaude(apiKey, model, prompt) {
     signal: AbortSignal.timeout(90_000),
   });
   if (!response.ok) throw new Error('Claude API request failed with HTTP ' + response.status + '.');
-  const payload = await response.json();
+  const payload = await readBoundedJson(response, 512 * 1024, 'Claude');
   const text = Array.isArray(payload?.content)
     ? payload.content.filter((block) => block?.type === 'text').map((block) => block.text).join('\n')
     : '';
@@ -158,7 +199,7 @@ async function callDeepSeek(apiKey, model, prompt) {
     signal: AbortSignal.timeout(90_000),
   });
   if (!response.ok) throw new Error('DeepSeek API request failed with HTTP ' + response.status + '.');
-  const payload = await response.json();
+  const payload = await readBoundedJson(response, 512 * 1024, 'DeepSeek');
   const text = payload?.choices?.[0]?.message?.content;
   if (typeof text !== 'string' || !text.trim()) throw new Error('DeepSeek returned no review text.');
   return redactSensitiveData(text).slice(0, MAX_REVIEW_OUTPUT_CHARS);
@@ -195,7 +236,8 @@ async function upsertPullRequestComment(apiBase, repository, prNumber, token, bo
     token,
   );
   if (!Array.isArray(comments)) throw new Error('GitHub returned an invalid PR comment list.');
-  const existing = comments.find((comment) => typeof comment.body === 'string' && comment.body.includes(COMMENT_MARKER));
+  const existing = comments.find((comment) => comment.user?.login === 'github-actions[bot]' &&
+    typeof comment.body === 'string' && comment.body.includes(COMMENT_MARKER));
   const url = existing
     ? apiBase + '/repos/' + repository + '/issues/comments/' + existing.id
     : apiBase + '/repos/' + repository + '/issues/' + prNumber + '/comments';

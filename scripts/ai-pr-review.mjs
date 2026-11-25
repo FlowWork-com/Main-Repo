@@ -172,7 +172,13 @@ async function callClaude(apiKey, model, prompt) {
     ? payload.content.filter((block) => block?.type === 'text').map((block) => block.text).join('\n')
     : '';
   if (!text.trim()) throw new Error('Claude returned no review text.');
-  return redactSensitiveData(text).slice(0, MAX_REVIEW_OUTPUT_CHARS);
+  return {
+    text: redactSensitiveData(text).slice(0, MAX_REVIEW_OUTPUT_CHARS),
+    usage: {
+      inputTokens: readTokenCount(payload?.usage?.input_tokens),
+      outputTokens: readTokenCount(payload?.usage?.output_tokens),
+    },
+  };
 }
 
 async function callDeepSeek(apiKey, model, prompt) {
@@ -202,7 +208,17 @@ async function callDeepSeek(apiKey, model, prompt) {
   const payload = await readBoundedJson(response, 512 * 1024, 'DeepSeek');
   const text = payload?.choices?.[0]?.message?.content;
   if (typeof text !== 'string' || !text.trim()) throw new Error('DeepSeek returned no review text.');
-  return redactSensitiveData(text).slice(0, MAX_REVIEW_OUTPUT_CHARS);
+  return {
+    text: redactSensitiveData(text).slice(0, MAX_REVIEW_OUTPUT_CHARS),
+    usage: {
+      inputTokens: readTokenCount(payload?.usage?.prompt_tokens),
+      outputTokens: readTokenCount(payload?.usage?.completion_tokens),
+    },
+  };
+}
+
+function readTokenCount(value) {
+  return Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
 function formatComment({ prNumber, reviewers, reviewedFiles, skippedFiles, truncatedFiles, results }) {
@@ -224,6 +240,13 @@ function formatComment({ prNumber, reviewers, reviewedFiles, skippedFiles, trunc
       parts.push('', 'Review could not be completed: ' + result.error);
     } else {
       parts.push('', result.text);
+      if (result.usage && (result.usage.inputTokens !== null || result.usage.outputTokens !== null)) {
+        parts.push('', 'Token usage returned by provider: ' +
+          (result.usage.inputTokens === null ? 'input unavailable' : result.usage.inputTokens + ' input') + ', ' +
+          (result.usage.outputTokens === null ? 'output unavailable' : result.usage.outputTokens + ' output') + '.');
+      } else {
+        parts.push('', 'Token usage was not returned by the provider.');
+      }
     }
   }
   parts.push('', '---', '_Generated from the bounded changed-file diff. The selected diff was sent to the configured external AI provider(s)._');
@@ -317,7 +340,8 @@ export async function runReview(environment = process.env) {
   const prompt = buildReviewPrompt(pr, selectedFiles, skippedFiles, truncatedFiles);
   const settled = await Promise.all(providers.map(async (provider) => {
     try {
-      return { name: provider.name, model: provider.model, text: await provider.run(prompt) };
+      const result = await provider.run(prompt);
+      return { name: provider.name, model: provider.model, text: result.text, usage: result.usage };
     } catch (error) {
       const safeMessage = error instanceof Error ? error.message : 'Provider request failed.';
       return { name: provider.name, model: provider.model, error: safeMessage.slice(0, 300) };
@@ -342,7 +366,7 @@ export async function runReview(environment = process.env) {
     reviewedFiles: selectedFiles.length,
     skippedFiles,
     truncatedFiles,
-    providerResults: settled.map(({ name, model, error }) => ({ name, model, ok: !error })),
+    providerResults: settled.map(({ name, model, error, usage }) => ({ name, model, ok: !error, usage: usage ?? null })),
   };
 }
 

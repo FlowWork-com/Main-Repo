@@ -111,6 +111,6 @@ test("accepts only non-negative safe-integer provider token counts", () => {
 test("sanitizes notification mentions and remote image markup in reviewer output", () => {
   const safe = sanitizeReviewText("Notify @here and @everyone. ![chart](https://tracker.invalid/image.png)");
   assert.doesNotMatch(safe, /@here|@everyone/i);
-  assert.doesNotMatch(safe, /!\\[/);
+  assert.doesNotMatch(safe, /!\[/);
   assert.match(safe, /chart/);
 });

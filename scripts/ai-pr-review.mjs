@@ -60,8 +60,8 @@ export function shouldReviewFile(filename) {
 
 export function sanitizeReviewText(value) {
   return redactSensitiveData(value)
-    .replace(/@(everyone|here)\\b/gi, (_, audience) => '@' + String.fromCharCode(8203) + audience)
-    .replace(/!\\[([^\\]]*)\\]\\([^)]+\\)/g, '$1');
+    .replace(/@(everyone|here)\b/gi, (_, audience) => '@' + String.fromCharCode(8203) + audience)
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1');
 }
 
 function buildReviewPrompt(pullRequest, reviewedFiles, skippedFiles, truncatedFiles = 0) {

@@ -64,7 +64,7 @@ export function sanitizeReviewText(value) {
     .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1');
 }
 
-function buildReviewPrompt(pullRequest, reviewedFiles, skippedFiles, truncatedFiles = 0) {
+export function buildReviewPrompt(pullRequest, reviewedFiles, skippedFiles, truncatedFiles = 0) {
   const context = {
     pullRequest: {
       number: pullRequest.number,

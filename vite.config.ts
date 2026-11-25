@@ -1,5 +1,5 @@
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import { loadEnv } from 'vite';
 import process from 'node:process';
 
@@ -19,6 +19,7 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: 'jsdom',
       setupFiles: ['./src/frontend/test/setup.ts'],
+      exclude: [...configDefaults.exclude, 'scripts/**/*.test.mjs'],
       restoreMocks: true,
     },
   };

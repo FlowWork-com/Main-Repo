@@ -1,0 +1,58 @@
+name: Manual AI-assisted PR review
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Open pull request number to review"
+        type: string
+        required: true
+      reviewers:
+        description: "Choose which independent reviewer(s) to run"
+        type: choice
+        required: true
+        default: claude
+        options:
+          - claude
+          - deepseek
+          - both
+
+permissions: {}
+
+concurrency:
+  group: ai-pr-review-${{ inputs.pr_number }}
+  cancel-in-progress: false
+
+jobs:
+  review:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+    steps:
+      - name: Check out trusted main-branch review code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run bounded Claude / DeepSeek review
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_API_URL: ${{ github.api_url }}
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          REVIEWERS: ${{ inputs.reviewers }}
+          ANTHROPIC_API_KEY: ${{ (inputs.reviewers == 'claude' || inputs.reviewers == 'both') && secrets.ANTHROPIC_API_KEY || '' }}
+          DEEPSEEK_API_KEY: ${{ (inputs.reviewers == 'deepseek' || inputs.reviewers == 'both') && secrets.DEEPSEEK_API_KEY || '' }}
+          CLAUDE_REVIEW_MODEL: claude-sonnet-5-5
+          DEEPSEEK_REVIEW_MODEL: deepseek-flash
+        run: node scripts/ai-pr-review.mjs

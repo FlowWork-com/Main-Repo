@@ -102,6 +102,10 @@ jobs:
 
       - name: Check manual staging invoice acceptance script syntax
         run: node --check scripts/staging-invoice-extraction-smoke.mjs
+      - name: Check and test AI-assisted PR review script
+        run: |
+          node --check scripts/ai-pr-review.mjs
+          node --test scripts/ai-pr-review.test.mjs
 
       - name: Offline planner evaluation
         run: npm run evaluate:planner

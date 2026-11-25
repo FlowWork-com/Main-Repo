@@ -25,4 +25,10 @@ export default tseslint.config(
       globals: globals.deno,
     },
   },
+  {
+    files: ['scripts/ai-pr-review.mjs'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
 );

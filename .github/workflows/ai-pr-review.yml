@@ -51,8 +51,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ inputs.pr_number }}
           REVIEWERS: ${{ inputs.reviewers }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ (inputs.reviewers == 'claude' || inputs.reviewers == 'both') && secrets.ANTHROPIC_API_KEY || '' }}
+          DEEPSEEK_API_KEY: ${{ (inputs.reviewers == 'deepseek' || inputs.reviewers == 'both') && secrets.DEEPSEEK_API_KEY || '' }}
           CLAUDE_REVIEW_MODEL: claude-sonnet-5-5
           DEEPSEEK_REVIEW_MODEL: deepseek-flash
         run: node scripts/ai-pr-review.mjs

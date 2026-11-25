@@ -79,7 +79,7 @@ The AI reviewer is advisory. It does not run the project's CI, inspect live secr
 
 ## 5. Integration sequence after this PR
 
-1. **Claude and DeepSeek PR review:** merge the workflow, add the selected provider secret(s), run against a small non-sensitive PR, and verify the comment, model IDs, and usage/billing observation.
+1. **Claude and DeepSeek PR review:** merge the workflow, add the selected provider secret(s), run against a small non-sensitive PR, verify the comment, model IDs, and returned input/output token counts, then confirm charges in the provider billing console.
 2. **Gemini invoice adapter:** implement a separate native Gemini adapter against the existing invoice-extraction interface. Preserve the current approval gate, human review, null/abstention behavior, document-size limits, and evidence handling. Compare it against the same synthetic PDF/image fixtures as the current provider before changing any assignment.
 3. **Devin implementation service:** connect a dedicated Devin service user using its V3 API key and a narrowly scoped GitHub repository connection. It should receive one bounded issue, produce a branch/PR, and stop for existing CI and human review. It must not receive production secrets, self-merge, change branch protection, or deploy.
 4. **Codex development integration:** retain the current dedicated-branch coding workflow. A later SDK/app-server integration should preserve explicit approval events and keep the agent separate from repository merge/deployment authority.

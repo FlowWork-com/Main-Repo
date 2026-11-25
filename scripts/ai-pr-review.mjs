@@ -43,7 +43,7 @@ export function shouldReviewFile(filename) {
     /\.(?:[cm]?[jt]sx?|sql|md|ya?ml|toml)$/i.test(path);
 }
 
-export function buildReviewPrompt(pullRequest, reviewedFiles, skippedFiles) {
+export function buildReviewPrompt(pullRequest, reviewedFiles, skippedFiles, truncatedFiles = 0) {
   const context = {
     pullRequest: {
       number: pullRequest.number,
@@ -66,6 +66,7 @@ export function buildReviewPrompt(pullRequest, reviewedFiles, skippedFiles) {
     changeLimits: {
       reviewableFiles: reviewedFiles.length,
       skippedFiles,
+      truncatedFiles,
       maxTotalPatchCharacters: MAX_DIFF_CHARS,
     },
     files: reviewedFiles.map((file) => ({
@@ -163,7 +164,7 @@ async function callDeepSeek(apiKey, model, prompt) {
   return redactSensitiveData(text).slice(0, MAX_REVIEW_OUTPUT_CHARS);
 }
 
-function formatComment({ prNumber, reviewers, reviewedFiles, skippedFiles, results }) {
+function formatComment({ prNumber, reviewers, reviewedFiles, skippedFiles, truncatedFiles, results }) {
   const parts = [
     COMMENT_MARKER,
     '## FlowWork AI-assisted PR review',
@@ -171,6 +172,7 @@ function formatComment({ prNumber, reviewers, reviewedFiles, skippedFiles, resul
     'PR: #' + prNumber,
     'Files reviewed: ' + reviewedFiles.length,
     'Files skipped (unsupported, binary, unpatched, or bounded out): ' + skippedFiles,
+    'Patches truncated to the per-file limit: ' + truncatedFiles,
     'Reviewers: ' + reviewers.map((entry) => entry.name + ' (' + entry.model + ')').join(', '),
     '',
     '> Advisory only. This review does not run the test suite, approve the PR, or authorize a merge or deployment. Human review and required CI checks remain mandatory.',
@@ -258,8 +260,10 @@ export async function runReview(environment = process.env) {
   const selectedFiles = [];
   let totalChars = 0;
   let skippedFiles = allFiles.length - reviewable.length;
+  let truncatedFiles = 0;
   for (const file of reviewable) {
     const patch = file.patch.slice(0, MAX_PATCH_CHARS_PER_FILE);
+    if (file.patch.length > MAX_PATCH_CHARS_PER_FILE) truncatedFiles += 1;
     if (selectedFiles.length >= MAX_REVIEW_FILES || totalChars + patch.length > MAX_DIFF_CHARS) {
       skippedFiles += 1;
       continue;
@@ -268,9 +272,7 @@ export async function runReview(environment = process.env) {
     totalChars += patch.length;
   }
   if (selectedFiles.length === 0) throw new Error('The diff exceeds the configured review limit.');
-  if (selectedFiles.length < reviewable.length) skippedFiles += reviewable.length - selectedFiles.length;
-
-  const prompt = buildReviewPrompt(pr, selectedFiles, skippedFiles);
+  const prompt = buildReviewPrompt(pr, selectedFiles, skippedFiles, truncatedFiles);
   const settled = await Promise.all(providers.map(async (provider) => {
     try {
       return { name: provider.name, model: provider.model, text: await provider.run(prompt) };
@@ -288,6 +290,7 @@ export async function runReview(environment = process.env) {
     reviewers: providers.map(({ name, model }) => ({ name, model })),
     reviewedFiles: selectedFiles,
     skippedFiles,
+    truncatedFiles,
     results: settled,
   });
   await upsertPullRequestComment(apiBase, repository, prNumber, token, body);
@@ -296,6 +299,7 @@ export async function runReview(environment = process.env) {
     reviewers: providers.map(({ name, model }) => ({ name, model })),
     reviewedFiles: selectedFiles.length,
     skippedFiles,
+    truncatedFiles,
     providerResults: settled.map(({ name, model, error }) => ({ name, model, ok: !error })),
   };
 }

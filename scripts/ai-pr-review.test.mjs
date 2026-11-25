@@ -4,6 +4,7 @@ import {
   buildReviewPrompt,
   readTokenCount,
   redactSensitiveData,
+  sanitizeReviewText,
   runReview,
   shouldReviewFile,
 } from "./ai-pr-review.mjs";
@@ -105,4 +106,11 @@ test("accepts only non-negative safe-integer provider token counts", () => {
   assert.equal(readTokenCount(-1), null);
   assert.equal(readTokenCount("123"), null);
   assert.equal(readTokenCount(Number.MAX_SAFE_INTEGER + 1), null);
+});
+
+test("sanitizes notification mentions and remote image markup in reviewer output", () => {
+  const safe = sanitizeReviewText("Notify @here and @everyone. ![chart](https://tracker.invalid/image.png)");
+  assert.doesNotMatch(safe, /@here|@everyone/i);
+  assert.doesNotMatch(safe, /!\\[/);
+  assert.match(safe, /chart/);
 });

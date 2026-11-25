@@ -38,8 +38,8 @@ The workflow defaults are:
 
 | Provider | Model | API endpoint |
 |---|---|---|
-| Claude | claude-sonnet-5-5 | https://api.anthropic.com/v1/messages |
-| DeepSeek | deepseek-flash | https://api.deepseek.com/chat/completions |
+| Claude | claude-sonnet-5-5 | https://api.anthropic.com/v1/messages (see [Claude Messages API](https://platform.claude.com/docs/en/api/messages) and [Sonnet 5.5 model details](https://platform.claude.com/docs/en/models/sonnet-5-5/overview)) |
+| DeepSeek | deepseek-flash | https://api.deepseek.com/chat/completions (see [DeepSeek Chat Completions API](https://api-docs.deepseek.com/api/create-chat-completion/)) |
 
 Models are explicit workflow settings and can be updated after a reviewed model/version change. Provider account billing and rate limits still apply. Selecting both calls both APIs and may incur charges from each provider.
 

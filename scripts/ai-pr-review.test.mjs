@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildReviewPrompt,
+  formatProviderError,
   readTokenCount,
   redactSensitiveData,
   sanitizeReviewText,
@@ -116,4 +117,27 @@ test("sanitizes notification mentions and remote image markup in reviewer output
   assert.doesNotMatch(safe, /@here|@everyone/i);
   assert.doesNotMatch(safe, /!\[/);
   assert.match(safe, /chart/);
+});
+
+test("includes safe Claude API validation details in provider errors", () => {
+  const message = formatProviderError("Claude", 400, {
+    error: {
+      type: "invalid_request_error",
+      message: "This API key is not scoped to a workspace. Add the anthropic-workspace-id header.",
+    },
+    request_id: "req_test_123",
+  });
+  assert.match(message, /HTTP 400/);
+  assert.match(message, /invalid_request_error/);
+  assert.match(message, /not scoped to a workspace/);
+  assert.match(message, /req_test_123/);
+});
+
+test("redacts credentials from provider error details", () => {
+  const secret = "ghp_" + "A".repeat(36);
+  const message = formatProviderError("Claude", 400, {
+    error: { type: "invalid_request_error", message: "Rejected value " + secret },
+  });
+  assert.doesNotMatch(message, /ghp_A{20,}/);
+  assert.match(message, /\\[REDACTED\\]/);
 });

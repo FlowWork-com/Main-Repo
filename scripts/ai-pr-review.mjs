@@ -70,8 +70,8 @@ function buildReviewPrompt(pullRequest, reviewedFiles, skippedFiles, truncatedFi
       number: pullRequest.number,
       title: redactSensitiveData(pullRequest.title).slice(0, 500),
       description: redactSensitiveData(pullRequest.body ?? '').slice(0, 4_000),
-      baseBranch: pullRequest.base?.ref ?? 'unknown',
-      headBranch: pullRequest.head?.ref ?? 'unknown',
+      baseBranch: redactSensitiveData(pullRequest.base?.ref ?? 'unknown'),
+      headBranch: redactSensitiveData(pullRequest.head?.ref ?? 'unknown'),
     },
     reviewInstructions: [
       'Review only the supplied changed-file patches. Do not assume tests, builds, deployment, or runtime checks were performed.',
@@ -91,7 +91,7 @@ function buildReviewPrompt(pullRequest, reviewedFiles, skippedFiles, truncatedFi
       maxTotalPatchCharacters: MAX_DIFF_CHARS,
     },
     files: reviewedFiles.map((file) => ({
-      filename: file.filename,
+      filename: redactSensitiveData(file.filename),
       status: file.status,
       additions: file.additions,
       deletions: file.deletions,

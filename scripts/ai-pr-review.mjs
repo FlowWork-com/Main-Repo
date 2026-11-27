@@ -332,6 +332,22 @@ function formatComment({ prNumber, reviewers, reviewedFiles, skippedFiles, trunc
   return sanitizeReviewText(parts.join('\n')).slice(0, 55_000);
 }
 
+export function formatGitHubApiError(status, payload, requestId = '') {
+  const message = typeof payload?.message === 'string'
+    ? redactSensitiveData(payload.message).replace(/[\r\n\t]+/g, ' ').slice(0, 500)
+    : typeof payload === 'string'
+      ? redactSensitiveData(payload).replace(/[\r\n\t]+/g, ' ').slice(0, 500)
+      : '';
+  const documentationUrl = typeof payload?.documentation_url === 'string'
+    ? payload.documentation_url.slice(0, 300)
+    : '';
+  const parts = ['GitHub could not publish the review comment (HTTP ' + status + ').'];
+  if (message) parts.push(message);
+  if (documentationUrl) parts.push('Documentation: ' + documentationUrl);
+  if (requestId) parts.push('Request ID: ' + requestId.slice(0, 100));
+  return parts.join(' ');
+}
+
 async function upsertPullRequestComment(apiBase, repository, prNumber, token, body) {
   const comments = await fetchGitHubJson(
     apiBase + '/repos/' + repository + '/issues/' + prNumber + '/comments?per_page=100',
@@ -355,7 +371,24 @@ async function upsertPullRequestComment(apiBase, repository, prNumber, token, bo
     redirect: 'error',
     signal: AbortSignal.timeout(20_000),
   });
-  if (!response.ok) throw new Error('GitHub could not publish the review comment (HTTP ' + response.status + ').');
+  if (!response.ok) {
+    let errorPayload = null;
+    try {
+      const rawError = (await response.text()).slice(0, 8 * 1024);
+      try {
+        errorPayload = JSON.parse(rawError);
+      } catch {
+        errorPayload = rawError;
+      }
+    } catch {
+      // Keep the HTTP status if GitHub's error body cannot be read.
+    }
+    throw new Error(formatGitHubApiError(
+      response.status,
+      errorPayload,
+      response.headers.get('x-github-request-id') || '',
+    ));
+  }
 }
 
 export async function runReview(environment = process.env) {

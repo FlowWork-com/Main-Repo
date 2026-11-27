@@ -256,6 +256,46 @@ async function callDeepSeek(apiKey, model, prompt) {
   };
 }
 
+async function callGroq(apiKey, model, prompt) {
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer ' + apiKey,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      max_completion_tokens: 3_500,
+      temperature: 0.1,
+      messages: [
+        { role: 'system', content: REVIEW_SYSTEM_PROMPT },
+        { role: 'user', content: prompt },
+      ],
+    }),
+    redirect: 'error',
+    signal: AbortSignal.timeout(90_000),
+  });
+  if (!response.ok) {
+    let errorPayload = null;
+    try {
+      errorPayload = await readBoundedJson(response, 32 * 1024, 'Groq error');
+    } catch {
+      // Preserve the HTTP status when Groq returns a non-JSON error body.
+    }
+    throw new Error(formatProviderError('Groq', response.status, errorPayload));
+  }
+  const payload = await readBoundedJson(response, 512 * 1024, 'Groq');
+  const text = payload?.choices?.[0]?.message?.content;
+  if (typeof text !== 'string' || !text.trim()) throw new Error('Groq returned no review text.');
+  return {
+    text: redactSensitiveData(text).slice(0, MAX_REVIEW_OUTPUT_CHARS),
+    usage: {
+      inputTokens: readTokenCount(payload?.usage?.prompt_tokens),
+      outputTokens: readTokenCount(payload?.usage?.completion_tokens),
+    },
+  };
+}
+
 export function readTokenCount(value) {
   return Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
@@ -327,7 +367,7 @@ export async function runReview(environment = process.env) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw new Error('GITHUB_REPOSITORY is invalid.');
   if (!token) throw new Error('GITHUB_TOKEN is unavailable.');
   if (!Number.isSafeInteger(prNumber) || prNumber < 1) throw new Error('Enter a valid positive PR number.');
-  if (!['claude', 'deepseek', 'both'].includes(reviewerSelection)) throw new Error('Select Claude, DeepSeek, or both.');
+  if (!['claude', 'deepseek', 'groq', 'both'].includes(reviewerSelection)) throw new Error('Select Claude, DeepSeek, Groq, or both.');
   if (environment.GITHUB_REF && environment.GITHUB_REF !== 'refs/heads/main') {
     throw new Error('Run this workflow from the main branch.');
   }
@@ -347,6 +387,15 @@ export async function runReview(environment = process.env) {
       name: 'DeepSeek',
       model: environment.DEEPSEEK_REVIEW_MODEL || 'deepseek-flash',
       run: (prompt) => callDeepSeek(environment.DEEPSEEK_API_KEY, environment.DEEPSEEK_REVIEW_MODEL || 'deepseek-flash', prompt),
+    });
+  }
+
+  if (reviewerSelection === 'groq') {
+    if (!environment.GROQ_API_KEY) throw new Error('Add GROQ_API_KEY to GitHub Actions secrets before selecting Groq.');
+    providers.push({
+      name: 'Groq',
+      model: environment.GROQ_REVIEW_MODEL || 'openai/gpt-oss-120b',
+      run: (prompt) => callGroq(environment.GROQ_API_KEY, environment.GROQ_REVIEW_MODEL || 'openai/gpt-oss-120b', prompt),
     });
   }
 

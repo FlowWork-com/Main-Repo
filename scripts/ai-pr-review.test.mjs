@@ -90,6 +90,19 @@ test("refuses to call Claude when its GitHub Actions secret is missing", async (
   );
 });
 
+test("requires the Groq Actions secret when Groq is selected", async () => {
+  await assert.rejects(
+    runReview({
+      GITHUB_REPOSITORY: "FlowWork-com/Main-Repo",
+      GITHUB_TOKEN: "github-test-token",
+      GITHUB_REF: "refs/heads/main",
+      PR_NUMBER: "110",
+      REVIEWERS: "groq",
+    }),
+    /Add GROQ_API_KEY to GitHub Actions secrets/,
+  );
+});
+
 test("refuses to run from a branch other than main", async () => {
   await assert.rejects(
     runReview({

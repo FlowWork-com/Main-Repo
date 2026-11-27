@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildReviewPrompt,
   formatProviderError,
+  formatGitHubApiError,
   readTokenCount,
   redactSensitiveData,
   sanitizeReviewText,
@@ -151,6 +152,25 @@ test("redacts credentials from provider error details", () => {
   const message = formatProviderError("Claude", 400, {
     error: { type: "invalid_request_error", message: "Rejected value " + secret },
   });
+  assert.doesNotMatch(message, /ghp_A{20,}/);
+  assert.match(message, /\[REDACTED\]/);
+});
+
+
+test("includes safe GitHub API details when comment publishing fails", () => {
+  const message = formatGitHubApiError(403, {
+    message: "Resource not accessible by integration",
+    documentation_url: "https://docs.github.com/rest/issues/comments",
+  }, "REQ_test_123");
+  assert.match(message, /HTTP 403/);
+  assert.match(message, /Resource not accessible by integration/);
+  assert.match(message, /docs.github.com/);
+  assert.match(message, /REQ_test_123/);
+});
+
+test("redacts credentials from GitHub API error details", () => {
+  const secret = "ghp_" + "A".repeat(36);
+  const message = formatGitHubApiError(403, { message: "Rejected " + secret });
   assert.doesNotMatch(message, /ghp_A{20,}/);
   assert.match(message, /\[REDACTED\]/);
 });

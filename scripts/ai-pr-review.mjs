@@ -345,7 +345,7 @@ export function formatGitHubApiError(status, payload, requestId = '', acceptedPe
   if (message) parts.push(message);
   if (documentationUrl) parts.push('Documentation: ' + documentationUrl);
   if (requestId) parts.push('Request ID: ' + requestId.slice(0, 100));
-  const safePermissions = redactSensitiveData(acceptedPermissions).replace(/[\\r\\n\\t]+/g, ' ').slice(0, 200);
+  const safePermissions = redactSensitiveData(acceptedPermissions).replace(/[\r\n\t]+/g, ' ').slice(0, 200);
   if (safePermissions) parts.push('Accepted permissions: ' + safePermissions);
   return parts.join(' ');
 }

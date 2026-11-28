@@ -256,6 +256,23 @@ async function callDeepSeek(apiKey, model, prompt) {
   };
 }
 
+export const GROQ_MAX_COMPLETION_TOKENS = 1_500;
+
+// Reserve a smaller completion budget so the prompt plus requested output stays
+// comfortably below common on-demand tokens-per-minute limits. Code reviews
+// should be concise; 1,500 tokens is ample for actionable findings.
+export function buildGroqChatCompletionRequest(model, prompt) {
+  return {
+    model,
+    max_completion_tokens: GROQ_MAX_COMPLETION_TOKENS,
+    temperature: 0.1,
+    messages: [
+      { role: 'system', content: REVIEW_SYSTEM_PROMPT },
+      { role: 'user', content: prompt },
+    ],
+  };
+}
+
 async function callGroq(apiKey, model, prompt) {
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
@@ -263,15 +280,7 @@ async function callGroq(apiKey, model, prompt) {
       authorization: 'Bearer ' + apiKey,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({
-      model,
-      max_completion_tokens: 3_500,
-      temperature: 0.1,
-      messages: [
-        { role: 'system', content: REVIEW_SYSTEM_PROMPT },
-        { role: 'user', content: prompt },
-      ],
-    }),
+    body: JSON.stringify(buildGroqChatCompletionRequest(model, prompt)),
     redirect: 'error',
     signal: AbortSignal.timeout(90_000),
   });

@@ -213,6 +213,6 @@ test("keeps large PR review context compact and within the configured diff budge
     0,
   );
 
-  assert.equal(prompt.includes("\\n  \\"pullRequest\\""), false);
+  assert.equal(prompt.includes('\n  "pullRequest"'), false);
   assert.equal(JSON.parse(prompt).changeLimits.maxTotalPatchCharacters, 30_000);
 });

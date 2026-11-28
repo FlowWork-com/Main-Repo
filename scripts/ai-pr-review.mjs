@@ -332,7 +332,7 @@ function formatComment({ prNumber, reviewers, reviewedFiles, skippedFiles, trunc
   return sanitizeReviewText(parts.join('\n')).slice(0, 55_000);
 }
 
-export function formatGitHubApiError(status, payload, requestId = '') {
+export function formatGitHubApiError(status, payload, requestId = '', acceptedPermissions = '') {
   const message = typeof payload?.message === 'string'
     ? redactSensitiveData(payload.message).replace(/[\r\n\t]+/g, ' ').slice(0, 500)
     : typeof payload === 'string'
@@ -345,6 +345,8 @@ export function formatGitHubApiError(status, payload, requestId = '') {
   if (message) parts.push(message);
   if (documentationUrl) parts.push('Documentation: ' + documentationUrl);
   if (requestId) parts.push('Request ID: ' + requestId.slice(0, 100));
+  const safePermissions = redactSensitiveData(acceptedPermissions).replace(/[\r\n\t]+/g, ' ').slice(0, 200);
+  if (safePermissions) parts.push('Accepted permissions: ' + safePermissions);
   return parts.join(' ');
 }
 
@@ -387,6 +389,7 @@ async function upsertPullRequestComment(apiBase, repository, prNumber, token, bo
       response.status,
       errorPayload,
       response.headers.get('x-github-request-id') || '',
+      response.headers.get('x-accepted-github-permissions') || '',
     ));
   }
 }

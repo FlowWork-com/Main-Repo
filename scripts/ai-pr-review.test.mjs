@@ -157,15 +157,16 @@ test("redacts credentials from provider error details", () => {
 });
 
 
-test("includes safe GitHub API details when comment publishing fails", () => {
+test("includes safe GitHub API details and accepted permissions when comment publishing fails", () => {
   const message = formatGitHubApiError(403, {
     message: "Resource not accessible by integration",
     documentation_url: "https://docs.github.com/rest/issues/comments",
-  }, "REQ_test_123");
+  }, "REQ_test_123", "issues=write; pull_requests=write");
   assert.match(message, /HTTP 403/);
   assert.match(message, /Resource not accessible by integration/);
   assert.match(message, /docs.github.com/);
   assert.match(message, /REQ_test_123/);
+  assert.match(message, /Accepted permissions: issues=write; pull_requests=write/);
 });
 
 test("redacts credentials from GitHub API error details", () => {

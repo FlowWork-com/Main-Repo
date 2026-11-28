@@ -29,10 +29,12 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # GitHub currently requires pull-requests: write to publish PR timeline
+    # comments through GITHUB_TOKEN; issues: write alone can return HTTP 403.
     permissions:
       contents: read
-      pull-requests: read
-      issues: write
+      pull-requests: write
+      issues: read
     steps:
       - name: Check out trusted main-branch review code
         uses: actions/checkout@v4

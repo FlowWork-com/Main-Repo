@@ -7,6 +7,7 @@ import {
   formatProviderError,
   formatGitHubApiError,
   readTokenCount,
+  reviewPriority,
   redactSensitiveData,
   sanitizeReviewText,
   runReview,
@@ -181,8 +182,8 @@ test("redacts credentials from GitHub API error details", () => {
 test("keeps Groq completion reservations bounded for on-demand TPM limits", () => {
   const request = buildGroqChatCompletionRequest("openai/gpt-oss-120b", "Review this bounded diff.");
 
-  assert.equal(GROQ_MAX_COMPLETION_TOKENS, 1_000);
-  assert.equal(request.max_completion_tokens, 1_000);
+  assert.equal(GROQ_MAX_COMPLETION_TOKENS, 500);
+  assert.equal(request.max_completion_tokens, 500);
   assert.equal(request.model, "openai/gpt-oss-120b");
   assert.equal(request.temperature, 0.1);
   assert.equal(request.messages[0].role, "system");
@@ -214,5 +215,12 @@ test("keeps large PR review context compact and within the configured diff budge
   );
 
   assert.equal(prompt.includes('\n  "pullRequest"'), false);
-  assert.equal(JSON.parse(prompt).changeLimits.maxTotalPatchCharacters, 30_000);
+  assert.equal(JSON.parse(prompt).changeLimits.maxTotalPatchCharacters, 26_000);
+});
+
+test("prioritizes implementation files before tests, entrypoints, and documentation", () => {
+  assert.equal(reviewPriority("src/frontend/components/FindingsPanel.tsx"), 0);
+  assert.equal(reviewPriority("src/frontend/components/FindingsPanel.test.tsx"), 1);
+  assert.equal(reviewPriority("src/frontend/App.tsx"), 2);
+  assert.equal(reviewPriority("docs/agent-integrations-onboarding.md"), 3);
 });

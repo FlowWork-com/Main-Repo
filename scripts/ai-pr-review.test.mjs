@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildReviewPrompt,
+  buildGroqChatCompletionRequest,
+  GROQ_MAX_COMPLETION_TOKENS,
   formatProviderError,
   formatGitHubApiError,
   readTokenCount,
@@ -174,4 +176,19 @@ test("redacts credentials from GitHub API error details", () => {
   const message = formatGitHubApiError(403, { message: "Rejected " + secret });
   assert.doesNotMatch(message, /ghp_A{20,}/);
   assert.match(message, /\[REDACTED\]/);
+});
+
+test("keeps Groq completion reservations bounded for on-demand TPM limits", () => {
+  const request = buildGroqChatCompletionRequest("openai/gpt-oss-120b", "Review this bounded diff.");
+
+  assert.equal(GROQ_MAX_COMPLETION_TOKENS, 1_500);
+  assert.equal(request.max_completion_tokens, 1_500);
+  assert.equal(request.model, "openai/gpt-oss-120b");
+  assert.equal(request.temperature, 0.1);
+  assert.equal(request.messages[0].role, "system");
+  assert.match(request.messages[0].content, /senior code reviewer/);
+  assert.deepEqual(request.messages[1], {
+    role: "user",
+    content: "Review this bounded diff.",
+  });
 });

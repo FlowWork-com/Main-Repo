@@ -28,6 +28,7 @@ import { PromptTemplatesPanel } from './components/PromptTemplatesPanel';
 import { GoogleWorkspacePanel } from './components/GoogleWorkspacePanel';
 import { FinnlpIntegrationPanel } from './components/FinnlpIntegrationPanel';
 import { InvoiceExtractionQualityPanel } from './components/InvoiceExtractionQualityPanel';
+import { FindingsPanel } from './components/FindingsPanel';
 import { getAuthRedirectTo } from './authRedirect';
 
 export function App() {
@@ -38,7 +39,7 @@ export function App() {
   const [authError, setAuthError] = useState('');
   const [email, setEmail] = useState('');
   const [linkSent, setLinkSent] = useState(false);
-  const [activeView, setActiveView] = useState<'workspace' | 'history' | 'quality'>('workspace');
+  const [activeView, setActiveView] = useState<'workspace' | 'history' | 'quality' | 'findings'>('workspace');
 
   useEffect(() => {
     if (!client) return;
@@ -117,6 +118,14 @@ export function App() {
                 type="button"
               >
                 History
+              </button>
+              <button
+                className={`button button--quiet topbar-nav__button${activeView === 'findings' ? ' is-active' : ''}`}
+                aria-pressed={activeView === 'findings'}
+                onClick={() => setActiveView('findings')}
+                type="button"
+              >
+                Findings
               </button>
               <button
                 className={`button button--quiet topbar-nav__button${activeView === 'quality' ? ' is-active' : ''}`}
@@ -222,8 +231,8 @@ function WorkspaceView({
 }: {
   readonly client: SupabaseClient;
   readonly userId: string;
-  readonly activeView: 'workspace' | 'history' | 'quality';
-  readonly onViewChange: (view: 'workspace' | 'history') => void;
+  readonly activeView: 'workspace' | 'history' | 'quality' | 'findings';
+  readonly onViewChange: (view: 'workspace' | 'history' | 'quality' | 'findings') => void;
 }) {
   const repository = useMemo(() => new SupabaseWorkflowRepository(client), [client]);
   const [workspace, setWorkspace] = useState<WorkspaceRecord | null>(null);
@@ -448,6 +457,29 @@ function WorkspaceView({
             ))}
           </div>
         )}
+      </section>
+    );
+  }
+
+  if (activeView === 'findings') {
+    return (
+      <section className="history-view" aria-labelledby="findings-page-title">
+        <div className="workspace__heading">
+          <div>
+            <p className="eyebrow">Workflow insights</p>
+            <h2 id="findings-page-title">Findings</h2>
+          </div>
+          <button className="button" onClick={() => onViewChange('workspace')} type="button">
+            Back to workspace
+          </button>
+        </div>
+        <FindingsPanel
+          client={client}
+          workspaceId={workspace.id}
+          tasks={tasks.map((task) => ({ id: task.id, title: task.title }))}
+          selectedTaskId={selectedTaskId}
+          onTaskChange={setSelectedTaskId}
+        />
       </section>
     );
   }

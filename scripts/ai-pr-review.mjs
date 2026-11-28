@@ -2,8 +2,8 @@ import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 
 const MAX_REVIEW_FILES = 60;
-const MAX_DIFF_CHARS = 100_000;
-const MAX_PATCH_CHARS_PER_FILE = 18_000;
+const MAX_DIFF_CHARS = 30_000;
+const MAX_PATCH_CHARS_PER_FILE = 24_000;
 const MAX_REVIEW_OUTPUT_CHARS = 12_000;
 const COMMENT_MARKER = '<!-- flowwork-ai-pr-review -->';
 const ANTHROPIC_VERSION = '2026-10-21';
@@ -98,7 +98,7 @@ export function buildReviewPrompt(pullRequest, reviewedFiles, skippedFiles, trun
       patch: redactSensitiveData(file.patch).slice(0, MAX_PATCH_CHARS_PER_FILE),
     })),
   };
-  return JSON.stringify(context, null, 2);
+  return JSON.stringify(context);
 }
 
 async function fetchGitHubJson(url, token) {
@@ -256,11 +256,10 @@ async function callDeepSeek(apiKey, model, prompt) {
   };
 }
 
-export const GROQ_MAX_COMPLETION_TOKENS = 1_500;
+export const GROQ_MAX_COMPLETION_TOKENS = 1_000;
 
-// Reserve a smaller completion budget so the prompt plus requested output stays
-// comfortably below common on-demand tokens-per-minute limits. Code reviews
-// should be concise; 1,500 tokens is ample for actionable findings.
+// Reserve a compact completion budget and cap/compact the submitted diff so
+// the combined request is less likely to exceed Groq's on-demand TPM allowance.
 export function buildGroqChatCompletionRequest(model, prompt) {
   return {
     model,

@@ -56,13 +56,12 @@ export function shouldReviewFile(filename) {
 }
 
 export function reviewPriority(filename) {
-  const path = String(filename ?? '').replaceAll('\\\\', '/');
-  if (/\\.(?:test|spec)\\.[cm]?[jt]sx?$/i.test(path)) return 1;
-  if (/^src\\/frontend\\/App\\.[cm]?[jt]sx?$/i.test(path)) return 2;
-  if (/^docs\\//.test(path)) return 3;
+  const path = String(filename ?? '').replaceAll('\\', '/');
+  if (/\.(?:test|spec)\.[cm]?[jt]sx?$/i.test(path)) return 1;
+  if (/^src\/frontend\/App\.[cm]?[jt]sx?$/i.test(path)) return 2;
+  if (/^docs\//.test(path)) return 3;
   return 0;
 }
-
 export function sanitizeReviewText(value) {
   return redactSensitiveData(value)
     .replace(/@(everyone|here)\b/gi, (_, audience) => '@' + String.fromCharCode(8203) + audience)
